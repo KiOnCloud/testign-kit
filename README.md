@@ -10,4 +10,8 @@ Bộ công cụ cho AI agent hỗ trợ manual tester. Agent khảo sát spec c�
 |---|---|
 | [`templates/survey-report-template.md`](templates/survey-report-template.md) | Template survey report |
 
-> Repo private. Nội dung liên quan đến dự án khách hàng Nhật (NDA/ISMS): không commit source code, spec hay dữ liệu thật của khách vào đây.
+> Repo public. Không commit source code, spec hay dữ liệu thật của khách hàng (NDA/ISMS) vào đây.
+
+## License
+
+[MIT](LICENSE)
