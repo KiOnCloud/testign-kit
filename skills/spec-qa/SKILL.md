@@ -5,6 +5,97 @@ description: Compare a Backlog ticket's spec with the scout brief and write the 
 
 # spec-qa
 
-Not implemented yet (planned for phase P2).
+Write the survey report for one ticket: what Production does today (master at the merge-base), what
+this phase already changed (`git diff master...develop`), and where the spec disagrees with either.
 
-Before doing anything in this skill, read `${CLAUDE_PLUGIN_ROOT}/references/rules.md`.
+Inputs from `/testign:survey`: `ticket`, and optionally `repo`, `lang`, `master_ref`, `develop_ref`
+(branch names or SHAs, used for replays), `fetch`, `feature` (cache name).
+
+## Before you start
+
+1. Read `${CLAUDE_PLUGIN_ROOT}/references/rules.md` and follow it throughout. Below, `<run>` means
+   `<python> "${CLAUDE_PLUGIN_ROOT}/scripts/run.py"` (rules §10).
+2. Read `${CLAUDE_PLUGIN_ROOT}/templates/survey-report-template.md`. The report must follow its
+   frontmatter and section order exactly.
+3. Read `<run> config`: `output_dir`, `lang`, refs, `backlog.*`. Report files live in
+   `<output_dir>/<TICKET>/` (get the paths with `<run> report-path --ticket <TICKET>`).
+4. If `repo` was not given, ask the tester for the path of their local clone once, and remember it in
+   the report frontmatter.
+
+## Steps
+
+### 1. Read the ticket
+
+Use Backlog MCP: `get_issue` (summary, description), `get_issue_comments`, and list attachments with
+`get_issue_attachment` where useful. Figma links, images and files you cannot read go to section 6
+"Chưa đọc được"; F1 checks cover only what was read. If the Backlog MCP server is not available, ask
+the tester to paste the ticket text and continue.
+
+### 2. Anchors
+
+Extract anchors from the spec: screen names, JP UI labels (verbatim, e.g. 「確定」), API names,
+business terms, table names. Show them to the tester in one line and continue without waiting.
+
+### 3. Scout
+
+Invoke the `scout` skill with `ticket`, `repo`, `anchors`, refs, `fetch` and `feature` (default: the
+main screen name). It returns the brief path and the facts file path. Read both.
+
+### 4. Decisions log (read only)
+
+Fetch the decisions log page with Backlog MCP (`get_wiki_pages` to find the page named in
+`backlog.decisions_log_page`, then `get_wiki`). Save its content to
+`<output_dir>/<TICKET>/.decisions-page.md`, run `<run> decisions-parse --file <that file>`, then delete
+the file. Use only `active` entries:
+
+- entries of this ticket, and entries of other tickets whose `Question`/`Decision` mention the same
+  screen or JP label, become `[khách chốt]` with the entry ID;
+- `unparsed` lines may be cited as `[wiki]` at most, never `[khách chốt]`; mention them to the tester.
+
+If `decisions-parse` stops because the project uses Backlog notation, or the page cannot be found, say
+so in section 6 and continue without it.
+
+### 5. Findings
+
+Compare the spec with B* rows (Production) and the develop changes:
+
+- F1 spec contradicts itself (ticket text vs attachments/Figma),
+- F2 spec silent on or contradicting Production behavior,
+- F3 another ticket in this phase changed the same place (use `commits_by_ticket` and anchors with
+  status `new_in_phase`),
+- F4 shared logic outside the spec's scope is affected,
+- F5 the answer depends on something unreadable (SP, config, batch, master data).
+
+For each: fact or intent (unsure → intent), severity, "Chặn test case?", routing (fact → Dev,
+intent → BrSE/khách, hybrid → Dev confirms the fact first, then escalate the intent with that fact),
+and a question. Every question routed to BrSE/khách gets a ja draft line. A point already decided in
+the decisions log is not asked again; cite the entry instead.
+
+### 6. Write the report
+
+Fill sections 1–6 and 8 of the template in the report language; leave section 7 as in the template.
+Every B* row and every finding carries a source label. B* rows come from the brief (keep their IDs);
+R* rows come from shared logic, other tickets in the phase, and dropped-but-related files. Section 6
+lists what was read, what could not be read (including the brief's coverage), anchors not found, the
+decisions log entries used, and the scout cache result (hit / partial with re-read rows / miss).
+
+Frontmatter: `ticket`, `repo`, `master_ref`/`develop_ref` as given, `merge_base` and `develop_head`
+as full SHAs from the facts file, `lang`, and `cache_root`/`cache_feature` from the scout result (null
+when the cache was not used). `revision`, `previous`, `plugin_version` and `generated_at` are set by
+the save command.
+
+Write the draft to `<output_dir>/<TICKET>/<TICKET>-survey-draft.md`, then:
+
+```bash
+<run> report-save --draft "<draft path>"
+```
+
+It validates the draft (sections 1, 2, 3, 6 present and in order, source labels on every B* row and
+finding, fact/intent on every finding, ja draft for every BrSE question, full SHAs) and saves it as the
+next revision without overwriting anything. If it exits 1, fix the listed errors in the draft and run it
+again. Warnings about leftover `<...>` placeholders should also be fixed.
+
+### 7. Hand back
+
+Tell the tester the report path, the conclusion line from section 1, and the questions to send (Dev
+and BrSE separately, with the ja drafts). Do not send anything to Backlog yourself.

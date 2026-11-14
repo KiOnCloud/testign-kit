@@ -77,11 +77,8 @@ def split(text: str) -> tuple[dict, str]:
         key, value = line.split(":", 1)
         value = value.strip().strip('"').strip("'")
         meta[key.strip()] = None if value in ("", "null", "~") else value
-    if meta.get("revision") is not None:
-        try:
-            meta["revision"] = int(meta["revision"])
-        except ValueError as exc:
-            raise ReportError(f"revision must be a number, got {meta['revision']!r}") from exc
+    if meta.get("revision") is not None and str(meta["revision"]).isdigit():
+        meta["revision"] = int(meta["revision"])
     return meta, "".join(lines[end + 1 :])
 
 
@@ -189,11 +186,110 @@ def write_revision(read_path: Path, body: str, meta_updates: dict | None = None)
     read_path = Path(read_path)
     meta, _ = load(read_path)
     target = next_revision_path(read_path)
-    if target.exists():
-        raise ReportError(f"{target} already exists; refusing to overwrite")
     meta = {**meta, **(meta_updates or {})}
     meta["revision"] = int(target.stem.rsplit("-r", 1)[1])
     meta["previous"] = read_path.name
     meta["generated_at"] = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
-    target.write_text(join(meta, body), encoding="utf-8", newline="\n")
+    write_new(target, join(meta, body))
     return target
+
+
+def write_new(target: Path, text: str) -> None:
+    """Create ``target`` exclusively; an existing file (even one created a moment ago) is never replaced."""
+    target = Path(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(target, "x", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
+    except FileExistsError:
+        raise ReportError(f"{target} already exists; refusing to overwrite") from None
+
+
+def is_revision_file(path: Path) -> bool:
+    return re.search(r"-survey-r\d+\.md$", Path(path).name) is not None
+
+
+SOURCE_LABELS = ("[code]", "[khách chốt]", "[wiki]", "[observed]", "[suy luận]")
+REQUIRED_SECTIONS = (1, 2, 3, 6)
+_PLACEHOLDER = re.compile(r"<(?!/?(?:details|summary|br|b|i|code|sub|sup)\b)[^<>\n]{1,60}>")
+
+
+def ticket_dir(output_dir: Path, ticket: str) -> Path:
+    """Reports and test case files of a ticket live in ``<output_dir>/<TICKET>/``."""
+    return Path(output_dir).expanduser() / ticket
+
+
+def new_report_path(output_dir: Path, ticket: str) -> Path:
+    """Path for the next revision of ``ticket`` (``r1`` when none exists). Never an existing file."""
+    folder = ticket_dir(output_dir, ticket)
+    found = _revisions(folder, ticket) if folder.exists() else []
+    return folder / revision_name(ticket, (found[-1][0] if found else 0) + 1)
+
+
+def _q_blocks(body: str) -> dict[str, str]:
+    text = section(body, 4)
+    blocks = {}
+    for m in re.finditer(r"^### (Q\d+)\b(.*?)(?=^### |\Z)", text, flags=re.S | re.M):
+        blocks[m.group(1)] = m.group(0)
+    return blocks
+
+
+def validate(path: Path) -> dict:
+    """Check a report file against the template contract."""
+    path = Path(path)
+    if not path.exists():
+        return {"ok": False, "errors": [f"report not found: {path}"], "warnings": []}
+    return validate_text(path.read_text(encoding="utf-8"))
+
+
+def validate_text(text: str) -> dict:
+    """Check report text against the template contract. ``errors`` must be empty; ``warnings`` are advisory."""
+    errors: list[str] = []
+    warnings: list[str] = []
+    try:
+        meta, body = split(text)
+    except ReportError as exc:
+        return {"ok": False, "errors": [str(exc)], "warnings": []}
+
+    for key in FRONTMATTER_KEYS:
+        if key not in meta:
+            errors.append(f"frontmatter is missing '{key}'")
+    if "revision" in meta and not isinstance(meta["revision"], int):
+        errors.append(f"frontmatter 'revision' must be a number, got {meta['revision']!r}")
+    for key in ("merge_base", "develop_head"):
+        if meta.get(key) and not re.fullmatch(r"[0-9a-f]{40}", str(meta[key])):
+            errors.append(f"frontmatter '{key}' must be a full 40-character SHA")
+
+    numbers = [int(n) for n in re.findall(r"^## (\d+)\.", body, flags=re.M)]
+    for n in REQUIRED_SECTIONS:
+        if n not in numbers:
+            errors.append(f"section {n} is missing")
+    if numbers != sorted(numbers):
+        errors.append(f"sections are out of order: {numbers}")
+
+    for cells in table_rows(section(body, 3)):
+        if cells and re.fullmatch(r"B\d+", cells[0]) and not any(l in " ".join(cells) for l in SOURCE_LABELS):
+            errors.append(f"{cells[0]} has no source label")
+
+    blocks = _q_blocks(body)
+    for q in question_rows(body):
+        block = blocks.get(q["id"])
+        if block is None:
+            errors.append(f"{q['id']} is in section 2 but has no detail block in section 4")
+            continue
+        heading = block.splitlines()[0]
+        if not re.search(r"\b(fact|intent)\b", heading):
+            errors.append(f"{q['id']} heading has no fact/intent label")
+        if not any(l in block for l in SOURCE_LABELS):
+            errors.append(f"{q['id']} has no source label")
+        if "brse" in q["qa"].lower() and "(ja" not in block:
+            errors.append(f"{q['id']} is routed to BrSE/khách but has no ja draft question")
+
+    if not section(body, 6).strip():
+        errors.append("section 6 (coverage) is empty")
+
+    visible = re.sub(r"<!--.*?-->", "", body, flags=re.S)
+    leftovers = sorted(set(_PLACEHOLDER.findall(visible)))
+    if leftovers:
+        warnings.append("unfilled placeholders: " + ", ".join(leftovers[:10]))
+    return {"ok": not errors, "errors": errors, "warnings": warnings}

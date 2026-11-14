@@ -1,7 +1,8 @@
-# Decisions log format (DRAFT for review)
+# Decisions log format
 
-> **Status: draft, waiting for Asher's review.** Until it is approved, `spec-qa` reads the wiki page
-> as free text and `qa-close` does not write to it.
+> **Status:** Asher accepted this format on 2026-11-14. The four review questions in §6 were not
+> answered one by one, so the plugin implements the defaults this draft proposed. Change §6 (and the
+> code) if any of them turns out wrong.
 
 The decisions log is one shared page on the Backlog wiki that records what the customer or BrSE
 decided for each ticket. It lives only on the wiki, never in a local file. `spec-qa` reads it so that
@@ -12,8 +13,12 @@ appends to it after the tester approves each row.
 
 - One page per Backlog project, named in `~/.testign-kit/config.json` → `backlog.decisions_log_page`
   (for example `QA/Decisions log`), inside `backlog.project_key`.
-- The page content is Markdown. This needs the Backlog project's text formatting rule to be
-  **Markdown**, not Backlog notation. See open question 1.
+- The page content is Markdown, so the Backlog project's text formatting rule must be **Markdown**.
+  `backlog.text_format` in the config records the project's rule (default `markdown`). When it is
+  `backlog` (Backlog notation), `decisions-parse`, `wiki-get`, `wiki-append-preview` and `wiki-update`
+  stop with a message instead of reading or writing the page.
+- The page is found by `backlog.decisions_log_wiki_id`, or by `backlog.project_key` plus the exact
+  page name in `backlog.decisions_log_page`.
 
 ## 2. Page layout
 
@@ -105,6 +110,8 @@ Japanese UI labels stay verbatim (see `rules.md`).
 
 The Backlog MCP server has no wiki update tool, so `qa-close` writes through a small Python helper
 over the Backlog REST API with the same `BACKLOG_DOMAIN` and `BACKLOG_API_KEY` as the MCP server.
+The helper reads them from the shell environment. Values set only inside the MCP server's config are
+not visible to it, so the tester also sets them as environment variables (see README).
 
 Checked against the Backlog API docs on 2026-11-14
 (<https://developer.nulab.com/docs/backlog/api/2/update-wiki-page/>):
@@ -127,10 +134,14 @@ Gaps the docs do not state, handled in P4:
 - `mailNotify` is sent as `false` unless the tester asks for notifications.
 - Without an API key that can edit the page, `qa-close` prints the approved Markdown for manual paste.
 
-## 6. Open questions for review
+## 6. Review questions and the defaults in use
 
-1. Is the Backlog project's text formatting rule set to Markdown? If it uses Backlog notation, headings
-   would be `*`/`**` and the parse rules above must change.
-2. One page per project, or one page per release/phase? (Draft: one per project.)
-3. Should `Decided by` carry a person's name, or only the role?
-4. Is `Decision` in the report language enough, or should it also have a ja version for the customer?
+These were open in the draft. Asher accepted the format without answering them individually, so the
+draft's defaults are implemented:
+
+1. **Text formatting rule.** Markdown is supported. Backlog notation is not parsed; it is declared with
+   `backlog.text_format: "backlog"`, and the decisions commands then stop with a message.
+2. **Page scope.** One page per Backlog project, not per release or phase.
+3. **`Decided by`.** The role, plus the person's name when the source comment shows it.
+4. **Language of `Decision`.** The report language only. `Question` keeps the language it was asked in
+   (usually the ja draft) and `Quote` stays verbatim.

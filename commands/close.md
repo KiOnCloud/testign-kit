@@ -3,8 +3,10 @@ description: Close QA for a ticket, record approved customer decisions in the Ba
 argument-hint: <TICKET-ID> [--report <path>]
 ---
 
-Not implemented yet (planned for phase P4).
+Run the `qa-close` skill of the testign plugin for these arguments: `$ARGUMENTS`
 
-When implemented, this command runs the `qa-close` skill of the testign plugin for `$ARGUMENTS`.
+- The first argument is the ticket ID. If it is missing, ask for it.
+- `--report` picks a specific report revision; by default the highest revision in
+  `<output_dir>/<TICKET>/` is used.
 
-For now, tell the tester that `/testign:close` is not available yet and stop.
+Nothing is written to the Backlog wiki without the tester approving each row and then the diff.

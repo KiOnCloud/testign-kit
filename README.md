@@ -5,7 +5,7 @@
 A Claude Code plugin that helps manual testers working on large legacy codebases. Before writing test cases, the tester gets an agent-generated survey of how the feature behaves today, what the current phase has already changed, and where the ticket's spec disagrees with either.
 
 > [!WARNING]
-> **Status: skeleton (v0.1.0).** The plugin installs and its commands are listed, but they only say "not implemented yet". Everything under [Planned components](#planned-components) describes intended behavior, not shipped features.
+> **Status: v0.1.0, not yet validated on real tickets.** All three commands are implemented and covered by tests on made-up repositories. The replay check on real released tickets is still pending, so treat survey results as a draft to review.
 
 ## Why
 
@@ -25,15 +25,16 @@ testign-kit makes that investigation an automatic step for every ticket, and tur
 5. **Write the survey report** using [`templates/survey-report-template.md`](templates/survey-report-template.md). It describes on-screen behavior, labels every claim with its source, lists what could not be read, and keeps code references in an appendix for developers.
 6. **Trace test cases.** Each test case references a report row ID (`B*` for behavior, `R*` for regression scope), so the agent can report gaps (rows with no test case) and orphans (test cases with no row).
 
-## Planned components
+## Components
 
 | Component | Purpose |
 |---|---|
-| Survey skill | Scout `master` and `develop` for a ticket and produce the survey brief |
-| QA routing rules | Fact/intent classification, finding types, routing to Dev or BrSE/customer, with Japanese drafts for customer-facing questions |
-| Survey report template | Already available in [`templates/`](templates/survey-report-template.md) |
-| Test case trace check | Gap and orphan check between test cases and report rows |
-| Local scout cache | Reuse the `master` survey per feature on the tester's machine (`~/.testign-kit/cache/`), validated by file blob hashes. The `develop` diff always runs fresh |
+| `/testign:survey` (skills `spec-qa` + `scout`) | Scout `master` and `develop` for a ticket and write the survey report |
+| `/testign:close` (skill `qa-close`) | Classify answers, append approved decisions to the Backlog wiki decisions log, write a new report revision |
+| `/testign:testcase` (skill `testcase`) | Fill a copy of your Excel template and run the gap/orphan trace check |
+| Shared rules | [`references/rules.md`](references/rules.md): language, source labels, fact/intent routing, F1–F5 |
+| Survey report template | [`templates/survey-report-template.md`](templates/survey-report-template.md) |
+| Local scout cache | Reuse the `master` brief per feature (`~/.testign-kit/cache/`), validated by file blob hashes. The `develop` diff always runs fresh |
 
 ## Installation
 
@@ -72,7 +73,7 @@ claude mcp add backlog -e BACKLOG_DOMAIN=<space>.backlog.com -e BACKLOG_API_KEY=
 
 Tools the plugin uses: `get_issue`, `get_issue_comments`, `get_issue_attachment`, `get_wiki_pages`, `get_wiki`.
 
-The MCP server has no wiki update tool, so `/testign:close` writes the decisions log through the Backlog REST API (`PATCH /api/v2/wikis/:wikiId`) using the same `BACKLOG_DOMAIN` and `BACKLOG_API_KEY` environment variables. Without a key that can edit the page, it prints the approved Markdown for you to paste. The page layout is in [`references/decisions-log-format.md`](references/decisions-log-format.md).
+The MCP server has no wiki update tool, so `/testign:close` writes the decisions log through the Backlog REST API (`PATCH /api/v2/wikis/:wikiId`). The helper reads `BACKLOG_DOMAIN` and `BACKLOG_API_KEY` from your **shell environment**; values passed only to the MCP server with `-e` are not visible to it, so set them as user environment variables as well (`export ...` in your shell profile on macOS, `setx BACKLOG_API_KEY ...` on Windows, then restart Claude Code). The key is never printed or logged. Without these variables, or without a key that can edit the page, `/testign:close` shows the diff and prints the new page content for you to paste. The page layout is in [`references/decisions-log-format.md`](references/decisions-log-format.md); the Backlog project's text formatting rule must be Markdown.
 
 ### Tester settings
 
@@ -84,7 +85,15 @@ Settings live in `~/.testign-kit/config.json` (`%USERPROFILE%\.testign-kit\confi
 | `lang` | `vi` | Report language (`vi`, `ja`, `en`) |
 | `master_ref` / `develop_ref` | `master` / `develop` | Branch names for Production and the current phase |
 | `ticket_id_regex` | Backlog keys like `PROJ-123` | How commits are grouped by ticket |
-| `backlog.space`, `backlog.project_key`, `backlog.decisions_log_page` | empty | Backlog space, project and the decisions log wiki page |
+| `backlog.space`, `backlog.project_key`, `backlog.decisions_log_page` | empty | Backlog space, project and the decisions log wiki page name |
+| `backlog.decisions_log_wiki_id` | empty | Wiki page ID; skips the lookup by name |
+| `backlog.text_format` | `markdown` | The Backlog project's text formatting rule; `backlog` (Backlog notation) disables the decisions log commands |
+
+Reports, briefs and test case files for a ticket go to `<output_dir>/<TICKET>/`. Report revisions are named `<TICKET>-survey-r<N>.md` and are never overwritten.
+
+### Scout cache
+
+The Production part of a survey (the master brief) is cached per repository and feature in `~/.testign-kit/cache/<root-commit>/<feature>/`. It is reused only when every source file's blob hash at the new merge-base still matches; rows whose files changed are re-read, and the report's coverage section says whether the cache was a hit, partial or miss. To clear it, delete that folder (or the whole `~/.testign-kit/cache/`).
 
 ### Test case templates
 
@@ -96,14 +105,10 @@ If you have no template yet, a basic made-up one ships with the plugin: [`templa
 
 ## Usage
 
-Until the plugin exists, you can use the report template directly: give it to Claude Code together with the ticket spec and access to the repository, and ask for a survey report that follows it.
-
-The planned flow for a tester is:
-
-1. Run the survey on a ticket against a read-only checkout of the repository.
-2. Review the report and the routed questions, then send them to Dev or the BrSE.
-3. Record the answers, update the report, and write test cases that reference `B*`/`R*` row IDs.
-4. Run the trace check to find gaps and orphans before review.
+1. **Survey:** `/testign:survey PROJ-123 --repo <path to your clone>`. Reads the ticket, scouts the repo, reads the decisions log and writes `PROJ-123-survey-r1.md`. Add `--master-ref <sha> --develop-ref <sha>` to replay an old ticket, `--fetch` to update refs first.
+2. **Send the questions:** the report lists questions for Dev and for the BrSE/customer (with Japanese drafts). Send them yourself; the plugin never posts to Backlog.
+3. **Close:** `/testign:close PROJ-123`. Collects answers from the ticket's comments and from you, asks you to approve each decision and then the wiki diff, appends the approved decisions to the decisions log, and writes the next report revision.
+4. **Test cases:** `/testign:testcase PROJ-123`. Checks that the report's pinned commits are still current, fills a copy of your template (each case carries its `B*`/`R*` ID in 備考), and writes gaps, orphans and cases waiting on QA into a new report revision.
 
 The report defaults to Vietnamese (falling back to Japanese, then English), and Japanese UI labels are kept verbatim so testers can match them against the screen.
 

@@ -53,8 +53,8 @@ folder, so plugin updates do not remove them and customer files never enter the 
 
 ## Step 2 — choose the report and check its hashes
 
-If the argument is a ticket ID, use the highest `<TICKET>-survey-r<N>.md` in the config `output_dir`
-(`<run> config`). Then:
+If the argument is a ticket ID, use `latest` from `<run> report-path --ticket <TICKET>` (the highest
+`<output_dir>/<TICKET>/<TICKET>-survey-r<N>.md`). Then:
 
 ```bash
 <run> hash-check --report "<report>"

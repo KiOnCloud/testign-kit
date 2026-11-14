@@ -10,6 +10,8 @@ previous: <file name of revision N-1 | null>
 plugin_version: <testign version>
 lang: <vi|ja|en>
 generated_at: <ISO 8601 timestamp>
+cache_root: <scout cache root commit | null>
+cache_feature: <scout cache feature slug | null>
 ---
 
 <!--
@@ -97,7 +99,8 @@ stateDiagram-v2
 - ⛔ **Chưa đọc được:** <stored procedure, config, batch job, master data>
   → các kết luận liên quan: <B-ID / Q-ID / R-ID> chỉ ở mức `[suy luận]`
 - 🔍 **Grep không ra:** <label / anchor không tìm thấy trong source>
-- **Decisions log đã tham chiếu:** <có, mục ... | không có>
+- **Decisions log đã tham chiếu:** <có, D-ID ... | không có>
+- **Scout cache:** <hit | partial (đọc lại: B-ID …) | miss (lý do)>
 
 ---
 

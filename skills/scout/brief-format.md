@@ -2,7 +2,7 @@
 
 The scout brief is an intermediate file for `spec-qa`, not the tester-facing report. It is written in
 the report language (see `rules.md` §1) and saved next to the facts file as
-`<TICKET>-scout-brief.md` in the output folder.
+`<output_dir>/<TICKET>/<TICKET>-scout-brief.md`.
 
 ```markdown
 ---
@@ -15,6 +15,9 @@ develop_head: <full SHA>
 root_commit: <full SHA>
 facts_file: <path to scout-facts JSON>
 anchors: [<anchor>, ...]
+cache_root: <root commit SHA used as the cache key>
+cache_feature: <feature slug>
+cache_result: <hit | partial | miss>
 ---
 
 # Scout brief — <TICKET-ID> <feature name>
@@ -53,6 +56,7 @@ they are input for F3 findings.
   because the read cap was reached> → <B-ID / change entries that stay `[suy luận]`>
 - 🔍 **Grep không ra:** <anchors with status `not_found`>
 - ➖ **Bỏ qua trong diff:** <count of `changed_files.dropped`, and up to 10 paths>
+- 🗃️ **Scout cache:** <hit | partial (đọc lại: B-ID …) | miss (lý do)>
 ```
 
 Section 3 is always present, even when every list is empty (write "Không có").

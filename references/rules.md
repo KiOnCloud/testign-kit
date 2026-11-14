@@ -77,7 +77,9 @@ Trong mục 2 của report: sắp xếp Block trước, rồi theo Mức.
 
 ## 9. Report revisions
 
-- Tên file: `<TICKET>-survey-r<N>.md` trong thư mục output (config `output_dir`).
+- Tên file: `<output_dir>/<TICKET>/<TICKET>-survey-r<N>.md` (config `output_dir`, mặc định `~/Downloads`).
+  File test case, brief và facts của ticket cũng nằm trong `<output_dir>/<TICKET>/`.
+- Report mới luôn được lưu qua `report-save` (validate + đánh số revision), không ghi file report trực tiếp.
 - Mọi lệnh mặc định đọc revision cao nhất và không bao giờ ghi đè một revision có sẵn;
   thay đổi luôn tạo `r<N+1>` với `previous` trỏ về file cũ.
 

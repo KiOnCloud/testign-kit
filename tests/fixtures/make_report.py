@@ -25,9 +25,9 @@ BODY = """
 
 | ID | Hành vi | Production (master) | Phase này (develop) | Spec yêu cầu | Lệch? |
 |---|---|---|---|---|---|
-| B1 | Bấm 「確定」 | Hiện màn xác nhận | ➖ Không đổi | Không nhắc tới | ✅ Khớp |
-| B2 | Tổng tiền | Tiền hàng + thuế | Trừ giảm giá (#DEMO-1) | Trừ giảm giá | ✅ Khớp |
-| B3 | Làm tròn | Làm tròn xuống | ➖ Không đổi | Làm tròn lên | ⚠️ Q1 |
+| B1 | Bấm 「確定」 | Hiện màn xác nhận `[code]` | ➖ Không đổi | Không nhắc tới | ✅ Khớp |
+| B2 | Tổng tiền | Tiền hàng + thuế `[code]` | Trừ giảm giá (#DEMO-1) | Trừ giảm giá | ✅ Khớp |
+| B3 | Làm tròn | Làm tròn xuống `[suy luận]` | ➖ Không đổi | Làm tròn lên | ⚠️ Q1 |
 
 ---
 
@@ -35,7 +35,9 @@ BODY = """
 
 ### Q1 · F4 · intent · 🟠 Major · Chặn test case: Partial
 
-- **Hiện trạng:** ...
+- **Hiện trạng:** 請求書 dùng chung CalcTotal `[code]`
+- **Câu hỏi:** Giảm giá có áp dụng cho 請求書 không?
+- **Câu hỏi (ja, draft cho BrSE):** 割引は請求書にも適用されますか？
 
 ---
 
@@ -51,6 +53,7 @@ BODY = """
 ## 6. Coverage & độ tin cậy
 
 - ✅ **Đã khảo sát:** OrderConfirm, OrderService
+- ⛔ **Chưa đọc được:** Không có
 
 ---
 

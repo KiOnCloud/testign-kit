@@ -18,7 +18,8 @@ def test_defaults_resolve_output_dir_under_home(tmp_path):
     assert cfg["lang"] == "vi"
     assert cfg["master_ref"] == "master"
     assert cfg["develop_ref"] == "develop"
-    assert set(cfg["backlog"]) == {"space", "project_key", "decisions_log_page"}
+    assert set(cfg["backlog"]) == {"space", "project_key", "decisions_log_page", "decisions_log_wiki_id", "text_format"}
+    assert cfg["backlog"]["text_format"] == "markdown"
 
 
 def test_default_output_dir_uses_real_home():
@@ -44,7 +45,8 @@ def test_overrides_merge_with_defaults(tmp_path):
     assert cfg["lang"] == "ja"
     assert cfg["develop_ref"] == "release/2026"
     assert cfg["master_ref"] == "master"
-    assert cfg["backlog"] == {"space": "demo.backlog.com", "project_key": "", "decisions_log_page": ""}
+    assert cfg["backlog"]["space"] == "demo.backlog.com"
+    assert cfg["backlog"]["project_key"] == "" and cfg["backlog"]["text_format"] == "markdown"
 
 
 def test_output_dir_tilde_is_expanded(tmp_path):

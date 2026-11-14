@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1001,
+    "created": "2026-11-14T02:10:00Z",
+    "createdUser": {"name": "Tanaka (BrSE)"},
+    "content": "Q1について：割引は請求書にも適用してください。お客様確認済みです。"
+  },
+  {
+    "id": 1002,
+    "created": "2026-11-14T03:00:00Z",
+    "createdUser": {"name": "Dev Minh"},
+    "content": "Q2: Hiện tại CalcTotal làm tròn xuống (Math.Floor). Em xác nhận fact này."
+  },
+  {
+    "id": 1003,
+    "created": "2026-11-14T04:30:00Z",
+    "createdUser": {"name": "Tanaka (BrSE)"},
+    "content": "Q3の端数処理はお客様に確認中です。回答をお待ちください。"
+  },
+  {
+    "id": 1004,
+    "created": "2026-11-14T05:00:00Z",
+    "createdUser": {"name": "Dev Minh"},
+    "content": "Deploy staging lúc 15h nhé."
+  }
+]

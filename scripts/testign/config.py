@@ -42,6 +42,10 @@ def defaults(home: Path | None = None) -> dict[str, Any]:
             "space": "",
             "project_key": "",
             "decisions_log_page": "",
+            "decisions_log_wiki_id": "",
+            # Text formatting rule of the Backlog project. Only "markdown" is supported for the
+            # decisions log; "backlog" (Backlog notation) makes the decisions commands stop with a message.
+            "text_format": "markdown",
         },
     }
 
