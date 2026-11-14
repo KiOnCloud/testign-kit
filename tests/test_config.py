@@ -18,7 +18,7 @@ def test_defaults_resolve_output_dir_under_home(tmp_path):
     assert cfg["lang"] == "vi"
     assert cfg["master_ref"] == "master"
     assert cfg["develop_ref"] == "develop"
-    assert set(cfg["backlog"]) == {"space", "project_key", "decisions_log_page", "decisions_log_wiki_id", "text_format"}
+    assert set(cfg["backlog"]) == {"space", "project_key", "decisions_log_prefix", "text_format"}
     assert cfg["backlog"]["text_format"] == "markdown"
 
 

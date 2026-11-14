@@ -43,16 +43,31 @@ main screen name). It returns the brief path and the facts file path. Read both.
 
 ### 4. Decisions log (read only)
 
-Fetch the decisions log page with Backlog MCP (`get_wiki_pages` to find the page named in
-`backlog.decisions_log_page`, then `get_wiki`). Save its content to
-`<output_dir>/<TICKET>/.decisions-page.md`, run `<run> decisions-parse --file <that file>`, then delete
-the file. Use only `active` entries:
+The log is split into one wiki page per feature, a `common` page and an index (format:
+`${CLAUDE_PLUGIN_ROOT}/references/decisions-log-format.md`). Look decisions up through the index with
+the anchors file scout wrote:
 
-- entries of this ticket, and entries of other tickets whose `Question`/`Decision` mention the same
-  screen or JP label, become `[khách chốt]` with the entry ID;
+```bash
+<run> decisions-lookup --anchors-file "<output_dir>/<TICKET>/<ticket>-anchors.json" --ticket <TICKET> --feature "<feature>"
+```
+
+It matches index rows by ticket and by overlapping anchors, then opens every matching page plus
+`common` and the feature's own page, so a decision filed under another feature is still found. Each
+returned page has its parsed entries.
+
+If it fails because `BACKLOG_DOMAIN`/`BACKLOG_API_KEY` are not set in the shell, use Backlog MCP
+instead: find `<prefix>/index` with `get_wiki_pages` and read it with `get_wiki`, save it to
+`<output_dir>/<TICKET>/.decisions-index.md`, and run the same command with `--index-file "<that file>"`. It prints
+`page_names`; read each existing one with `get_wiki`, save it to `<output_dir>/<TICKET>/.decisions-page.md`, run
+`<run> decisions-parse --file <that file>`, and delete the saved copies afterwards.
+
+Use only `active` entries:
+
+- entries of this ticket, and entries matched by anchors that concern the scoped screens or logic,
+  become `[khách chốt]` with the entry ID;
 - `unparsed` lines may be cited as `[wiki]` at most, never `[khách chốt]`; mention them to the tester.
 
-If `decisions-parse` stops because the project uses Backlog notation, or the page cannot be found, say
+If the decisions commands stop because the project uses Backlog notation, or no index exists yet, say
 so in section 6 and continue without it.
 
 ### 5. Findings

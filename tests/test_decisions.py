@@ -107,7 +107,7 @@ def test_crlf_page_keeps_crlf():
 
 def test_empty_page():
     new, result = decisions.append("", [row()], RX, {"DEMO-12": "注文確定"})
-    assert new.startswith("## DEMO-12 · 注文確定\n\n### D-DEMO-12-001 · Q2\n")
+    assert new.startswith("# Decisions — page\n\n## DEMO-12 · 注文確定\n\n### D-DEMO-12-001 · Q2\n")
     assert result["added"] == ["D-DEMO-12-001"]
 
 

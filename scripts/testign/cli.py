@@ -270,20 +270,19 @@ def _cmd_report_save(args: argparse.Namespace) -> int:
 def _backlog_cfg() -> dict:
     backlog = config.load()["backlog"]
     decisions.check_text_format(backlog.get("text_format", "markdown"))
+    if not backlog.get("decisions_log_prefix"):
+        raise ValueError("set backlog.decisions_log_prefix (e.g. \"QA/Decisions\") in ~/.testign-kit/config.json")
     return backlog
 
 
-def _wiki_id(args: argparse.Namespace, backlog: dict) -> str:
-    if getattr(args, "wiki_id", None):
-        return backlog_wiki.wiki_id_of(args.wiki_id)
-    if backlog.get("decisions_log_wiki_id"):
-        return backlog_wiki.wiki_id_of(backlog["decisions_log_wiki_id"])
-    if backlog.get("project_key") and backlog.get("decisions_log_page"):
-        return str(backlog_wiki.find(backlog["project_key"], backlog["decisions_log_page"]))
-    raise ValueError(
-        "no decisions log page configured: set backlog.decisions_log_wiki_id, or backlog.project_key and "
-        "backlog.decisions_log_page, in ~/.testign-kit/config.json (or pass --wiki-id)"
-    )
+def _page_name(backlog: dict, slug: str) -> str:
+    return f"{backlog['decisions_log_prefix'].rstrip('/')}/{slug}"
+
+
+def _need_project(backlog: dict) -> str:
+    if not backlog.get("project_key"):
+        raise ValueError("set backlog.project_key in ~/.testign-kit/config.json")
+    return backlog["project_key"]
 
 
 def _read_rows(path: str) -> list[dict]:
@@ -300,65 +299,127 @@ def _keepends(text: str) -> list[str]:
     return [line + eol for line, eol in decisions.split_lines(text)]
 
 
-def _diff(old: str, new: str) -> str:
-    return "".join(difflib.unified_diff(_keepends(old), _keepends(new), "wiki (now)", "wiki (after append)"))
+def _diff(name: str, old: str, new: str) -> str:
+    return "".join(difflib.unified_diff(_keepends(old), _keepends(new), f"{name} (now)", f"{name} (after append)"))
 
 
 def _sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _append(page: str, rows: list[dict]) -> tuple[str, dict]:
-    titles = {r["ticket"]: r["ticket_title"] for r in rows if r.get("ticket_title")}
-    return decisions.append(page, rows, config.load()["ticket_id_regex"], titles)
+def _titles(rows: list[dict]) -> dict[str, str]:
+    return {r["ticket"]: r["ticket_title"] for r in rows if r.get("ticket") and r.get("ticket_title")}
 
 
 def _cmd_decisions_parse(args: argparse.Namespace) -> int:
-    _backlog_cfg()
+    decisions.check_text_format(config.load()["backlog"].get("text_format", "markdown"))
     page = Path(args.file).read_text(encoding="utf-8")
+    if args.index:
+        return _emit({"index": decisions.parse_index(page)})
     return _emit(decisions.parse(page, config.load()["ticket_id_regex"]))
 
 
-def _cmd_wiki_get(args: argparse.Namespace) -> int:
+def _cmd_decisions_lookup(args: argparse.Namespace) -> int:
     backlog = _backlog_cfg()
-    page = backlog_wiki.get(_wiki_id(args, backlog))
-    return _emit({**page, "parsed": decisions.parse(page["content"], config.load()["ticket_id_regex"])})
+    spec = _read_anchors_file(args.anchors_file)
+    feature = decisions.page_slug(args.feature) if args.feature else None
+    if args.index_file:
+        index = Path(args.index_file).read_text(encoding="utf-8")
+        found = decisions.lookup(index, spec["anchors"], args.ticket, feature)
+        return _emit({"mode": "manual", **found, "page_names": [_page_name(backlog, p) for p in found["pages"]]})
+    project = _need_project(backlog)
+    listing = backlog_wiki.list_pages(project, backlog["decisions_log_prefix"])
+    index_name = _page_name(backlog, decisions.INDEX)
+    index = backlog_wiki.get(listing[index_name]["id"])["content"] if index_name in listing else ""
+    found = decisions.lookup(index, spec["anchors"], args.ticket, feature)
+    regex = config.load()["ticket_id_regex"]
+    pages = []
+    for slug in found["pages"]:
+        name = _page_name(backlog, slug)
+        if name not in listing:
+            pages.append({"page": slug, "name": name, "exists": False})
+            continue
+        content = backlog_wiki.get(listing[name]["id"])["content"]
+        pages.append({"page": slug, "name": name, "exists": True, "parsed": decisions.parse(content, regex)})
+    return _emit({"mode": "api", "index_exists": index_name in listing, "matched": found["matched"], "pages": pages})
+
+
+def _plan_wiki(backlog: dict, rows: list[dict]) -> dict:
+    """Read the index and every page the rows need, compute the new contents and an approval hash."""
+    project = _need_project(backlog)
+    listing = backlog_wiki.list_pages(project, backlog["decisions_log_prefix"])
+    index_name = _page_name(backlog, decisions.INDEX)
+
+    def read(name: str) -> str:
+        return backlog_wiki.get(listing[name]["id"])["content"] if name in listing else ""
+
+    index = read(index_name)
+    pages = {slug: read(_page_name(backlog, slug)) for slug in decisions.pages_needed(rows, index)}
+    changed, new_index, result = decisions.apply_changes(
+        pages, index, rows, config.load()["ticket_id_regex"], _titles(rows), project)
+    writes = [(_page_name(backlog, slug), pages[slug], new) for slug, new in sorted(changed.items())]
+    if new_index != index:
+        writes.append((index_name, index, new_index))  # the index is written last
+    approval = _sha(json.dumps([[n, listing.get(n, {}).get("updated"), new] for n, _old, new in writes],
+                               ensure_ascii=False))
+    return {"listing": listing, "writes": writes, "result": result, "approval": approval, "project": project}
 
 
 def _cmd_wiki_append_preview(args: argparse.Namespace) -> int:
     backlog = _backlog_cfg()
     rows = _read_rows(args.rows)
-    if args.page_file:
-        page = Path(args.page_file).read_text(encoding="utf-8")
-        new, result = _append(page, rows)
-        return _emit({"mode": "manual", **result, "diff": _diff(page, new), "new_content": new})
-    current = backlog_wiki.get(_wiki_id(args, backlog))
-    new, result = _append(current["content"], rows)
-    return _emit({"mode": "api", "wiki_id": current["id"], "name": current["name"], "updated": current["updated"],
-                  "new_sha256": _sha(new), **result, "diff": _diff(current["content"], new)})
+    if args.pages_dir:
+        folder = Path(args.pages_dir)
+
+        def read(slug: str) -> str:
+            f = folder / f"{slug}.md"
+            return f.read_text(encoding="utf-8") if f.exists() else ""
+
+        index = read(decisions.INDEX)
+        pages = {slug: read(slug) for slug in decisions.pages_needed(rows, index)}
+        changed, new_index, result = decisions.apply_changes(
+            pages, index, rows, config.load()["ticket_id_regex"], _titles(rows), backlog.get("project_key", ""))
+        if new_index != index:
+            changed[decisions.INDEX] = new_index
+        return _emit({"mode": "manual", **result, "pages": [
+            {"page": slug, "name": _page_name(backlog, slug), "exists": (folder / f"{slug}.md").exists(),
+             "diff": _diff(slug, pages.get(slug, index if slug == decisions.INDEX else ""), new), "new_content": new}
+            for slug, new in changed.items()
+        ]})
+    plan = _plan_wiki(backlog, rows)
+    return _emit({"mode": "api", **plan["result"], "approval": plan["approval"], "pages": [
+        {"name": name, "exists": name in plan["listing"], "updated": plan["listing"].get(name, {}).get("updated"),
+         "diff": _diff(name, old, new)}
+        for name, old, new in plan["writes"]
+    ]})
 
 
 def _cmd_wiki_update(args: argparse.Namespace) -> int:
     backlog = _backlog_cfg()
-    rows = _read_rows(args.rows)
-    wiki_id = _wiki_id(args, backlog)
-    current = backlog_wiki.get(wiki_id)
-    if current["updated"] != args.expected_updated:
+    plan = _plan_wiki(backlog, _read_rows(args.rows))
+    if plan["approval"] != args.approval:
         raise backlog_wiki.ConflictError(
-            f"the wiki page changed since the diff was shown (updated {args.expected_updated} -> "
-            f"{current['updated']}). Run wiki-append-preview again and show the new diff."
-        )
-    new, result = _append(current["content"], rows)
-    if _sha(new) != args.expected_hash:
-        raise backlog_wiki.ConflictError(
-            "the content to write differs from the diff the tester approved (did the rows file change?). "
+            "the wiki pages or the content to write differ from the diff the tester approved. "
             "Run wiki-append-preview again and show the new diff."
         )
-    if not result["added"] and not result["superseded"]:
-        return _emit({"written": False, **result, "reason": "every row is already in the log"})
-    saved = backlog_wiki.update(wiki_id, new, current["updated"], expected_content=current["content"],
-                                mail_notify=args.mail_notify)
-    return _emit({"written": True, **saved, **result})
+    if not plan["writes"]:
+        return _emit({"written": [], **plan["result"], "reason": "every row is already in the log"})
+    written = []
+    for name, old, new in plan["writes"]:
+        try:
+            if name in plan["listing"]:
+                saved = backlog_wiki.update(plan["listing"][name]["id"], new, plan["listing"][name]["updated"],
+                                            expected_content=old, mail_notify=args.mail_notify)
+            else:
+                saved = backlog_wiki.create(plan["project"], name, new, mail_notify=args.mail_notify)
+        except backlog_wiki.BacklogError as exc:
+            done = ", ".join(w["name"] for w in written) or "none"
+            raise backlog_wiki.BacklogError(
+                f"{exc} (pages already written: {done}; rerun the preview: entries already on a page are "
+                "skipped and missing index rows are added)"
+            ) from None
+        written.append(saved)
+    return _emit({"written": written, **plan["result"]})
 
 
 def _cmd_cache_check(args: argparse.Namespace) -> int:
@@ -492,25 +553,26 @@ def build_parser() -> argparse.ArgumentParser:
     rs.add_argument("--out-dir", help="output folder (default: config output_dir)")
     rs.set_defaults(func=_cmd_report_save)
 
-    dp = sub.add_parser("decisions-parse", help="parse a decisions log page saved to a file")
+    dp = sub.add_parser("decisions-parse", help="parse a decisions page (or the index) saved to a file")
     dp.add_argument("--file", required=True)
+    dp.add_argument("--index", action="store_true", help="the file is the decisions index page")
     dp.set_defaults(func=_cmd_decisions_parse)
 
-    wg = sub.add_parser("wiki-get", help="read the decisions log page through the Backlog REST API")
-    wg.add_argument("--wiki-id")
-    wg.set_defaults(func=_cmd_wiki_get)
+    dl = sub.add_parser("decisions-lookup", help="find decisions for a survey through the index (feature pages + common)")
+    dl.add_argument("--anchors-file", required=True)
+    dl.add_argument("--ticket")
+    dl.add_argument("--feature", help="the survey's feature (its page is always opened)")
+    dl.add_argument("--index-file", help="index page saved from Backlog MCP; prints the pages to open, no API call")
+    dl.set_defaults(func=_cmd_decisions_lookup)
 
-    wp = sub.add_parser("wiki-append-preview", help="show the diff that appending approved rows would make")
+    wp = sub.add_parser("wiki-append-preview", help="show the diffs that appending approved rows would make")
     wp.add_argument("--rows", required=True, help="JSON list of approved decision rows")
-    wp.add_argument("--wiki-id")
-    wp.add_argument("--page-file", help="page content saved from Backlog MCP; no API call, prints the new content")
+    wp.add_argument("--pages-dir", help="folder of pages saved from Backlog MCP as <slug>.md and index.md; no API call")
     wp.set_defaults(func=_cmd_wiki_append_preview)
 
-    wu = sub.add_parser("wiki-update", help="append approved rows to the wiki page if it did not change")
+    wu = sub.add_parser("wiki-update", help="write the approved diffs if no page changed since the preview")
     wu.add_argument("--rows", required=True)
-    wu.add_argument("--expected-updated", required=True, help="'updated' value from wiki-append-preview")
-    wu.add_argument("--expected-hash", required=True, help="'new_sha256' value from wiki-append-preview")
-    wu.add_argument("--wiki-id")
+    wu.add_argument("--approval", required=True, help="'approval' value from wiki-append-preview")
     wu.add_argument("--mail-notify", action="store_true", help="let Backlog email watchers about the edit")
     wu.set_defaults(func=_cmd_wiki_update)
 

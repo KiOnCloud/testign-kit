@@ -86,13 +86,34 @@ def get(wiki_id: int | str) -> dict:
     return {"id": page["id"], "name": page["name"], "content": page.get("content") or "", "updated": page.get("updated")}
 
 
+def list_pages(project_key: str, prefix: str = "") -> dict[str, dict]:
+    """Wiki pages of a project whose name starts with ``prefix``: name -> {id, updated}. Metadata only."""
+    pages = _call("GET", "/wikis", {"projectIdOrKey": project_key, **({"keyword": prefix} if prefix else {})})
+    return {
+        p["name"]: {"id": p["id"], "updated": p.get("updated")}
+        for p in pages
+        if str(p.get("name", "")).startswith(prefix)
+    }
+
+
 def find(project_key: str, name: str) -> int:
     """Wiki page ID by exact page name within a project."""
-    pages = _call("GET", "/wikis", {"projectIdOrKey": project_key})
-    for page in pages:
-        if page.get("name") == name:
-            return page["id"]
-    raise BacklogError(f"wiki page '{name}' not found in project {project_key}")
+    page = list_pages(project_key, name).get(name)
+    if not page:
+        raise BacklogError(f"wiki page '{name}' not found in project {project_key}")
+    return page["id"]
+
+
+def create(project_key: str, name: str, content: str, mail_notify: bool = False) -> dict:
+    """Create a page, refusing when a page with that name appeared since the tester saw the diff."""
+    if name in list_pages(project_key, name):
+        raise ConflictError(f"wiki page '{name}' was created by someone else meanwhile; show the tester a new diff")
+    project = _call("GET", f"/projects/{urllib.parse.quote(project_key, safe='')}")
+    page = _call("POST", "/wikis", form={"projectId": str(project["id"]), "name": name, "content": content,
+                                         "mailNotify": str(mail_notify).lower()})
+    if _normalize(page.get("content") or "") != _normalize(content):
+        raise BacklogError(f"Backlog saved different content than was sent to '{name}'; check the page by hand.")
+    return {"id": page["id"], "name": page["name"], "updated": page.get("updated")}
 
 
 def _normalize(text: str) -> str:

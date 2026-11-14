@@ -146,97 +146,275 @@ def _check_page(parsed: dict) -> None:
                 raise DecisionsError(f"entry {e['id']} has no '- Status:' line; add one on the wiki first")
 
 
-def append(page: str, rows: list[dict], ticket_regex: str, titles: dict[str, str] | None = None) -> tuple[str, dict]:
-    """Append approved ``rows`` to ``page``. Returns the new page and what was added, skipped, superseded.
+INDEX_HEADER = "| ID | Page | Ticket | Q | Anchors | Date | Status |"
+INDEX_RULE = "|---|---|---|---|---|---|---|"
+_INDEX_ROW_RE = re.compile(r"^\|\s*(D-[^|\s]+-\d{3})\s*\|")
+COMMON = "common"
+INDEX = "index"
 
-    A row is skipped when the ticket already has an entry with the same Q ID and Source link. A row with
-    the same Q ID and a different Source becomes a new entry, and the previous active entry for that Q
-    (on the page or earlier in the same batch) gets ``Status: superseded by <new ID>``.
+
+class _PageEdit:
+    """Pending edits of one page: replaced lines, blocks inserted after a line, new ticket sections."""
+
+    def __init__(self, name: str, content: str, ticket_regex: str, heading: str):
+        self.name = name
+        self.original = content
+        self.heading = heading
+        self.lines = split_lines(content)
+        terms = [t for _, t in self.lines if t]
+        self.eol = max(set(terms), key=terms.count) if terms else "\n"
+        self.parsed = parse(content, ticket_regex)
+        _check_page(self.parsed)
+        self.replace: dict[int, str] = {}
+        self.inserts: dict[int, list[str]] = {}
+        self.sections: dict[str, list[str]] = {}
+        self.titles: dict[str, str] = {}
+
+    def target_for(self, ticket: str, title: str) -> list[str]:
+        section = self.parsed["tickets"].get(ticket)
+        if section:
+            return self.inserts.setdefault(_section_end(self.lines, section["line"]), [])
+        if title:
+            self.titles.setdefault(ticket, title)
+        return self.sections.setdefault(ticket, [])
+
+    def render(self) -> str:
+        out: list[str] = []
+        for idx, (text, eol) in enumerate(self.lines):
+            text = self.replace.get(idx, text)
+            extra = self.inserts.get(idx)
+            if extra is None:
+                out.append(text + eol)
+                continue
+            out.append(text + (eol or self.eol))
+            next_is_heading = idx + 1 < len(self.lines) and self.lines[idx + 1][0].startswith("#")
+            block = extra + ([""] if next_is_heading else [])
+            for j, new_line in enumerate(block):
+                last = j == len(block) - 1
+                out.append(new_line + ("" if last and not eol else (eol or self.eol)))
+        text = "".join(out)
+        if not text.strip() and self.sections:
+            text = self.heading + self.eol
+        for ticket, block in self.sections.items():
+            title = self.titles.get(ticket, "")
+            heading = f"## {ticket} · {title}" if title else f"## {ticket}"
+            if text and not text.endswith(("\n", "\r")):
+                text += self.eol
+            if text.strip() and not text.endswith(self.eol * 2):
+                text += self.eol
+            text += self.eol.join([heading, *block]) + self.eol
+        return text
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.replace or self.inserts or self.sections)
+
+
+def parse_index(page: str) -> list[dict]:
+    """Rows of the decisions index table: id, page, ticket, q, anchors (list), date, status, line (0-based)."""
+    rows = []
+    for idx, (raw, _eol) in enumerate(split_lines(page)):
+        if not _INDEX_ROW_RE.match(raw.strip()):
+            continue
+        cells = [c.strip().replace("\\|", "|") for c in re.split(r"(?<!\\)\|", raw.strip().strip("|"))]
+        if len(cells) < 7:
+            continue
+        rows.append({
+            "id": cells[0], "page": cells[1], "ticket": cells[2], "q": cells[3],
+            "anchors": [a.strip() for a in cells[4].split(";") if a.strip()],
+            "date": cells[5], "status": cells[6], "line": idx,
+        })
+    return rows
+
+
+def _index_line(row: dict) -> str:
+    def cell(value: str) -> str:
+        return str(value).replace("|", "\\|")
+
+    anchors = "; ".join(cell(a) for a in row["anchors"])
+    return f"| {row['id']} | {row['page']} | {row['ticket']} | {row['q']} | {anchors} | {row['date']} | {row['status']} |"
+
+
+def _norm_anchor(text: str) -> str:
+    return re.sub(r"[\s「」『』【】\"'`]+", "", text).casefold()
+
+
+def _anchors_match(a: str, b: str) -> bool:
+    x, y = _norm_anchor(a), _norm_anchor(b)
+    if len(x) < 2 or len(y) < 2:
+        return x == y and bool(x)
+    return x in y or y in x
+
+
+def lookup(index_page: str, anchors: list[str], ticket: str | None = None, feature: str | None = None) -> dict:
+    """Index rows relevant to a survey and the pages to open.
+
+    A row matches when it belongs to the ticket or one of its anchors overlaps a survey anchor. The pages
+    to open are the pages of every matching row, plus ``common`` and the survey's own feature page, so a
+    decision filed under another feature is still found.
+    """
+    rows = parse_index(index_page)
+    matched = [
+        r for r in rows
+        if r["ticket"] == ticket or any(_anchors_match(a, b) for a in anchors for b in r["anchors"])
+    ]
+    pages = list(dict.fromkeys([*(r["page"] for r in matched), COMMON, *([feature] if feature else [])]))
+    return {"matched": [{k: v for k, v in r.items() if k != "line"} for r in matched], "pages": pages}
+
+
+def page_slug(feature: str) -> str:
+    """Feature page slug; the same slug as the scout cache key."""
+    from .cache import slug as cache_slug
+
+    try:
+        slug = cache_slug(str(feature))
+    except ValueError:
+        raise DecisionsError("row has an empty 'feature'; use the feature slug or 'common'") from None
+    if slug == INDEX:
+        raise DecisionsError("'index' is reserved for the decisions index page")
+    return slug
+
+
+def pages_needed(rows: list[dict], index_page: str) -> list[str]:
+    """Pages the append must load: the rows' target pages, plus pages holding entries for the same
+    ticket and Q (they may be superseded or already contain the same decision)."""
+    keys = {(r["ticket"], r["q"]) for r in rows}
+    targets = [page_slug(r.get("feature", "")) for r in rows]
+    related = [r["page"] for r in parse_index(index_page) if (r["ticket"], r["q"]) in keys]
+    return list(dict.fromkeys([*targets, *related]))
+
+
+def apply_changes(pages: dict[str, str], index_page: str, rows: list[dict], ticket_regex: str,
+                  titles: dict[str, str] | None = None, project: str = "") -> tuple[dict[str, str], str, dict]:
+    """Append approved rows across feature/common pages and the index.
+
+    ``pages`` maps page slug to current content ("" for a page that does not exist yet) and must hold
+    every page from ``pages_needed``. Returns (changed pages, new index content, result). Existing lines
+    are kept byte for byte except superseded ``Status`` lines (on pages) and status cells (in the index).
+    A row whose decision is already on a page is skipped; if the index lacks its row (an earlier run
+    stopped between the page and the index write), the index row is added.
     """
     titles = titles or {}
     ticket_re = re.compile(ticket_pattern(ticket_regex))
+    rows = [dict(r) for r in rows]
     for row in rows:
         if not re.fullmatch(r"Q\d+", str(row.get("q", ""))):
             raise DecisionsError(f"row has an invalid Q ID: {row.get('q')!r}")
         if not ticket_re.fullmatch(str(row.get("ticket", ""))):
             raise DecisionsError(f"row has an invalid ticket ID: {row.get('ticket')!r}")
+        anchors = row.get("anchors")
+        if not isinstance(anchors, list) or not [a for a in anchors if str(a).strip()]:
+            raise DecisionsError(f"row for {row['ticket']} {row['q']} needs a non-empty 'anchors' list")
+        row["_page"] = page_slug(row.get("feature", ""))
+    missing = [p for p in pages_needed(rows, index_page) if p not in pages]
+    if missing:
+        raise DecisionsError(f"pages not loaded: {', '.join(missing)}")
 
-    lines = split_lines(page)
-    terms = [t for _, t in lines if t]
-    default_eol = max(set(terms), key=terms.count) if terms else "\n"
-    parsed = parse(page, ticket_regex)
-    _check_page(parsed)
-
-    result = {"added": [], "skipped": [], "superseded": []}
-    status_updates: dict[int, str] = {}  # 0-based index of an existing line -> new text
-    inserts: dict[int, list[str]] = {}  # new lines after an existing line index
-    new_sections: dict[str, list[str]] = {}
-    active: dict[tuple[str, str], tuple] = {}  # (ticket, q) -> ("page", line index, id) | ("new", list, pos, id)
-
-    counters: dict[str, int] = {}
-    for t, d in parsed["tickets"].items():
-        ids = [int(x) for x in re.findall(rf"\bD-{re.escape(t)}-(\d{{3}})\b", page)]
-        counters[t] = max(ids or [0])
-        for e in d["entries"]:
-            if e["active"]:
-                active[(t, e["q"])] = ("page", e["status_lines"][-1] - 1, e["id"])
-    seen = {
-        (t, e["q"], e["fields"].get("Source", "").strip())
-        for t, d in parsed["tickets"].items()
-        for e in d["entries"]
+    editors = {
+        name: _PageEdit(name, content, ticket_regex,
+                        f"# Decisions — {project + ' / ' if project else ''}{name}")
+        for name, content in pages.items()
     }
+    index_lines = split_lines(index_page)
+    index_terms = [t for _, t in index_lines if t]
+    index_eol = max(set(index_terms), key=index_terms.count) if index_terms else "\n"
+    index_rows = parse_index(index_page)
+    index_ids = {r["id"] for r in index_rows}
+    index_replace: dict[int, str] = {}
+    index_new: list[dict] = []
 
+    everything = index_page + "".join(pages.values())
+    counters: dict[str, int] = {}
+    seen: dict[tuple[str, str, str], tuple[str, str]] = {}
+    active: dict[tuple[str, str], tuple] = {}
+    for name, ed in editors.items():
+        for t, d in ed.parsed["tickets"].items():
+            for e in d["entries"]:
+                seen[(t, e["q"], e["fields"].get("Source", "").strip())] = (e["id"], name)
+                if e["active"]:
+                    active[(t, e["q"])] = ("page", name, e["status_lines"][-1] - 1, e["id"])
+
+    result = {"added": [], "skipped": [], "superseded": [], "index_repaired": [], "pages": []}
     for row in rows:
-        ticket, q, source = row["ticket"], row["q"], str(row["source"]).strip()
+        ticket, q, source, page = row["ticket"], row["q"], str(row["source"]).strip(), row["_page"]
+        anchors = [str(a).strip() for a in row["anchors"] if str(a).strip()]
         if (ticket, q, source) in seen:
-            result["skipped"].append({"ticket": ticket, "q": q, "source": source})
+            entry_id, where = seen[(ticket, q, source)]
+            result["skipped"].append({"ticket": ticket, "q": q, "source": source, "id": entry_id, "page": where})
+            if entry_id not in index_ids:
+                index_new.append({"id": entry_id, "page": where, "ticket": ticket, "q": q, "anchors": anchors,
+                                  "date": row.get("date", ""), "status": "active"})
+                index_ids.add(entry_id)
+                result["index_repaired"].append(entry_id)
             continue
-        counters[ticket] = counters.get(ticket, 0) + 1
+        if ticket not in counters:
+            counters[ticket] = max([int(x) for x in re.findall(rf"\bD-{re.escape(ticket)}-(\d{{3}})\b", everything)] or [0])
+        counters[ticket] += 1
         entry_id = f"D-{ticket}-{counters[ticket]:03d}"
         block = ["", *render_entry(entry_id, row)]
-        seen.add((ticket, q, source))
+        seen[(ticket, q, source)] = (entry_id, page)
         result["added"].append(entry_id)
 
         previous = active.get((ticket, q))
         if previous:
             superseded = f"- Status: superseded by {entry_id}"
             if previous[0] == "page":
-                status_updates[previous[1]] = superseded
+                editors[previous[1]].replace[previous[2]] = superseded
             else:
                 previous[1][previous[2]] = superseded
-            result["superseded"].append(previous[-1])
+            prev_id = previous[-1]
+            result["superseded"].append(prev_id)
+            for r in index_rows:
+                if r["id"] == prev_id:
+                    index_replace[r["line"]] = _index_line({**r, "status": f"superseded by {entry_id}"})
+            for r in index_new:
+                if r["id"] == prev_id:
+                    r["status"] = f"superseded by {entry_id}"
 
-        section = parsed["tickets"].get(ticket)
-        if section:
-            target = inserts.setdefault(_section_end(lines, section["line"]), [])
-        else:
-            target = new_sections.setdefault(ticket, [])
+        target = editors[page].target_for(ticket, titles.get(ticket, row.get("ticket_title", "")))
         target.extend(block)
         active[(ticket, q)] = ("new", target, len(target) - 1, entry_id)
+        index_new.append({"id": entry_id, "page": page, "ticket": ticket, "q": q, "anchors": anchors,
+                          "date": row["date"], "status": "active"})
+        index_ids.add(entry_id)
 
-    out: list[str] = []
-    for idx, (text, eol) in enumerate(lines):
-        text = status_updates.get(idx, text)
-        extra = inserts.get(idx)
-        if extra is None:
-            out.append(text + eol)
-            continue
-        out.append(text + (eol or default_eol))
-        next_is_heading = idx + 1 < len(lines) and lines[idx + 1][0].startswith("#")
-        block = extra + ([""] if next_is_heading else [])
-        for j, new_line in enumerate(block):
-            last = j == len(block) - 1
-            out.append(new_line + ("" if last and not eol else (eol or default_eol)))
+    changed = {name: ed.render() for name, ed in editors.items() if ed.changed}
+    result["pages"] = sorted(changed)
+    new_index = _render_index(index_lines, index_eol, index_replace, index_new, index_rows, project)
+    return changed, new_index, result
+
+
+def _render_index(lines, eol, replace, new_rows, rows, project) -> str:
+    out = [replace.get(i, text) + term for i, (text, term) in enumerate(lines)]
+    if not new_rows:
+        return "".join(out)
+    added = [_index_line(r) for r in new_rows]
+    if rows:
+        last = rows[-1]["line"]
+        text, term = lines[last]
+        out[last] = replace.get(last, text) + (term or eol)
+        block = [a + eol for a in added]
+        if not term:
+            block[-1] = added[-1]
+        out[last + 1:last + 1] = block
+        return "".join(out)
     text = "".join(out)
-    for ticket, block in new_sections.items():
-        title = titles.get(ticket, "")
-        heading = f"## {ticket} · {title}" if title else f"## {ticket}"
-        if text and not text.endswith(("\n", "\r")):
-            text += default_eol
-        if text.strip() and not text.endswith(default_eol * 2):
-            text += default_eol  # blank line before the new section
-        text += default_eol.join([heading, *block]) + default_eol
-    return text, result
+    if not text.strip():
+        title = f"# Decisions index — {project}" if project else "# Decisions index"
+        text = (title + eol + eol + "> Managed by testign `/testign:close`. One row per decision; keep the columns."
+                + eol + eol)
+    elif not text.endswith(("\n", "\r")):
+        text += eol + eol
+    elif not text.endswith(eol * 2):
+        text += eol
+    return text + eol.join([INDEX_HEADER, INDEX_RULE, *added]) + eol
+
+
+def append(page: str, rows: list[dict], ticket_regex: str, titles: dict[str, str] | None = None) -> tuple[str, dict]:
+    """Single-page append (all rows on one page, no index). Kept for parsing/formatting checks."""
+    rows = [{"feature": "page", "anchors": ["-"], **r} for r in rows]
+    changed, _index, result = apply_changes({"page": page}, "", rows, ticket_regex, titles)
+    return changed.get("page", page), {k: result[k] for k in ("added", "skipped", "superseded")}
 
 
 def _section_end(lines: list[tuple[str, str]], heading_line: int) -> int:

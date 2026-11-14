@@ -42,13 +42,20 @@ only when they settle an intent question.
 ### 3. Row approval (gate 1)
 
 Show one table: Q ID, classification, verbatim quote, link, and the proposed log entry (Decision in the
-report language, Decided by). The tester approves, edits or rejects each row. Write nothing before this.
-Only approved **decided** rows go further. `approved_by` is the tester's name.
+report language, Decided by, the **page** it goes to, and its **anchors**). The tester approves, edits or
+rejects each row. Write nothing before this. Only approved **decided** rows go further. `approved_by` is
+the tester's name.
+
+Page: the report's `cache_feature` (the feature slug) by default; `common` when the decision is about
+logic shared by several features (tax, rounding, master data, a shared service). Anchors: the screen
+names, JP UI labels, API names and business terms the decision is about, taken from the report; they are
+what later surveys match on, so include every screen the decision affects.
 
 Save the approved rows as `<output_dir>/<TICKET>/<TICKET>-approved-decisions.json`, a list of:
 
 ```json
-{"ticket": "DEMO-12", "ticket_title": "<summary>", "q": "Q2", "date": "YYYY-MM-DD", "question": "<as asked, usually the ja draft>",
+{"ticket": "DEMO-12", "ticket_title": "<summary>", "q": "Q2", "feature": "<feature slug | common>",
+ "anchors": ["注文確定", "「確定」"], "date": "YYYY-MM-DD", "question": "<as asked, usually the ja draft>",
  "decision": "...", "quote": "<verbatim>", "source": "<link>", "decided_by": "Customer | BrSE (<name>) | Dev (<name>)",
  "approved_by": "<tester>", "report": "<report file name>"}
 ```
@@ -59,26 +66,31 @@ Save the approved rows as `<output_dir>/<TICKET>/<TICKET>-approved-decisions.jso
 <run> wiki-append-preview --rows "<approved json>"
 ```
 
-Show the tester the `diff` and the `added` / `skipped` (already in the log) / `superseded` lists.
-Write only after the tester approves this diff in the same run:
+The preview lists one diff per page that will change: feature/common pages first (a page that does
+not exist yet shows `exists: false` and will be created), the index last. Show every diff and the
+`added` / `skipped` (already in the log) / `superseded` / `index_repaired` lists. Write only after the
+tester approves all of them in the same run:
 
 ```bash
-<run> wiki-update --rows "<approved json>" --expected-updated "<updated from the preview>" --expected-hash "<new_sha256 from the preview>"
+<run> wiki-update --rows "<approved json>" --approval "<approval from the preview>"
 ```
 
-Do not edit the approved rows file between the preview and the update: the update recomputes the
-page and refuses to write unless it is exactly the content whose diff the tester approved.
+Do not edit the approved rows file between the preview and the update: the update re-reads every page
+and refuses to write unless the pages are unchanged and the new contents are exactly the approved diffs.
 
-- If it says the page changed since the diff was shown, or that the content differs from the approved
-  diff, run the preview again and ask again.
+- If it says the pages or the content differ from the approved diff, run the preview again and ask again.
+- If a write fails midway, it lists the pages already written. Run the preview again: entries already on
+  a page are skipped and their missing index rows are added; show that diff and update again.
 - If the preview fails because `BACKLOG_DOMAIN`/`BACKLOG_API_KEY` are not set in the shell or the key
-  cannot edit the page: fetch the page with Backlog MCP `get_wiki`, save it to
-  `<output_dir>/<TICKET>/.decisions-page.md`, run
-  `<run> wiki-append-preview --rows "<approved json>" --page-file "<that file>"`, show the diff, and
-  give the tester `new_content` to paste into the wiki by hand. Say clearly that nothing was written.
+  cannot edit the pages: with Backlog MCP, read `<prefix>/index` and each target page (and any page the
+  index lists for the same ticket and Q), save them as `<output_dir>/<TICKET>/.decisions/<slug>.md`
+  (`index.md` for the index; leave a page's file out if it does not exist), run
+  `<run> wiki-append-preview --rows "<approved json>" --pages-dir "<that folder>"`, show the diffs, and
+  give the tester each page's `new_content` to paste (create missing pages with the name shown). Say
+  clearly that nothing was written.
 - If it stops because the project uses Backlog notation, tell the tester and stop the wiki part.
 
-Delete the approved rows file and any `.decisions-page.md` copy afterwards.
+Delete the approved rows file and the `.decisions` folder afterwards.
 
 ### 5. New report revision
 

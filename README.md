@@ -73,7 +73,9 @@ claude mcp add backlog -e BACKLOG_DOMAIN=<space>.backlog.com -e BACKLOG_API_KEY=
 
 Tools the plugin uses: `get_issue`, `get_issue_comments`, `get_issue_attachment`, `get_wiki_pages`, `get_wiki`.
 
-The MCP server has no wiki update tool, so `/testign:close` writes the decisions log through the Backlog REST API (`PATCH /api/v2/wikis/:wikiId`). The helper reads `BACKLOG_DOMAIN` and `BACKLOG_API_KEY` from your **shell environment**; values passed only to the MCP server with `-e` are not visible to it, so set them as user environment variables as well (`export ...` in your shell profile on macOS, `setx BACKLOG_API_KEY ...` on Windows, then restart Claude Code). The key is never printed or logged. Without these variables, or without a key that can edit the page, `/testign:close` shows the diff and prints the new page content for you to paste. The page layout is in [`references/decisions-log-format.md`](references/decisions-log-format.md); the Backlog project's text formatting rule must be Markdown.
+The decisions log is split into one wiki page per feature (same name as the scout cache feature), a `common` page for shared logic, and an index that lists every decision with its anchors. `/testign:survey` looks up the index by the ticket's anchors and opens every matching page, so a decision filed under another feature is still found.
+
+The MCP server has no wiki update tool, so `/testign:close` writes the decisions log through the Backlog REST API (`PATCH` / `POST /api/v2/wikis`), creating feature pages and the index when they do not exist yet. The helper reads `BACKLOG_DOMAIN` and `BACKLOG_API_KEY` from your **shell environment**; values passed only to the MCP server with `-e` are not visible to it, so set them as user environment variables as well (`export ...` in your shell profile on macOS, `setx BACKLOG_API_KEY ...` on Windows, then restart Claude Code). The key is never printed or logged. Without these variables, or without a key that can edit the pages, `/testign:close` shows the diffs and prints the new page contents for you to paste. The page layout is in [`references/decisions-log-format.md`](references/decisions-log-format.md); the Backlog project's text formatting rule must be Markdown.
 
 ### Tester settings
 
@@ -85,8 +87,8 @@ Settings live in `~/.testign-kit/config.json` (`%USERPROFILE%\.testign-kit\confi
 | `lang` | `vi` | Report language (`vi`, `ja`, `en`) |
 | `master_ref` / `develop_ref` | `master` / `develop` | Branch names for Production and the current phase |
 | `ticket_id_regex` | Backlog keys like `PROJ-123` | How commits are grouped by ticket |
-| `backlog.space`, `backlog.project_key`, `backlog.decisions_log_page` | empty | Backlog space, project and the decisions log wiki page name |
-| `backlog.decisions_log_wiki_id` | empty | Wiki page ID; skips the lookup by name |
+| `backlog.space`, `backlog.project_key` | empty | Backlog space and the project that holds the decisions log |
+| `backlog.decisions_log_prefix` | `QA/Decisions` | Wiki name prefix of the decisions log: `<prefix>/index`, `<prefix>/common` and one `<prefix>/<feature>` page per feature |
 | `backlog.text_format` | `markdown` | The Backlog project's text formatting rule; `backlog` (Backlog notation) disables the decisions log commands |
 
 Reports, briefs and test case files for a ticket go to `<output_dir>/<TICKET>/`. Report revisions are named `<TICKET>-survey-r<N>.md` and are never overwritten.
