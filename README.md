@@ -5,7 +5,7 @@
 A Claude Code plugin that helps manual testers working on large legacy codebases. Before writing test cases, the tester gets an agent-generated survey of how the feature behaves today, what the current phase has already changed, and where the ticket's spec disagrees with either.
 
 > [!WARNING]
-> **Status: early design.** The plugin itself is not written yet. This repository currently holds only the survey report template. Everything under [Planned components](#planned-components) describes intended behavior, not shipped features.
+> **Status: skeleton (v0.1.0).** The plugin installs and its commands are listed, but they only say "not implemented yet". Everything under [Planned components](#planned-components) describes intended behavior, not shipped features.
 
 ## Why
 
@@ -37,20 +37,53 @@ testign-kit makes that investigation an automatic step for every ticket, and tur
 
 ## Installation
 
-The plugin is not published yet, so there is nothing to install today. Once it ships, this repository will also act as its own plugin marketplace, and installation will follow the standard Claude Code flow:
+### Prerequisites
+
+- Claude Code.
+- **Python 3.10 or newer** on `PATH` (`python3` on macOS; `py -3` or `python` on Windows). The skills call a small stdlib-only Python package for git and file work. Install it from [python.org](https://www.python.org/downloads/) if `python3 --version` or `py -3 --version` fails.
+- Git, and a local clone of the customer repository. The plugin only reads it (`git show`, `git diff`, `git log`, `git grep`) and never checks out or changes the working tree.
+- The Backlog MCP server (see below) for reading tickets and the wiki.
+
+### Install the plugin
+
+This repository is its own plugin marketplace. In Claude Code:
 
 ```text
 /plugin marketplace add KiOnCloud/testign-kit
-/plugin install testign-kit@testign-kit
+/plugin install testign@testign-kit
 ```
 
-Or from your shell:
+Or in one step on Claude Code 2.1.275 or later:
+
+```text
+/plugin install testign --marketplace KiOnCloud/testign-kit
+```
+
+The commands are namespaced by the plugin name: `/testign:survey`, `/testign:close`, `/testign:testcase`. See the official docs on [installing plugins](https://code.claude.com/docs/en/discover-plugins) for scopes, updates and removal.
+
+### Backlog MCP server
+
+Tickets, comments and the wiki are read through Nulab's official [`backlog-mcp-server`](https://github.com/nulab/backlog-mcp-server). Add it to your own Claude Code MCP config with your own credentials; this repository never ships API keys or an `.mcp.json`.
 
 ```bash
-claude plugin install testign-kit --marketplace KiOnCloud/testign-kit
+claude mcp add backlog -e BACKLOG_DOMAIN=<space>.backlog.com -e BACKLOG_API_KEY=<your key> -- npx backlog-mcp-server
 ```
 
-The final plugin and marketplace names may change before release. See the official docs on [installing plugins](https://code.claude.com/docs/en/discover-plugins) for scopes, updates and removal.
+Tools the plugin uses: `get_issue`, `get_issue_comments`, `get_issue_attachment`, `get_wiki_pages`, `get_wiki`.
+
+The MCP server has no wiki update tool, so `/testign:close` writes the decisions log through the Backlog REST API (`PATCH /api/v2/wikis/:wikiId`) using the same `BACKLOG_DOMAIN` and `BACKLOG_API_KEY` environment variables. Without a key that can edit the page, it prints the approved Markdown for you to paste. The page layout is in [`references/decisions-log-format.md`](references/decisions-log-format.md).
+
+### Tester settings
+
+Settings live in `~/.testign-kit/config.json` (`%USERPROFILE%\.testign-kit\config.json` on Windows). The file is created with defaults the first time a command runs:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `output_dir` | `~/Downloads` | Where reports and test case files are written |
+| `lang` | `vi` | Report language (`vi`, `ja`, `en`) |
+| `master_ref` / `develop_ref` | `master` / `develop` | Branch names for Production and the current phase |
+| `ticket_id_regex` | Backlog keys like `PROJ-123` | How commits are grouped by ticket |
+| `backlog.space`, `backlog.project_key`, `backlog.decisions_log_page` | empty | Backlog space, project and the decisions log wiki page |
 
 ## Usage
 
@@ -69,10 +102,32 @@ The report defaults to Vietnamese (falling back to Japanese, then English), and 
 
 ```text
 .
+├── .claude-plugin/
+│   ├── plugin.json                 # plugin "testign"
+│   └── marketplace.json            # marketplace "testign-kit"
+├── .github/workflows/test.yml      # pytest + claude plugin validate on Windows and macOS
+├── commands/                       # /testign:survey, /testign:close
+├── skills/                         # scout (internal), spec-qa, qa-close, testcase (/testign:testcase)
+├── references/
+│   ├── rules.md                    # shared rules every skill reads
+│   └── decisions-log-format.md     # Backlog wiki decisions log format
 ├── templates/
-│   └── survey-report-template.md   # survey report structure and agent instructions
+│   └── survey-report-template.md   # survey report structure
+├── scripts/
+│   ├── run.py                      # single entry point the skills call
+│   └── testign/                    # python package (config, git scoping, ...)
+├── tests/                          # pytest
+├── pyproject.toml
 ├── LICENSE
 └── README.md
+```
+
+### Development
+
+```bash
+python -m pip install pytest
+python -m pytest
+claude plugin validate --strict .
 ```
 
 ## Contributing

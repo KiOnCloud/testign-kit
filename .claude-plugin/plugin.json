@@ -1,0 +1,10 @@
+{
+  "name": "testign",
+  "version": "0.1.0",
+  "description": "Survey a Backlog ticket against a legacy repo (master at merge-base and git diff master...develop), route QA questions, keep a shared decisions log and fill the customer's Excel test case template.",
+  "author": { "name": "KiOnCloud" },
+  "homepage": "https://github.com/KiOnCloud/testign-kit",
+  "repository": "https://github.com/KiOnCloud/testign-kit",
+  "license": "MIT",
+  "keywords": ["qa", "testing", "manual-testing", "legacy", "backlog", "survey", "test-cases"]
+}

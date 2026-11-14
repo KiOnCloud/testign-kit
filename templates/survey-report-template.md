@@ -1,25 +1,21 @@
-<!--
-=====================================================================
-SURVEY REPORT TEMPLATE — hướng dẫn cho agent (không render)
-=====================================================================
-NGÔN NGỮ
-- Report: theo ngôn ngữ được chỉ định; nếu không chỉ định → vi > ja > en.
-- Câu hỏi route BrSE/khách: LUÔN kèm bản nháp ja, bất kể ngôn ngữ report.
-- Label UI giữ nguyên văn tiếng Nhật (vd 「確定」ボタン), không dịch.
-- Identifier code, tên file, commit: giữ tiếng Anh.
+---
+ticket: <TICKET-ID>
+repo: <repo name or path>
+master_ref: <master branch name or SHA as given>
+develop_ref: <develop branch name or SHA as given>
+merge_base: <merge-base SHA>
+develop_head: <develop HEAD SHA>
+revision: <N>
+previous: <file name of revision N-1 | null>
+plugin_version: <testign version>
+lang: <vi|ja|en>
+generated_at: <ISO 8601 timestamp>
+---
 
-NGUYÊN TẮC
-- Mô tả bằng HÀNH VI TRÊN MÀN HÌNH. Tham chiếu code chỉ đặt ở mục 8.
-- Production = master (merge-base). Phase này = develop. Diff dùng merge-base
-  (git diff master...develop), nhóm commit theo ticket ID.
-- Mọi khẳng định gắn nhãn nguồn: [code] [khách chốt] [wiki] [observed] [suy luận].
-- Mỗi finding gắn nhãn fact | intent. Không chắc → intent.
-- Route: fact → Dev. intent → BrSE/khách. Lai → Dev xác nhận fact trước,
-  sau đó escalate intent kèm fact đã xác nhận.
-- Không bịa coverage: phần chưa đọc được phải liệt kê ở mục 6.
-- Bỏ placeholder <...> khi điền; xoá dòng/mục không có dữ liệu thay vì để trống,
-  trừ mục 1, 2, 3, 6 (luôn có).
-=====================================================================
+<!--
+SURVEY REPORT TEMPLATE — hướng dẫn cho agent (không render)
+Quy tắc viết report nằm ở ${CLAUDE_PLUGIN_ROOT}/references/rules.md. Đọc file đó trước khi điền.
+Frontmatter là hợp đồng giữa các bước (survey → close → testcase): giữ đủ các field, ghi SHA đầy đủ.
 -->
 
 # [<TICKET-ID>] Survey report — <tên chức năng>

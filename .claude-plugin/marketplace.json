@@ -1,0 +1,12 @@
+{
+  "name": "testign-kit",
+  "owner": { "name": "KiOnCloud" },
+  "description": "Marketplace for the testign plugin: survey reports, QA routing and Excel test cases for manual testers on legacy codebases.",
+  "plugins": [
+    {
+      "name": "testign",
+      "source": "./",
+      "description": "Survey a Backlog ticket against a legacy repo, route QA questions, keep a shared decisions log and fill the customer's Excel test case template."
+    }
+  ]
+}
