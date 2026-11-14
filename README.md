@@ -6,10 +6,8 @@ Bộ công cụ cho AI agent hỗ trợ manual tester. Agent khảo sát spec c�
 
 ## Cấu trúc
 
-| Thư mục | Nội dung |
+| File | Nội dung |
 |---|---|
-| [`docs/handoff.md`](docs/handoff.md) | Thiết kế đầy đủ: bối cảnh, quyết định D1–D8, flow, rủi ro, việc còn mở |
 | [`templates/survey-report-template.md`](templates/survey-report-template.md) | Template survey report |
-| [`skills/`](skills/) | Chỗ đóng gói Claude Skill (chưa có) |
 
 > Repo private. Nội dung liên quan đến dự án khách hàng Nhật (NDA/ISMS): không commit source code, spec hay dữ liệu thật của khách vào đây.
