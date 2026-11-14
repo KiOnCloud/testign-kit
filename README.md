@@ -40,7 +40,8 @@ testign-kit makes that investigation an automatic step for every ticket, and tur
 ### Prerequisites
 
 - Claude Code.
-- **Python 3.10 or newer** on `PATH` (`python3` on macOS; `py -3` or `python` on Windows). The skills call a small stdlib-only Python package for git and file work. Install it from [python.org](https://www.python.org/downloads/) if `python3 --version` or `py -3 --version` fails.
+- **Python 3.10 or newer** on `PATH` (`python3` on macOS; `py -3` or `python` on Windows). The skills call a small Python package for git and file work. Install it from [python.org](https://www.python.org/downloads/) if `python3 --version` or `py -3 --version` fails.
+- **openpyxl** for `/testign:testcase`: `python3 -m pip install openpyxl` (or `py -3 -m pip install openpyxl` on Windows).
 - Git, and a local clone of the customer repository. The plugin only reads it (`git show`, `git diff`, `git log`, `git grep`) and never checks out or changes the working tree.
 - The Backlog MCP server (see below) for reading tickets and the wiki.
 
@@ -85,6 +86,14 @@ Settings live in `~/.testign-kit/config.json` (`%USERPROFILE%\.testign-kit\confi
 | `ticket_id_regex` | Backlog keys like `PROJ-123` | How commits are grouped by ticket |
 | `backlog.space`, `backlog.project_key`, `backlog.decisions_log_page` | empty | Backlog space, project and the decisions log wiki page |
 
+### Test case templates
+
+`/testign:testcase` fills a copy of your own Excel test case template. On the first run it asks for the template file and a name, detects the header row and which column holds each field (`No`, 確認項目, 手順, 期待結果, エビデンス, 備考), and registers it. You can register several templates (for example one per customer) and pick one per run; `template-preview` shows a template's sheets, header and column mapping as a small Markdown table in chat instead of having the model read the workbook.
+
+Registered templates are copied to `~/.testign-kit/templates/` with an `index.json` that records each name, sheet, header row and column mapping. They live there, not inside the installed plugin folder, so plugin updates keep them and customer templates never end up in this public repository.
+
+If you have no template yet, a basic made-up one ships with the plugin: [`templates/testcase-template-sample.xlsx`](templates/testcase-template-sample.xlsx).
+
 ## Usage
 
 Until the plugin exists, you can use the report template directly: give it to Claude Code together with the ticket spec and access to the repository, and ask for a survey report that follows it.
@@ -112,7 +121,8 @@ The report defaults to Vietnamese (falling back to Japanese, then English), and 
 │   ├── rules.md                    # shared rules every skill reads
 │   └── decisions-log-format.md     # Backlog wiki decisions log format
 ├── templates/
-│   └── survey-report-template.md   # survey report structure
+│   ├── survey-report-template.md   # survey report structure
+│   └── testcase-template-sample.xlsx # basic sample test case template
 ├── scripts/
 │   ├── run.py                      # single entry point the skills call
 │   └── testign/                    # python package (config, git scoping, ...)
@@ -125,7 +135,7 @@ The report defaults to Vietnamese (falling back to Japanese, then English), and 
 ### Development
 
 ```bash
-python -m pip install pytest
+python -m pip install pytest openpyxl
 python -m pytest
 claude plugin validate --strict .
 ```
