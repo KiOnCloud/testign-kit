@@ -34,6 +34,8 @@ Rules:
   merge-base>`, taken from `blob_hashes_at_merge_base` in the facts file. A row with no source file is
   not allowed.
 - A row that depends on a stored procedure, config, batch job or master data is `[suy luận]`.
+- Section 1 describes the merge-base only. Values or cases that exist only on develop (a new option,
+  a new limit) go in section 2, never into a section 1 row.
 
 ## 2. Changes in this phase (git diff master...develop)
 
