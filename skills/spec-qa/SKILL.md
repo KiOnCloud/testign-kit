@@ -36,7 +36,8 @@ the tester to paste the ticket text and continue.
 Extract anchors from the spec: screen names, JP UI labels (verbatim, e.g. 「確定」), API names,
 business terms, table names. Show them to the tester in one line and continue without waiting.
 Write them to `<output_dir>/<TICKET>/<TICKET>-anchors.json` as `{"anchors": [...]}` (create the folder
-if needed).
+if needed). Also save the ticket's summary and description, as read, to
+`<output_dir>/<TICKET>/<TICKET>-spec.md`; scout reads it to know which behaviors matter.
 
 ### 3. Scout
 
@@ -44,7 +45,7 @@ Invoke the `scout` skill. It runs in its own subagent and sees only its argument
 on one line, quoting values that contain spaces:
 
 ```text
-<TICKET> --repo "<repo>" --anchors-file "<output_dir>/<TICKET>/<TICKET>-anchors.json" [--master-ref <ref>] [--develop-ref <ref>] [--fetch] [--feature "<feature>"]
+<TICKET> --repo "<repo>" --anchors-file "<output_dir>/<TICKET>/<TICKET>-anchors.json" --spec-file "<output_dir>/<TICKET>/<TICKET>-spec.md" [--master-ref <ref>] [--develop-ref <ref>] [--fetch] [--feature "<feature>"]
 ```
 
 `--feature` defaults to the main screen name. Scout replies with a short `SCOUT_DONE` block (brief
