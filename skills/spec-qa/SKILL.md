@@ -35,17 +35,29 @@ the tester to paste the ticket text and continue.
 
 Extract anchors from the spec: screen names, JP UI labels (verbatim, e.g. 「確定」), API names,
 business terms, table names. Show them to the tester in one line and continue without waiting.
+Write them to `<output_dir>/<TICKET>/<TICKET>-anchors.json` as `{"anchors": [...]}` (create the folder
+if needed).
 
 ### 3. Scout
 
-Invoke the `scout` skill with `ticket`, `repo`, `anchors`, refs, `fetch` and `feature` (default: the
-main screen name). It returns the brief path and the facts file path. Read both.
+Invoke the `scout` skill. It runs in its own subagent and sees only its arguments, so pass everything
+on one line, quoting values that contain spaces:
+
+```text
+<TICKET> --repo "<repo>" --anchors-file "<output_dir>/<TICKET>/<TICKET>-anchors.json" [--master-ref <ref>] [--develop-ref <ref>] [--fetch] [--feature "<feature>"]
+```
+
+`--feature` defaults to the main screen name. Scout replies with a short `SCOUT_DONE` block (brief
+path, facts path, cache result) or `SCOUT_FAILED: <message>`; on failure show the message to the
+tester and stop. Read the brief. Its frontmatter carries the refs, SHAs and cache fields; open the
+facts file only for a field the brief does not have. Read source code yourself only when a finding
+needs a detail the brief lacks, and name that file in section 6.
 
 ### 4. Decisions log (read only)
 
 The log is split into one wiki page per feature, a `common` page and an index (format:
 `${CLAUDE_PLUGIN_ROOT}/references/decisions-log-format.md`). Look decisions up through the index with
-the anchors file scout wrote:
+the anchors file (scout adds `paths` and `symbols` to it):
 
 ```bash
 <run> decisions-lookup --anchors-file "<output_dir>/<TICKET>/<ticket>-anchors.json" --ticket <TICKET> --feature "<feature>"
@@ -95,7 +107,7 @@ lists what was read, what could not be read (including the brief's coverage), an
 decisions log entries used, and the scout cache result (hit / partial with re-read rows / miss).
 
 Frontmatter: `ticket`, `repo`, `master_ref`/`develop_ref` as given, `merge_base` and `develop_head`
-as full SHAs from the facts file, `lang`, and `cache_root`/`cache_feature` from the scout result (null
+as full SHAs from the brief frontmatter, `lang`, and `cache_root`/`cache_feature` from the scout result (null
 when the cache was not used). `revision`, `previous`, `plugin_version` and `generated_at` are set by
 the save command.
 

@@ -440,6 +440,7 @@ def _cmd_cache_check(args: argparse.Namespace) -> int:
         "brief": str(folder / cache.BRIEF) if decision["result"] != "miss" else None,
         "merge_base": base,
         "reviewed_by": (manifest or {}).get("reviewed_by"),
+        "scout_model": (manifest or {}).get("scout_model"),
     })
 
 
@@ -450,7 +451,7 @@ def _cmd_cache_save(args: argparse.Namespace) -> int:
     manifest = cache.save(folder, brief, facts, args.feature)
     return _emit({"cache_dir": str(folder), "cache_root": manifest["root_commit"],
                   "cache_feature": cache.slug(args.feature), "files": len(manifest["files"]),
-                  "rows": list(manifest["rows"])})
+                  "rows": list(manifest["rows"]), "scout_model": manifest["scout_model"]})
 
 
 def _cmd_cache_review(args: argparse.Namespace) -> int:

@@ -69,6 +69,26 @@ def test_no_cache_is_miss_then_saved(demo_repo, tmp_path):
     assert {"path": "db/sp_order_total.sql", "kind": "stored_procedure"} in manifest["unread"]
 
 
+def test_scout_model_comes_from_the_skill_unless_forced(tmp_path):
+    assert cache.scout_model({}) == "sonnet"
+    assert cache.scout_model({"CLAUDE_CODE_SUBAGENT_MODEL": "haiku"}) == "sonnet"
+    forced = {"CLAUDE_CODE_SUBAGENT_MODEL": "opus", "CLAUDE_CODE_SUBAGENT_MODEL_FORCE": "1"}
+    assert cache.scout_model(forced) == "opus (forced)"
+    unpinned = tmp_path / "SKILL.md"
+    unpinned.write_text("---\nname: scout\ncontext: fork\n---\n\nmodel: opus in the body is not frontmatter\n",
+                        encoding="utf-8")
+    assert cache.scout_model({}, unpinned) == "inherit"
+    assert cache.scout_model({}, tmp_path / "missing.md") == "unknown"
+
+
+def test_manifest_records_the_scout_model(demo_repo, tmp_path):
+    facts = facts_for(demo_repo)
+    folder = cache.entry_dir(facts["refs"]["root_commit"], "注文確定", tmp_path)
+    assert cache.save(folder, brief_for(facts), facts, "注文確定", model="haiku (forced)")["scout_model"] == "haiku (forced)"
+    manifest, problem = cache.load(folder)
+    assert problem is None and manifest["scout_model"] == "haiku (forced)"
+
+
 def test_nothing_changed_is_hit(demo_repo, tmp_path):
     seed(demo_repo, tmp_path)
     assert check(demo_repo, tmp_path)[0]["result"] == "hit"
@@ -164,8 +184,11 @@ def test_rows_without_sources_are_not_cached(demo_repo, tmp_path):
     assert not (folder / cache.MANIFEST).exists()
 
 
-def run_cli(*args, home):
+def run_cli(*args, home, **extra_env):
     env = dict(os.environ, HOME=str(home), USERPROFILE=str(home))
+    for name in ("CLAUDE_CODE_SUBAGENT_MODEL", "CLAUDE_CODE_SUBAGENT_MODEL_FORCE"):
+        env.pop(name, None)
+    env.update(extra_env)
     return subprocess.run([sys.executable, str(REPO / "scripts" / "run.py"), *args],
                           capture_output=True, text=True, encoding="utf-8", env=env)
 
@@ -188,6 +211,7 @@ def test_cli_check_save_and_review_after_close(demo_repo, tmp_path):
     hit = json.loads(run_cli("cache-check", "--repo", str(demo_repo.path), "--feature", "注文確定",
                              "--anchors-file", str(anchors), home=home).stdout)
     assert hit["result"] == "hit" and Path(hit["brief"]).exists()
+    assert json.loads(saved.stdout)["scout_model"] == "sonnet" and hit["scout_model"] == "sonnet"
 
     folder = Path(hit["cache_dir"])
     before = ((folder / cache.BRIEF).read_bytes(), json.loads((folder / cache.MANIFEST).read_text(encoding="utf-8"))["files"])
