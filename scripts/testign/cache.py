@@ -18,6 +18,8 @@ from . import config
 
 MANIFEST = "manifest.json"
 BRIEF = "brief.md"
+SCOUT_SKILL = Path(__file__).resolve().parents[2] / "skills" / "scout" / "SKILL.md"
+_MODEL_RE = re.compile(r"^model:\s*(\S+)\s*$", flags=re.M)
 
 
 def slug(feature: str) -> str:
@@ -83,6 +85,26 @@ def _shape_problem(data: object) -> str | None:
     return None
 
 
+def scout_model(env: dict | None = None, skill: Path = SCOUT_SKILL) -> str:
+    """The model the scout subagent is configured to run on, as recorded in a cache entry.
+
+    ``CLAUDE_CODE_SUBAGENT_MODEL`` together with ``CLAUDE_CODE_SUBAGENT_MODEL_FORCE`` overrides the
+    skill's ``model`` field; without the force flag, the skill's field wins. ``inherit`` means the
+    tester's session model. This is the configured value, not one reported by the model itself.
+    """
+    env = os.environ if env is None else env
+    forced = env.get("CLAUDE_CODE_SUBAGENT_MODEL", "").strip()
+    if forced and env.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE", "").strip().lower() in {"1", "true", "yes"}:
+        return f"{forced} (forced)"
+    try:
+        text = skill.read_text(encoding="utf-8")
+    except OSError:
+        return "unknown"
+    head = text.split("\n---", 1)[0] if text.startswith("---") else ""
+    m = _MODEL_RE.search(head)
+    return m.group(1) if m else "inherit"
+
+
 def _major(version: str) -> str:
     return str(version or "0").split(".")[0]
 
@@ -130,7 +152,7 @@ def brief_rows(brief: str) -> dict[str, list[str]]:
     return rows
 
 
-def save(folder: Path, brief: str, facts: dict, feature: str) -> dict:
+def save(folder: Path, brief: str, facts: dict, feature: str, model: str | None = None) -> dict:
     """Store the brief and a manifest built from the brief's source files and the scout facts."""
     rows = brief_rows(brief)
     if not rows:
@@ -156,6 +178,7 @@ def save(folder: Path, brief: str, facts: dict, feature: str) -> dict:
         "rows": rows,
         "unread": facts.get("unreadable", []),
         "plugin_version": facts.get("plugin_version"),
+        "scout_model": model if model is not None else scout_model(),
         "brief_sha256": _sha(brief.encode("utf-8")),
         "reviewed_by": None,
         "created_at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),

@@ -97,6 +97,29 @@ Reports, briefs and test case files for a ticket go to `<output_dir>/<TICKET>/`.
 
 The Production part of a survey (the master brief) is cached per repository and feature in `~/.testign-kit/cache/<root-commit>/<feature>/`. It is reused only when every source file's blob hash at the new merge-base still matches; rows whose files changed are re-read, and the report's coverage section says whether the cache was a hit, partial or miss. To clear it, delete that folder (or the whole `~/.testign-kit/cache/`).
 
+### Models and token use
+
+Most of a survey's tokens go into scouting: reading up to 40 source files and the phase diff. So
+`scout` runs as a separate subagent (`context: fork` in its `SKILL.md`) pinned to `model: sonnet`
+with `effort: medium`. The source code it reads stays in that subagent; `/testign:survey` only gets
+back the brief file. The other skills (`spec-qa`, `qa-close`, `testcase`) read little but make the
+judgment calls (fact or intent, verbatim quotes, writes to the shared wiki), so they run on whatever
+model your session uses.
+
+The pin is an alias, so it follows the current Sonnet without plugin updates. Each cache entry
+records the model its brief was written with (`scout_model` in `manifest.json`), and the report's
+coverage section shows it when a cached brief is reused, so a brief can be traced back if a model
+turns out too weak for a codebase.
+
+To run `scout` on another model, set both variables in your Claude Code settings `env`:
+
+```json
+{ "env": { "CLAUDE_CODE_SUBAGENT_MODEL": "opus", "CLAUDE_CODE_SUBAGENT_MODEL_FORCE": "1" } }
+```
+
+`CLAUDE_CODE_SUBAGENT_MODEL` alone does not override a model pinned in a skill, and the force flag
+applies to every subagent in your sessions, not only this plugin's. Remove it when you are done.
+
 ### Test case templates
 
 `/testign:testcase` fills a copy of your own Excel test case template. On the first run it asks for the template file and a name, detects the header row and which column holds each field (`No`, 確認項目, 手順, 期待結果, エビデンス, 備考), and registers it. You can register several templates (for example one per customer) and pick one per run; `template-preview` shows a template's sheets, header and column mapping as a small Markdown table in chat instead of having the model read the workbook.

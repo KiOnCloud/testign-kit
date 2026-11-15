@@ -2,17 +2,31 @@
 name: scout
 user-invocable: false
 description: Internal skill of the testign plugin, invoked by spec-qa and not by the tester directly. Given anchors from a spec and a local repo, it surveys Production behavior at the merge-base of master and develop, the current phase's changes from git diff master...develop grouped by ticket ID, and writes a brief with an honest coverage section. Reuses a cached master brief when its source files are unchanged.
+argument-hint: <TICKET-ID> --repo <path> --anchors-file <path> [--master-ref <ref>] [--develop-ref <ref>] [--fetch] [--feature <name>]
+context: fork
+agent: general-purpose
+background: false
+model: sonnet
+effort: medium
 ---
 
 # scout
 
-Produce a scout brief for one ticket. The caller (`spec-qa`) gives you:
+Produce a scout brief for one ticket. You run in your own subagent context: you do not see the
+conversation that called you, only these arguments from `spec-qa`:
 
-- `ticket` — the ticket ID.
-- `repo` — path to the tester's local clone of the customer repo.
-- `anchors` — screen names, JP UI labels (verbatim), API names and business terms from the spec.
-- optional `master_ref`, `develop_ref` (branch names or SHAs), `fetch` (true only if the tester
-  passed `--fetch`), `feature` (cache entry name; default the main screen name).
+```text
+$ARGUMENTS
+```
+
+- First argument: `ticket`, the ticket ID.
+- `--repo`: path to the tester's local clone of the customer repo.
+- `--anchors-file`: the anchors file `spec-qa` wrote, `{"anchors": [...]}` with screen names, JP UI
+  labels (verbatim), API names and business terms from the spec. Its folder is the work folder.
+- optional `--master-ref`, `--develop-ref` (branch names or SHAs), `--fetch` (only if the tester
+  passed it), `--feature` (cache entry name; default the first screen name among the anchors).
+
+If `--repo` or `--anchors-file` is missing, stop and reply `SCOUT_FAILED: <what is missing>`.
 
 Flow: `scope → cache check → master brief (reuse, partial re-read, or full) → develop diff (always
 fresh) → coverage → cache save`.
@@ -23,7 +37,7 @@ fresh) → coverage → cache save`.
    read-only) and §10 (how to call Python). Below, `<run>` means
    `<python> "${CLAUDE_PLUGIN_ROOT}/scripts/run.py"`.
 2. Read `${CLAUDE_PLUGIN_ROOT}/skills/scout/brief-format.md`. The brief must follow it.
-3. Work folder: `<output_dir>/<TICKET>/` (`output_dir` from `<run> config`). Create it if needed.
+3. Work folder `<work>`: the folder of the anchors file (`<output_dir>/<TICKET>/`).
 
 ## Hard rules
 
@@ -42,13 +56,13 @@ fresh) → coverage → cache save`.
 
 ### 1. Scope (always runs)
 
-Write the anchors to `<work>/<ticket>-anchors.json` as `{"anchors": [...]}` and run:
+Run, with the anchors file you were given:
 
 ```bash
 <run> scout-facts --repo "<repo>" --anchors-file "<work>/<ticket>-anchors.json" --out "<work>/<ticket>-scout-facts.json" [--master-ref <ref>] [--develop-ref <ref>] [--fetch]
 ```
 
-If it exits with code 2, show the tester its message (for example a missing branch) and stop.
+If it exits with code 2, stop and reply `SCOUT_FAILED: <its message>` (for example a missing branch).
 
 From the facts file:
 - `anchors[].merge_base` hits are the Production entry files.
@@ -66,7 +80,7 @@ From the facts file:
   and whatever the `new_anchors` touch, in step 3. Keep the other rows unchanged.
 - `miss` → do the full step 3.
 
-Remember `result`, `cache_root`, `cache_feature` and the re-read rows: they go into the brief
+Remember `result`, `cache_root`, `cache_feature`, `scout_model` and the re-read rows: they go into the brief
 frontmatter and the report's coverage section.
 
 ### 3. Master brief (merge-base)
@@ -107,6 +121,18 @@ Save the brief as `<work>/<ticket>-scout-brief.md`, then store its master sectio
 ```
 
 If `cache-save` refuses (for example a B* row without source files), fix the brief rather than
-skipping the cache: a row without sources is a brief error. Return to the caller the brief path, the
-facts file path, the cache result and `cache_root`/`cache_feature`. Do not write the survey report;
-that is `spec-qa`'s job.
+skipping the cache: a row without sources is a brief error. Do not write the survey report; that is
+`spec-qa`'s job.
+
+Your final reply goes back into the caller's context, so keep it to this block and nothing else. Do
+not repeat the brief or any code you read; `spec-qa` reads the brief file itself.
+
+```text
+SCOUT_DONE
+brief: <work>/<ticket>-scout-brief.md
+facts: <work>/<ticket>-scout-facts.json
+cache_result: <hit | partial | miss>
+cache_root: <cache_root>
+cache_feature: <cache_feature>
+files_read: <number of files read>
+```

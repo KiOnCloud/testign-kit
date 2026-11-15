@@ -56,7 +56,8 @@ they are input for F3 findings.
   because the read cap was reached> → <B-ID / change entries that stay `[suy luận]`>
 - 🔍 **Grep không ra:** <anchors with status `not_found`>
 - ➖ **Bỏ qua trong diff:** <count of `changed_files.dropped`, and up to 10 paths>
-- 🗃️ **Scout cache:** <hit | partial (đọc lại: B-ID …) | miss (lý do)>
+- 🗃️ **Scout cache:** <hit | partial (đọc lại: B-ID …) | miss (lý do)>; on hit or partial add the
+  cached brief's `scout_model` ("không rõ" when it is null)
 ```
 
 Section 3 is always present, even when every list is empty (write "Không có").
