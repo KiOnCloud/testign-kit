@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from make_report import write_report
 
-from testign import report
+from testign import __version__, report
 
 REPO = Path(__file__).resolve().parent.parent
 SHA_D, SHA_B = "d" * 40, "b" * 40
@@ -86,7 +86,7 @@ def test_report_save_numbers_revisions_and_refuses_invalid(tmp_path):
     second = json.loads(run_cli("report-save", "--draft", str(draft), "--out-dir", str(out), home=home).stdout)
     meta, _ = report.load(Path(second["saved"]))
     assert meta["revision"] == 2 and meta["previous"] == "DEMO-1-survey-r1.md"
-    assert meta["plugin_version"] == "0.1.0"
+    assert meta["plugin_version"] == __version__
 
     draft = make_draft(tmp_path / "drafts", tmp_path)
     draft.write_text(draft.read_text(encoding="utf-8").replace("`[code]`", ""), encoding="utf-8")
