@@ -2,7 +2,7 @@
 name: scout
 user-invocable: false
 description: Internal skill of the testign plugin, invoked by spec-qa and not by the tester directly. Given anchors from a spec and a local repo, it surveys Production behavior at the merge-base of master and develop, the current phase's changes from git diff master...develop grouped by ticket ID, and writes a brief with an honest coverage section. Reuses a cached master brief when its source files are unchanged.
-argument-hint: <TICKET-ID> --repo <path> --anchors-file <path> [--master-ref <ref>] [--develop-ref <ref>] [--fetch] [--feature <name>]
+argument-hint: <TICKET-ID> --repo <path> --anchors-file <path> --spec-file <path> [--master-ref <ref>] [--develop-ref <ref>] [--fetch] [--feature <name>]
 context: fork
 agent: general-purpose
 background: false
@@ -23,10 +23,14 @@ $ARGUMENTS
 - `--repo`: path to the tester's local clone of the customer repo.
 - `--anchors-file`: the anchors file `spec-qa` wrote, `{"anchors": [...]}` with screen names, JP UI
   labels (verbatim), API names and business terms from the spec. Its folder is the work folder.
+- `--spec-file`: the ticket text as `spec-qa` read it. Use it only to know which behaviors to
+  describe: for every rule the spec states (formulas, rounding, limits, validation, who sees what),
+  write what the code does today, including "the code does not do this" when that is what you read.
+  The spec is never a source for a B* row and you do not judge it; `spec-qa` compares.
 - optional `--master-ref`, `--develop-ref` (branch names or SHAs), `--fetch` (only if the tester
   passed it), `--feature` (cache entry name; default the first screen name among the anchors).
 
-If `--repo` or `--anchors-file` is missing, stop and reply `SCOUT_FAILED: <what is missing>`.
+If `--repo`, `--anchors-file` or `--spec-file` is missing, stop and reply `SCOUT_FAILED: <what is missing>`.
 
 Flow: `scope → cache check → master brief (reuse, partial re-read, or full) → develop diff (always
 fresh) → coverage → cache save`.
@@ -37,6 +41,7 @@ fresh) → coverage → cache save`.
    read-only) and §10 (how to call Python). Below, `<run>` means
    `<python> "${CLAUDE_PLUGIN_ROOT}/scripts/run.py"`.
 2. Read `${CLAUDE_PLUGIN_ROOT}/skills/scout/brief-format.md`. The brief must follow it.
+   Read the spec file.
 3. Work folder `<work>`: the folder of the anchors file (`<output_dir>/<TICKET>/`).
 
 ## Hard rules
@@ -79,6 +84,10 @@ From the facts file:
 - `partial` → copy section 1, then re-read only the rows in `stale_rows` (their source files changed)
   and whatever the `new_anchors` touch, in step 3. Keep the other rows unchanged.
 - `miss` → do the full step 3.
+
+A cached brief was written for an earlier ticket. On `hit` or `partial`, if the spec states a rule
+that no cached row covers, read the code for that rule in step 3 too, add rows for it, and report the
+result as `partial` with those rows listed as re-read.
 
 Remember `result`, `cache_root`, `cache_feature`, `scout_model` and the re-read rows: they go into the brief
 frontmatter and the report's coverage section.
