@@ -5,7 +5,7 @@
 A Claude Code plugin that helps manual testers working on large legacy codebases. Before writing test cases, the tester gets an agent-generated survey of how the feature behaves today, what the current phase has already changed, and where the ticket's spec disagrees with either.
 
 > [!WARNING]
-> **Status: v0.1.0, not yet validated on real tickets.** All three commands are implemented and covered by tests on made-up repositories. The replay check on real released tickets is still pending, so treat survey results as a draft to review.
+> **Status: v0.2.0, not yet validated on real tickets.** All three commands are implemented and covered by tests on made-up repositories. The replay check on real released tickets is still pending, so treat survey results as a draft to review.
 
 ## Why
 
