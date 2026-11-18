@@ -346,45 +346,52 @@ def test_restart_fails_open_and_queued_jobs(world, clock):
     assert second.busy() is False
 
 
-def test_shutdown_fails_open_jobs_and_releases_held_calls(bridge):
-    job = close_job(bridge)
-    out = {}
+@pytest.fixture
+def live(world):
+    """A bridge on the real clock, for tests where held calls run in threads."""
+    b = jobs.Bridge(jobs.MemoryStore(), world.context())
+    b.startup()
+    yield b
+    b.shutdown()
 
-    def agent():
-        out["wait"] = bridge.wait(B, 30)
 
-    bridge.wait(A, 0)
-    bridge.claim(job["id"], A)
-    t = threading.Thread(target=lambda: out.setdefault("ask", bridge.ask(job["id"], A, QUESTIONS, 30)))
+def spawn(fn):
+    t = threading.Thread(target=fn, daemon=True)
     t.start()
+    return t
+
+
+def test_shutdown_fails_open_jobs_and_releases_held_calls(live):
+    job = close_job(live)
+    out = {}
+    live.wait(A, 0)
+    live.claim(job["id"], A)
+    t = spawn(lambda: out.setdefault("ask", live.ask(job["id"], A, QUESTIONS, 30)))
     time.sleep(0.3)
-    bridge.shutdown()
+    live.shutdown()
     t.join(5)
     assert not t.is_alive()
-    assert bridge.jobs[job["id"]]["reason"] == "server-stopped"
+    assert live.jobs[job["id"]]["reason"] == "server-stopped"
 
 
-def test_a_newer_held_call_replaces_the_older_one(bridge):
+def test_a_newer_held_call_replaces_the_older_one(live):
     out = {}
-    t = threading.Thread(target=lambda: out.setdefault("first", bridge.wait(A, 30)))
-    t.start()
+    t = spawn(lambda: out.setdefault("first", live.wait(A, 30)))
     time.sleep(0.3)
-    job = close_job(bridge)
+    job = close_job(live)
     t.join(5)
     assert out["first"]["job"]["id"] == job["id"]
 
-    bridge.claim(job["id"], A)
-    bridge.done(job["id"], A, "done", None)
-    t = threading.Thread(target=lambda: out.setdefault("old", bridge.wait(A, 30)))
-    t.start()
+    live.claim(job["id"], A)
+    live.done(job["id"], A, "done", None)
+    t = spawn(lambda: out.setdefault("old", live.wait(A, 30)))
     time.sleep(0.3)
     started = time.monotonic()
-    new = {}
-    t2 = threading.Thread(target=lambda: new.setdefault("new", bridge.wait(A, 1)))
-    t2.start()
+    t2 = spawn(lambda: out.setdefault("new", live.wait(A, 1)))
     t.join(5)
     assert out["old"] == {"session": A, "job": None} and time.monotonic() - started < 2
     t2.join(5)
+    assert not t2.is_alive() and out["new"] == {"session": A, "job": None}
 
 
 def test_pruning_keeps_the_newest_finished_jobs(world, clock):
