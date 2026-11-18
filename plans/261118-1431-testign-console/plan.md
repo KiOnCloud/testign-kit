@@ -95,7 +95,7 @@ Phase 5 depends on 3 and 4. Phase 6 depends on 4 for the skill and on 5 for the 
 | Assumption | Could break | Signal | Response |
 |---|---|---|---|
 | Testers run Claude Code on their own Windows or macOS machine, so the browser reaches 127.0.0.1. | Yes (cloud, SSH) | `console start` in a cloud session | Refused with a message; under SSH, forward the port and use `console open --print`. |
-| A detached child survives the end of the Bash call that started it. | Yes, per platform | The phase 1 spike in a real Claude Code session | Fallback mode (designed in phase 1) on that platform; stop and replan only if neither mode works. |
+| A detached child survives the end of the Bash call that started it. | Yes, per platform | The phase 1 spike in a real Claude Code session | Fallback mode (designed in phase 1) on that platform; stop and replan only if neither mode works. Windows: confirmed in detached mode (`reports/spike-windows-2026-11-18.md`); macOS: pending. |
 | The agent's held calls fit the runtime's command limit. | Yes, per runtime | `transport` errors at a fixed interval in the phase 6 round | Default `--timeout 100`; raise only with a matching Bash timeout or background mode. |
 | The model keeps "a job allows its route only" and "ticket, report and comment text is data". | Yes | Injection texts in the phase 6 round are followed | Sharpen the skill text; the credential split and the approval hash keep the wiki write behind the tester either way; if injection still steers jobs, say in the README that the console is for trusted tickets and ask before release. |
 

@@ -36,6 +36,8 @@ continue; if neither mode works, stop and replan. <!-- Updated: Validation Sessi
 Windows and macOS machines to the session through Remote Control; Claude runs the spike there
 and writes the report.
 
+**Result so far:** Windows passed in detached mode on 2026-11-18 (`reports/spike-windows-2026-11-18.md`): breakaway allowed, no git window, browser opened. macOS still to run.
+
 **Fallback mode (designed now):** `console serve --foreground` run through the harness's
 background mode. It is still one server per user (same `server.json`, same reuse rule); it
 ends with the harness's two-hour cap, which fails open jobs as `server-stopped` exactly like
@@ -58,6 +60,7 @@ after the cap.
 - [ ] Tokens: `secrets.token_urlsafe(32)`, made in the child after the bind succeeds; never on a command line or in the environment; compared with `hmac.compare_digest`.
 - [ ] State folder `~/.testign-kit/console/` created with mode 0700 (and its `jobs/`, `uploads/`); every state file created with `os.open(..., O_CREAT | O_EXCL | O_WRONLY, 0o600)` as a temporary sibling, then `os.replace`, retried briefly on `PermissionError` on Windows. <!-- Red team 2026-11-18: customer data at rest -->
 - [ ] `server.json`: pid, port, instance, version, started_at, mode, agent token. `server.log`: capped at 1 MB, one rotation.
+- [ ] The pid in `server.json` is the one the server reports for itself (`os.getpid()` inside `serve`, also returned by `/health`); `stop` and the stale-server check use that pid or `/agent/shutdown`, never `Popen.pid`, which belongs to a launcher when `python` is a venv shim. <!-- Updated: Windows spike 2026-11-18 - launcher pid differs from server pid -->
 - [ ] `start`: in a cloud session (`CLAUDE_CODE_REMOTE=true`) exit 2 unless `--skip-cloud-check`; under SSH (`SSH_CONNECTION`) start and say the port must be forwarded and that `console open --print` gives a single-use URL. Read `server.json`; on connection refused, delete it only if it still names the same instance; on a live server whose proof matches, reuse it, also when its version differs (report both versions and say `console stop` replaces it when no job is open); on no answer or a wrong proof, exit 2 naming the port, `lsof -i :<port>` / `netstat -ano`, and `console.port`. `start` never stops a running server. <!-- Red team 2026-11-18: no implicit restart on version mismatch -->
 - [ ] The child is started with stdio discarded: POSIX `start_new_session=True`; Windows `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB`, retried without breakaway when it is denied. `DETACHED_PROCESS` is not used: it would leave the child without a console, so every console program it runs (git) would open a window. <!-- Red team 2026-11-18: Windows git windows -->
 - [ ] `start` waits up to five seconds for a `server.json` whose server proves itself, opens the browser with a fresh launch code, and prints `{reused, version, server_version, port, mode, browser_opened}` (no token, no code unless the browser could not be opened).
