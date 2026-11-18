@@ -90,6 +90,8 @@ Urgency: not stated.
 
 ## Exact next actions
 
+> Update 2026-11-18 15:25 UTC: steps 2–3 are done for Windows (`plans/261118-1431-testign-console/reports/spike-windows-2026-11-18.md`, detached mode passes; phase 1 updated to record the server's own pid). macOS spike deferred to 2026-11-19 by the user. Continue at step 4 after step 1.
+
 1. **First safe step**: on CloudKigo, in `D:\Workspace\testign-kit`, run `git fetch origin && git checkout claude/relaxed-franklin-oikzoa && git pull`, set `git config user.name "KiOnCloud"` and `git config user.email "76955774+KiOnCloud@users.noreply.github.com"`, then read `plans/261118-1431-testign-console/plan.md` and `phase-01-console-server-and-lifecycle.md` (section "Gate: Windows and macOS spike").
 2. Run the spike, each command as a separate Bash call from the repo root: `python plans/261118-1431-testign-console/spike/console_spike.py start`, `check` (immediately and again after ~60 s), `git` (ask the user whether a console window flashed for the plain call and for the `CREATE_NO_WINDOW` call), `browser` (ask whether a tab opened), `stop`. If `check` says `alive: false`, retry with `start --no-breakaway`. Optionally `start --detached` to confirm the `DETACHED_PROCESS` git-window problem.
 3. Write `plans/261118-1431-testign-console/reports/spike-windows-<date>.md` with the JSON outputs and observations; decide detached vs fallback for Windows; repeat on a macOS machine when available.
