@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Console skill, skill integration, docs and release"
-status: pending
+status: in-progress
 priority: P1
 effort: "2d"
 dependencies: [4, 5]
