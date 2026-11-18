@@ -78,7 +78,7 @@ per-user plugin. Approved mockup: https://claude.ai/artifact/FbwXMaek4XshNT2nPdp
 | 3 | [Console UI shell, i18n and screens](./phase-03-console-ui-shell-i18n-and-screens.md) | Done (e2e runs in CI only) |
 | 4 | [Job queue and agent bridge](./phase-04-job-queue-and-agent-bridge.md) | Done |
 | 5 | [Jobs and Close review screens](./phase-05-jobs-and-close-review-screens.md) | Done (e2e runs in CI only) |
-| 6 | [Console skill, skill integration, docs and release](./phase-06-console-skill-integration-docs-and-release.md) | In progress: skill and docs done; manual round, injection check and 0.3.0 release pending |
+| 6 | [Console skill, skill integration, docs and release](./phase-06-console-skill-integration-docs-and-release.md) | In progress: skill, docs and 0.3.0 done; e2e passes on Windows; macOS spike, manual round and injection check pending |
 
 Phase 1 opens with a spike on a real Claude Code session on Windows and macOS (needs the user's
 machine). Phase 3 depends on 1 and 2. Phase 4 depends on 1 only and can run beside phase 3.
