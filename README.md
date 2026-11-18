@@ -32,6 +32,7 @@ testign-kit makes that investigation an automatic step for every ticket, and tur
 | `/testign:survey` (skills `spec-qa` + `scout`) | Scout `master` and `develop` for a ticket and write the survey report |
 | `/testign:close` (skill `qa-close`) | Classify answers, append approved decisions to the Backlog wiki decisions log, write a new report revision |
 | `/testign:testcase` (skill `testcase`) | Fill a copy of your Excel template and run the gap/orphan trace check |
+| `/testign:console` (skill `console`) | A local web console for tickets, reports, trace, templates and the scout cache, with a job queue this Claude Code session works through |
 | Shared rules | [`references/rules.md`](references/rules.md): language, source labels, fact/intent routing, F1–F5 |
 | Survey report template | [`templates/survey-report-template.md`](templates/survey-report-template.md) |
 | Local scout cache | Reuse the `master` brief per feature (`~/.testign-kit/cache/`), validated by file blob hashes. The `develop` diff always runs fresh |
@@ -90,6 +91,8 @@ Settings live in `~/.testign-kit/config.json` (`%USERPROFILE%\.testign-kit\confi
 | `backlog.space`, `backlog.project_key` | empty | Backlog space and the project that holds the decisions log |
 | `backlog.decisions_log_prefix` | `QA/Decisions` | Wiki name prefix of the decisions log: `<prefix>/index`, `<prefix>/common` and one `<prefix>/<feature>` page per feature |
 | `backlog.text_format` | `markdown` | The Backlog project's text formatting rule; `backlog` (Backlog notation) disables the decisions log commands |
+| `console.port` | `4791` | Port of the local console on `127.0.0.1` |
+| `console.idle_minutes` | `30` | The console server ends after this many minutes without use when no job is open |
 
 Reports, briefs and test case files for a ticket go to `<output_dir>/<TICKET>/`. Report revisions are named `<TICKET>-survey-r<N>.md` and are never overwritten.
 
@@ -137,6 +140,58 @@ If you have no template yet, a basic made-up one ships with the plugin: [`templa
 
 The report defaults to Vietnamese (falling back to Japanese, then English), and Japanese UI labels are kept verbatim so testers can match them against the screen.
 
+## Console
+
+`/testign:console` opens a local web page on `127.0.0.1` (port 4791 by default) and keeps the Claude
+Code session attached to it. The console shows every ticket under `output_dir` with its latest survey
+report, the trace between a report and a filled workbook, your registered templates (register, set
+default, remove) and the scout cache. Its chrome switches between Vietnamese, English and Japanese;
+report content, quotes and template headers stay as written.
+
+From the console you queue jobs: survey a ticket, close QA, write test cases, write §7. The attached
+session takes them one at a time, follows the same skills as the chat commands and asks you its
+questions in the console (row review with edits, the wiki diff as the tool computed it, pasted
+answers). The session must be running `/testign:console`; with no session attached, queued jobs wait.
+
+```bash
+<python> scripts/run.py console start     # start or reuse the server and open the browser
+<python> scripts/run.py console open      # a fresh single-use link, e.g. after closing the tab
+<python> scripts/run.py console status
+<python> scripts/run.py console stop      # --force while jobs are open (they fail)
+```
+
+What it can and cannot change:
+
+- The server itself writes only under `~/.testign-kit/console/` (its state, job records, temporary
+  uploads) and `~/.testign-kit/templates/` (template registration). It never changes `output_dir`, a
+  report, a repository or `config.json`.
+- Reports, workbooks and the Backlog wiki change only through jobs the session runs, with the same
+  guards as the chat commands: report revisions are never overwritten, and the wiki is written only
+  after you confirmed the exact diff in the console.
+
+Security model:
+
+- The server listens on `127.0.0.1` only and refuses requests from other host names, other origins
+  and cross-site pages. The browser gets its session through a single-use link that `console start`
+  and `console open` hand to the browser; the agent's own token works only on the agent routes.
+- Limit: the agent runs as you, so an agent misled by text in a ticket could still mint itself a
+  console link and open a browser session. Two guards make that visible and harder: every new console
+  tab is announced in the tabs already open (if you did not open it, press "Release agent"), and a tab
+  opened after a job started cannot answer that job's questions.
+- The wiki diff you confirm is computed by the server from the page contents the approval hash covers,
+  not taken from the agent, and `wiki-update --job` writes only that confirmed approval.
+- The console lists folders under `output_dir`, which defaults to `~/Downloads`. Only folders named
+  like a ticket with a consistent report revision are shown; other files are not read. Ticket text,
+  comments and reports are treated as data, but use the console for tickets you trust.
+- It ends by itself after 30 minutes without use (`console.idle_minutes`) when no job is open.
+
+Limits:
+
+- Run it on your own Windows or macOS machine, where the browser reaches `127.0.0.1`. In a cloud
+  session it refuses to start. Over SSH, forward the port (`ssh -L 4791:127.0.0.1:4791 …`) and run
+  `console open --print` for a single-use URL.
+- If another program holds the port, set another one in `console.port` of `config.json`.
+
 ## Repository layout
 
 ```text
@@ -145,17 +200,19 @@ The report defaults to Vietnamese (falling back to Japanese, then English), and 
 │   ├── plugin.json                 # plugin "testign"
 │   └── marketplace.json            # marketplace "testign-kit"
 ├── .github/workflows/test.yml      # pytest + claude plugin validate on Windows and macOS
-├── commands/                       # /testign:survey, /testign:close
-├── skills/                         # scout (internal), spec-qa, qa-close, testcase (/testign:testcase)
+├── commands/                       # /testign:survey, /testign:close, /testign:console
+├── skills/                         # scout (internal), spec-qa, qa-close, testcase (/testign:testcase), console
 ├── references/
 │   ├── rules.md                    # shared rules every skill reads
-│   └── decisions-log-format.md     # Backlog wiki decisions log format
+│   ├── decisions-log-format.md     # Backlog wiki decisions log format
+│   └── console-bridge.md           # how the session works the console's job queue
 ├── templates/
 │   ├── survey-report-template.md   # survey report structure
 │   └── testcase-template-sample.xlsx # basic sample test case template
 ├── scripts/
 │   ├── run.py                      # single entry point the skills call
 │   └── testign/                    # python package (config, git scoping, ...)
+│       └── console/                # console server, read API, job queue and the browser UI (ui/)
 ├── tests/                          # pytest
 ├── pyproject.toml
 ├── LICENSE
