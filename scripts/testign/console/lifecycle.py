@@ -227,6 +227,11 @@ def _find_or_spawn(home: Path | None, port: int) -> tuple[dict, dict, bool]:
 
 
 # commands -------------------------------------------------------------------------------------
+def new_session_id() -> str:
+    """A fresh agent session id; every ``console start`` hands out a new one."""
+    return "s-" + secrets.token_hex(8)
+
+
 def _launch_url(info: dict) -> str:
     status, data = request(int(info["port"]), "POST", "/agent/launch-code", token=str(info["agent_token"]), body={})
     if status != 200 or not isinstance(data, dict) or not isinstance(data.get("code"), str):
@@ -258,6 +263,7 @@ def start(home: Path | None = None, *, browser: bool = True, skip_cloud_check: b
     port = _port_from_config(cfg)
     info, health, reused = _find_or_spawn(home, port)
     out: dict[str, Any] = {
+        "session": new_session_id(),
         "reused": reused,
         "version": __version__,
         "server_version": health.get("version", info.get("version")),
@@ -365,11 +371,12 @@ def stop(home: Path | None = None, *, force: bool = False) -> dict:
 
 # the server process ---------------------------------------------------------------------------
 def install_routes(state: srv.ConsoleState) -> None:
-    """Every route group beyond the base routes: read API and template management."""
-    from . import readapi, templates_api  # noqa: PLC0415 - they import this module
+    """Every route group beyond the base routes: read API, template management and the job bridge."""
+    from . import jobs, readapi, templates_api  # noqa: PLC0415 - they import this module
 
     readapi.install(state)
     templates_api.install(state)
+    jobs.install(state)
 
 
 def serve(home: Path | None = None, *, port: int | None = None, instance: str | None = None,
@@ -425,6 +432,11 @@ def serve(home: Path | None = None, *, port: int | None = None, instance: str | 
         pass
     finally:
         stop_idle.set()
+        for hook in list(state.shutdown_hooks):
+            try:
+                hook()
+            except Exception:  # noqa: BLE001
+                pass
         httpd.server_close()
         remove_server_json_if(home, instance)
         state.log.write("-", "stop", 0, "0ms", "-")

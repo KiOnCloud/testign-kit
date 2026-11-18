@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Job queue and agent bridge"
-status: pending
+status: done
 priority: P1
 effort: "3d"
 dependencies: [1]

@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__, backlog_wiki, cache, config, decisions, gitscope, hashcheck, report, templates, trace, xlsx
+from .console import client as console_client
 from .console import lifecycle
 
 
@@ -393,6 +394,18 @@ def _cmd_wiki_append_preview(args: argparse.Namespace) -> int:
 
 
 def _cmd_wiki_update(args: argparse.Namespace) -> int:
+    if bool(args.job) != bool(args.session):
+        raise ValueError("--job and --session go together")
+    if args.job:
+        # A console job writes only the approval the tester confirmed in the console.
+        try:
+            confirmed = console_client.approval(args.job, args.session).get("approval")
+        except console_client.ClientError as exc:
+            raise ValueError(f"cannot read the confirmed approval from the console: {exc.message}") from None
+        if not confirmed or confirmed != args.approval:
+            raise backlog_wiki.ConflictError(
+                "the tester has not confirmed this diff in the console; ask with `console ask --from-preview` first"
+            )
     backlog = _backlog_cfg()
     plan = _plan_wiki(backlog, _read_rows(args.rows))
     if plan["approval"] != args.approval:
@@ -483,9 +496,61 @@ def _cmd_console_serve(args: argparse.Namespace) -> int:
                            mode="foreground" if args.foreground else "detached")
 
 
+def _agent_command(fn):
+    """Agent commands print their result on stdout; errors as {error: {code, message}} on stderr, exit 2."""
+    def run(args: argparse.Namespace) -> int:
+        try:
+            return _emit(fn(args))
+        except console_client.ClientError as exc:
+            print(json.dumps(exc.as_json(), ensure_ascii=False), file=sys.stderr)
+            return 2
+    return run
+
+
+@_agent_command
+def _cmd_console_wait(args: argparse.Namespace) -> dict:
+    return console_client.wait(args.session, args.timeout)
+
+
+@_agent_command
+def _cmd_console_claim(args: argparse.Namespace) -> dict:
+    return console_client.claim(args.job, args.session)
+
+
+@_agent_command
+def _cmd_console_progress(args: argparse.Namespace) -> dict:
+    return console_client.progress(args.job, args.session, args.message)
+
+
+@_agent_command
+def _cmd_console_ask(args: argparse.Namespace) -> dict:
+    if args.question:
+        ask = console_client.read_json(args.question)
+    else:
+        ask = console_client.ask_from_preview(console_client.read_json(args.from_preview))
+    return console_client.ask(args.job, args.session, ask, args.timeout)
+
+
+@_agent_command
+def _cmd_console_done(args: argparse.Namespace) -> dict:
+    report_text = None
+    if args.report:
+        try:
+            report_text = Path(args.report).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise console_client.ClientError("bad-request", f"cannot read the report file: {type(exc).__name__}") from None
+    return console_client.done(args.job, args.session, args.result, report_text)
+
+
+@_agent_command
+def _cmd_console_approval(args: argparse.Namespace) -> dict:
+    return console_client.approval(args.job, args.session)
+
+
 def _add_console_parser(sub) -> None:
     cp = sub.add_parser("console", help="local console in the browser (start, open, status, stop)")
-    csub = cp.add_subparsers(dest="console_command", required=True, metavar="{start,open,status,stop}")
+    csub = cp.add_subparsers(dest="console_command", required=True,
+                             metavar="{start,open,status,stop,wait,claim,progress,ask,done,approval}")
 
     st = csub.add_parser("start", help="start the console server, or reuse the running one, and open the browser")
     st.add_argument("--no-browser", action="store_true", help="do not open a browser (use `console open` later)")
@@ -502,6 +567,44 @@ def _add_console_parser(sub) -> None:
     sp = csub.add_parser("stop", help="stop the console server")
     sp.add_argument("--force", action="store_true", help="stop even while jobs are open (they fail)")
     sp.set_defaults(func=_cmd_console_stop)
+
+    held_help = "seconds to hold the call (default 100, inside the 2-minute Bash limit; server cap 540)"
+    wt = csub.add_parser("wait", help="hold until the console offers a job (agent side)")
+    wt.add_argument("--session", required=True, help="session id printed by `console start`")
+    wt.add_argument("--timeout", type=float, help=held_help)
+    wt.set_defaults(func=_cmd_console_wait)
+
+    cl = csub.add_parser("claim", help="take the offered job (agent side)")
+    cl.add_argument("job")
+    cl.add_argument("--session", required=True)
+    cl.set_defaults(func=_cmd_console_claim)
+
+    pg = csub.add_parser("progress", help="report a step of the running job (agent side)")
+    pg.add_argument("job")
+    pg.add_argument("--session", required=True)
+    pg.add_argument("--message", required=True, help="one line in the job's ui_lang")
+    pg.set_defaults(func=_cmd_console_progress)
+
+    ak = csub.add_parser("ask", help="ask the tester through the console and hold for the answer (agent side)")
+    ak.add_argument("job")
+    ak.add_argument("--session", required=True)
+    src = ak.add_mutually_exclusive_group(required=True)
+    src.add_argument("--question", help="ask file (questions or review-rows)")
+    src.add_argument("--from-preview", help="wiki-append-preview output: confirm-diff, or paste-pages in manual mode")
+    ak.add_argument("--timeout", type=float, help=held_help)
+    ak.set_defaults(func=_cmd_console_ask)
+
+    dn = csub.add_parser("done", help="close the job with a result (agent side)")
+    dn.add_argument("job")
+    dn.add_argument("--session", required=True)
+    dn.add_argument("--result", required=True, choices=["done", "failed"])
+    dn.add_argument("--report", help="short result summary (Markdown) shown in the console, in the job's ui_lang")
+    dn.set_defaults(func=_cmd_console_done)
+
+    ap = csub.add_parser("approval", help="the wiki approval the tester confirmed for this job (agent side)")
+    ap.add_argument("job")
+    ap.add_argument("--session", required=True)
+    ap.set_defaults(func=_cmd_console_approval)
 
     sv = csub.add_parser("serve")
     sv.add_argument("--port", type=int)
@@ -624,6 +727,8 @@ def build_parser() -> argparse.ArgumentParser:
     wu.add_argument("--rows", required=True)
     wu.add_argument("--approval", required=True, help="'approval' value from wiki-append-preview")
     wu.add_argument("--mail-notify", action="store_true", help="let Backlog email watchers about the edit")
+    wu.add_argument("--job", help="console job id: refuse unless the tester confirmed this approval in the console")
+    wu.add_argument("--session", help="agent session id (with --job)")
     wu.set_defaults(func=_cmd_wiki_update)
 
     cc = sub.add_parser("cache-check", help="decide whether the cached master brief can be reused")
