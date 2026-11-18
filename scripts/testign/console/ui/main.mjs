@@ -6,15 +6,28 @@ import { createTranslator, loadDictionaries } from './i18n.mjs';
 import { closePalette, isPaletteKey, openPalette, paletteOpen, singleKeyAllowed } from './palette.mjs';
 import * as prefs from './prefs.mjs';
 import { href, parseRoute, sectionOf } from './router.mjs';
-import { clearEscapes, renderReopen, renderShell, runEscape, setNavCount, toast } from './views/shell.mjs';
+import { createStore } from './store.mjs';
+import {
+  clearEscapes, renderReopen, renderShell, runEscape, setNavCount, showSessionNotice, toast, updateAgentStatus,
+} from './views/shell.mjs';
 import * as tickets from './views/tickets.mjs';
 import * as report from './views/report.mjs';
 import * as trace from './views/trace.mjs';
 import * as templates from './views/templates.mjs';
 import * as cache from './views/cache.mjs';
 import * as settings from './views/settings.mjs';
+import * as jobs from './views/jobs.mjs';
+import * as review from './views/review.mjs';
 
-const VIEWS = { tickets, report, trace, templates, cache, settings };
+const VIEWS = { tickets, report, trace, templates, cache, settings, jobs, review };
+const SESSIONS_KEY = 'testign.knownSessions';
+const store = createStore({
+  fetchState: () => api.state(),
+  sessions: {
+    load: () => { try { return JSON.parse(sessionStorage.getItem(SESSIONS_KEY) || 'null'); } catch { return null; } },
+    save: (list) => { try { sessionStorage.setItem(SESSIONS_KEY, JSON.stringify(list)); } catch { /* blocked */ } },
+  },
+});
 
 const app = {
   dicts: {},
@@ -25,6 +38,7 @@ const app = {
   counts: {},
   ticketList: null,
   keyHandler: null,
+  storeHandler: null,
   generation: 0,
   forbidden: false,
 };
@@ -35,12 +49,20 @@ function applyPrefs() {
   const root = document.documentElement;
   root.lang = app.lang;
   root.dataset.theme = prefs.getTheme();
-  document.title = app.t('app_title');
+  updateTitle();
+}
+
+/** The tab title carries the number of jobs waiting for an answer. */
+function updateTitle() {
+  const st = store.get();
+  const n = st ? st.needs_input || 0 : 0;
+  document.title = n ? `(${n}) ${app.t('app_title')}` : app.t('app_title');
 }
 
 function showReopen() {
   if (app.forbidden) return;
   app.forbidden = true;
+  store.stop();
   closePalette();
   clearEscapes();
   for (const layer of document.querySelectorAll('.layer')) layer.remove();
@@ -74,7 +96,7 @@ function paletteItems() {
   const t = app.t;
   const go = (hash) => () => { location.hash = hash; };
   const screens = [
-    ['tickets', 'file', 'nav_tickets'], ['templates', 'layers', 'nav_templates'],
+    ['tickets', 'file', 'nav_tickets'], ['jobs', 'refresh', 'nav_jobs'], ['templates', 'layers', 'nav_templates'],
     ['cache', 'folder', 'nav_cache'], ['settings', 'settings', 'nav_settings'],
   ].map(([name, ic, key]) => ({ group: t('palette_screens'), label: t(key), icon: ic, run: go(href([name])) }));
   const ticketItems = (list) => list.flatMap((tk) => [
@@ -130,11 +152,13 @@ function render({ keepFocus } = {}) {
   clearEscapes();
   for (const layer of document.querySelectorAll('.layer')) layer.remove();
   app.keyHandler = null;
+  app.storeHandler = null;
   const generation = ++app.generation;
   const shell = renderShell({
     t: app.t, lang: app.lang, section: sectionOf(route), counts: app.counts, onLang, onPalette: showPalette,
   });
   mount(document.getElementById('app'), ...shell.root);
+  updateAgentStatus(app.t, store.get(), store.error());
   const ctx = {
     t: app.t,
     lang: app.lang,
@@ -155,6 +179,9 @@ function render({ keepFocus } = {}) {
     setCount,
     setTickets: (list) => { app.ticketList = list; setCount('tickets', list.length); },
     onKey: (fn) => { app.keyHandler = fn; },
+    store,
+    pollNow: () => store.pollNow(),
+    onStoreChange: (fn) => { app.storeHandler = fn; },
     toast,
     setLang: onLang,
     setTheme: onTheme,
@@ -198,15 +225,34 @@ async function exchange() {
     return;
   }
   app.forbidden = false;
+  store.start();
   if (!location.hash || location.hash === '#') history.replaceState(null, '', `${location.pathname}${href(['tickets'])}`);
   render();
   loadCounts();
+}
+
+function wireStore() {
+  store.onStatus((st) => {
+    updateAgentStatus(app.t, st, null);
+    updateTitle();
+  });
+  store.onError((err) => updateAgentStatus(app.t, store.get(), err));
+  store.onSessions((times) => showSessionNotice(app.t, times, () => {
+    api.releaseAgent().then((r) => {
+      toast(r && r.released ? app.t('jobs_released') : app.t('session_no_agent'));
+      store.pollNow();
+    }, () => toast(app.t('err_generic', { code: 'release' }), 'danger'));
+  }));
+  store.onChange((st) => {
+    if (app.storeHandler && !app.forbidden) app.storeHandler(st);
+  });
 }
 
 async function start() {
   app.dicts = await loadDictionaries();
   applyPrefs();
   setForbiddenHandler(showReopen);
+  wireStore();
   // A new launch URL pasted into this tab changes only the hash; exchange its code too.
   window.addEventListener('hashchange', () => {
     if (readLaunchCode(location.hash)) exchange().catch(showStartError);

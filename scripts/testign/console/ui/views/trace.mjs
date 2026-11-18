@@ -4,6 +4,7 @@
 import { h, icon, mount } from '../dom.mjs';
 import { NONE } from '../format.mjs';
 import { href } from '../router.mjs';
+import { queueJob } from './job-actions.mjs';
 import {
   badge, banner, breadcrumb, conclusionBadge, emptyState, errorState, hashBanner, loading, spacer,
 } from './shell.mjs';
@@ -61,7 +62,13 @@ export function render(ctx) {
         (tp) => go(workbook, tp)),
     ]);
     const result = h('div.stack-20');
-    mount(body, header(ctx, ticket, pickers), result);
+    const fm = (ticket.latest && ticket.latest.frontmatter) || {};
+    const next = Number.isFinite(fm.revision) ? `r${fm.revision + 1}` : '';
+    const write7 = h('button.k-btn.k-btn--primary', {
+      type: 'button', dataset: { trigger: 'write7' },
+      on: { click: () => queueJob(ctx, { kind: 'testcase', ticket: id, mode: 'trace', workbook, template }) },
+    }, t('trigger_write7', { rev: next }));
+    mount(body, header(ctx, ticket, pickers, write7), result);
     mount(result, loading(t, 4));
     ctx.memo(`trace:${workbook}|${template}`, () => ctx.api.trace(id, workbook, template)).then((data) => {
       if (!ctx.alive()) return;
@@ -88,12 +95,12 @@ function noTemplate(t) {
     h('a.k-btn.k-btn--secondary', { href: href(['templates']) }, [icon('layers'), t('trace_go_templates')]));
 }
 
-function header(ctx, ticket, pickers) {
+function header(ctx, ticket, pickers, action) {
   const { t } = ctx;
   const latest = ticket.latest || {};
   const fm = latest.frontmatter || {};
   const lang = typeof fm.lang === 'string' && fm.lang ? fm.lang : undefined;
-  return h('section.report-head', [
+  return h('section.report-top', [h('div.report-head', [
     h('div.row-8', [
       h('span.k-id', ticket.id),
       latest.conclusion ? conclusionBadge(t, latest.conclusion) : null,
@@ -101,7 +108,7 @@ function header(ctx, ticket, pickers) {
     ]),
     h('h1.page-title', { lang }, latest.title || ticket.id),
     pickers,
-  ]);
+  ]), action ? h('div.trigger-box', action) : null]);
 }
 
 function headerMismatch(ctx, data) {
@@ -159,7 +166,13 @@ function drawResult(ctx, box, data, ticket) {
       extra: h('progress.meter', { max: String(Math.max(total, 1)), value: String(covered), 'aria-label': t('trace_coverage') }),
     }),
     card(`${t('trace_gaps')} · ${gaps.length}`, gaps.length ? h('p.k-card__title', gaps.map((g) => h('span.k-id', g))) : null,
-      gaps.length ? t('trace_gaps_body') : t('trace_gaps_none'), { danger: gaps.length > 0 }),
+      gaps.length ? t('trace_gaps_body') : t('trace_gaps_none'), {
+        danger: gaps.length > 0,
+        extra: gaps.length ? h('div.k-card__meta.row-8', gaps.map((g) => h('button.k-btn.k-btn--secondary.k-btn--sm', {
+          type: 'button', dataset: { trigger: 'add-case', row: g },
+          on: { click: () => queueJob(ctx, { kind: 'testcase', ticket: ticket.id, mode: 'write', workbook: data.workbook, template: data.template, focus: [g] }) },
+        }, t('trigger_add_case', { row: g })))) : null,
+      }),
     card(`${t('trace_orphans')} · ${orphans.length}`, orphans.length ? h('p.k-card__title', orphans.map((o) => h('span.k-id', o))) : null,
       orphans.length ? t('trace_orphans_body') : t('trace_orphans_none'), { danger: orphans.length > 0 }),
     card(`${t('trace_waiting')} · ${waiting.length}`,

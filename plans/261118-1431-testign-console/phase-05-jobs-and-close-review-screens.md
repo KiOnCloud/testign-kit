@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Jobs and Close review screens"
-status: pending
+status: done
 priority: P1
 effort: "3d"
 dependencies: [3, 4]
@@ -22,19 +22,19 @@ and Trace screens, in vi, en and ja.
 
 ## Requirements
 
-- [ ] The console polls `/api/state` every 1.5 seconds while the tab is visible and stops while hidden; views refresh from the change counter, not on every poll.
-- [ ] Every job sent from the console carries the current `ui_lang`; survey also carries `report_lang` (default: config `lang`); close carries `tester` from Settings, and Close QA asks for the name first when it is empty.
-- [ ] Job triggers act on the latest revision only; while an older revision is shown, they are disabled with a note. <!-- Red team 2026-11-18: revision pinning -->
-- [ ] With no agent attached, the sidebar and Jobs screen say "No agent attached: run /testign:console in Claude Code"; queued jobs wait; nothing shows a spinner without a reason.
-- [ ] A job silent for 15 minutes shows as silent with "Mark failed" and "Release agent"; a failed job shows its reason (`revision-moved` explains that the report changed and offers "Queue again on the latest revision") and "Queue again".
-- [ ] `needs-input` jobs: sidebar badge with the count, document title prefixed with the count, and the question shown in the Jobs detail panel.
-- [ ] `questions` asks render as radio or checkbox groups with an optional "Other" text (multi-line where the ask allows it).
-- [ ] `review-rows` opens the Close review screen: one row per `row` id with Q (when present), class, decision, quote, source, feature, page and anchors; actions Write, Skip, Edit; Edit opens fields for decision, anchors and page. The primary button stays disabled until every row has a choice. <!-- Red team 2026-11-18: close gates -->
-- [ ] `confirm-diff` shows each page's unified diff from the preview as given (a "new page" badge when `exists` is false), and the `added`, `skipped`, `superseded` and `index_repaired` lists; Write confirms, Back declines.
-- [ ] `paste-pages` shows each page's `new_content` with a copy button and the page name, and states that testign wrote nothing; "Done" answers it.
-- [ ] Agent text, quotes and diff lines are shown with `textContent` through the bidi-visible helper; quotes keep `lang="ja"` when the ask marks them so.
-- [ ] New browser sessions reported by `/api/state` are shown as a notice in every open tab.
-- [ ] The accent budget of Kestrel holds: one primary button per view.
+- [x] The console polls `/api/state` every 1.5 seconds while the tab is visible and stops while hidden; views refresh from the change counter, not on every poll.
+- [x] Every job sent from the console carries the current `ui_lang`; survey also carries `report_lang` (default: config `lang`); close carries `tester` from Settings, and Close QA asks for the name first when it is empty.
+- [x] Job triggers act on the latest revision only; while an older revision is shown, they are disabled with a note. <!-- Red team 2026-11-18: revision pinning -->
+- [x] With no agent attached, the sidebar and Jobs screen say "No agent attached: run /testign:console in Claude Code"; queued jobs wait; nothing shows a spinner without a reason.
+- [x] A job silent for 15 minutes shows as silent with "Mark failed" and "Release agent"; a failed job shows its reason (`revision-moved` explains that the report changed and offers "Queue again on the latest revision") and "Queue again".
+- [x] `needs-input` jobs: sidebar badge with the count, document title prefixed with the count, and the question shown in the Jobs detail panel.
+- [x] `questions` asks render as radio or checkbox groups with an optional "Other" text (multi-line where the ask allows it).
+- [x] `review-rows` opens the Close review screen: one row per `row` id with Q (when present), class, decision, quote, source, feature, page and anchors; actions Write, Skip, Edit; Edit opens fields for decision, anchors and page. The primary button stays disabled until every row has a choice. <!-- Red team 2026-11-18: close gates -->
+- [x] `confirm-diff` shows each page's unified diff from the preview as given (a "new page" badge when `exists` is false), and the `added`, `skipped`, `superseded` and `index_repaired` lists; Write confirms, Back declines.
+- [x] `paste-pages` shows each page's `new_content` with a copy button and the page name, and states that testign wrote nothing; "Done" answers it.
+- [x] Agent text, quotes and diff lines are shown with `textContent` through the bidi-visible helper; quotes keep `lang="ja"` when the ask marks them so.
+- [x] New browser sessions reported by `/api/state` are shown as a notice in every open tab.
+- [x] The accent budget of Kestrel holds: one primary button per view.
 
 ## Triggers
 

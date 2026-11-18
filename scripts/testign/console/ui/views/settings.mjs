@@ -11,6 +11,12 @@ function show(value) {
   return value === null || value === undefined || value === '' ? NONE : String(value);
 }
 
+function agentText(t, st) {
+  if (!st) return NONE;
+  if (!st.agent || !st.agent.attached) return t('agent_none');
+  return st.open && st.open.silent ? t('agent_silent', { min: Math.floor((st.agent.silent_seconds || 0) / 60) }) : t('agent_ok');
+}
+
 export function render(ctx) {
   const { t, prefs } = ctx;
   const body = h('div.page.page-narrow');
@@ -59,6 +65,8 @@ export function render(ctx) {
     h('dl.k-props.props-plain', [
       h('dt', t('settings_version')), h('dd', h('span.k-chip', show(serverVersion()))),
       h('dt', t('settings_address')), h('dd', h('span.k-chip', h('code.k-mono', location.host))),
+      h('dt', t('settings_agent')), h('dd', h('span.k-chip', agentText(t, ctx.store.get()))),
+      h('dt', t('settings_sessions')), h('dd', h('span.k-chip.num', String(((ctx.store.get() || {}).browser_sessions || []).length || NONE))),
     ]),
     h('p.k-note', [t('settings_reopen'), ' ', h('code.k-mono', '/testign:console'), ' ', t('reopen_or'), ' ', h('code.k-mono', 'testign console open')]),
   ]);

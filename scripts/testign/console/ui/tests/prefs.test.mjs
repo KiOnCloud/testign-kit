@@ -61,3 +61,12 @@ test('the launch code is read only from a #c= hash', () => {
   assert.equal(readLaunchCode('#c=abc&x=1'), null);
   assert.equal(readLaunchCode(''), null);
 });
+
+test('the last repo path is remembered and storage failures are quiet', () => {
+  const store = memoryStore();
+  assert.equal(prefs.getLastRepo(store), '');
+  prefs.setLastRepo('  D:\repos\app ', store);
+  assert.equal(prefs.getLastRepo(store), 'D:\repos\app');
+  assert.equal(prefs.getLastRepo(throwing), '');
+  assert.equal(prefs.setLastRepo('x', throwing), false);
+});

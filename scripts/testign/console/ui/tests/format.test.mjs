@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { idRanges, isoDate, NONE, shortSha } from '../format.mjs';
+import { dateTime, idRanges, isoDate, NONE, shortSha, timeOrDay } from '../format.mjs';
 
 test('ISO strings keep the day as written', () => {
   assert.equal(isoDate('2026-01-01T00:00:00+00:00'), '2026-01-01');
@@ -31,4 +31,13 @@ test('id ranges', () => {
   assert.equal(idRanges(['B1']), 'B1');
   assert.equal(idRanges([]), '');
   assert.equal(idRanges(['x', 'B2']), 'x, B2');
+});
+
+test('job times: HH:MM today, the day otherwise', () => {
+  const now = new Date(2026, 10, 19, 15, 0);
+  assert.equal(timeOrDay(new Date(2026, 10, 19, 9, 5).toISOString(), now), '09:05');
+  assert.equal(timeOrDay(new Date(2026, 10, 17, 9, 5).toISOString(), now), '2026-11-17');
+  assert.equal(timeOrDay('nope', now), NONE);
+  assert.equal(dateTime(new Date(2026, 10, 19, 9, 5).toISOString()), '2026-11-19 09:05');
+  assert.equal(dateTime(null), NONE);
 });

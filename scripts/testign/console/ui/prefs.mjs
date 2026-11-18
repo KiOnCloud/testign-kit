@@ -3,7 +3,7 @@
 
 export const LANGS = ['vi', 'en', 'ja'];
 export const THEMES = ['light', 'dark'];
-const KEYS = { uiLang: 'testign.uiLang', theme: 'testign.theme', testerName: 'testign.testerName' };
+const KEYS = { uiLang: 'testign.uiLang', theme: 'testign.theme', testerName: 'testign.testerName', lastRepo: 'testign.lastRepo' };
 const NAME_MAX = 100;
 
 function storage() {
@@ -81,3 +81,13 @@ export function setTesterName(name, store) {
 }
 
 export const TESTER_NAME_MAX = NAME_MAX;
+
+/** The repo path last used for a survey, typed by the tester; empty when none. */
+export function getLastRepo(store) {
+  const saved = read(KEYS.lastRepo, store);
+  return typeof saved === 'string' ? saved.slice(0, 1000) : '';
+}
+
+export function setLastRepo(path, store) {
+  return write(KEYS.lastRepo, String(path ?? '').trim().slice(0, 1000), store);
+}

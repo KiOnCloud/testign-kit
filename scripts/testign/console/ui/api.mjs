@@ -129,6 +129,8 @@ export async function request(method, path, { json, binary, headers, signal } = 
   }
   if (res.status === 403) {
     const err = await parseError(res);
+    // A tab opened after a job started may not answer it; the session itself is still good.
+    if (err.code === 'session-too-new') throw err;
     token = null;
     remember(TOKEN_KEY, null);
     onForbidden();
@@ -170,4 +172,12 @@ export const api = {
   register: (body) => request('POST', '/api/templates', { json: body }),
   setDefault: (name) => request('POST', `/api/templates/${seg(name)}/default`, { json: {} }),
   remove: (name) => request('DELETE', `/api/templates/${seg(name)}`),
+  state: () => request('GET', '/api/state'),
+  jobs: () => request('GET', '/api/jobs'),
+  job: (id) => request('GET', `/api/jobs/${seg(id)}`),
+  createJob: (body) => request('POST', '/api/jobs', { json: body }),
+  answer: (id, askId, answer) => request('POST', `/api/jobs/${seg(id)}/answer`, { json: { ask_id: askId, answer } }),
+  cancelJob: (id) => request('POST', `/api/jobs/${seg(id)}/cancel`, { json: {} }),
+  failJob: (id) => request('POST', `/api/jobs/${seg(id)}/fail`, { json: {} }),
+  releaseAgent: () => request('POST', '/api/agent/release', { json: {} }),
 };

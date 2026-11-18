@@ -61,3 +61,20 @@ export function idRanges(ids) {
   flush();
   return out.join(', ');
 }
+
+/** HH:MM for a time today, YYYY-MM-DD otherwise (local time); an em dash when unreadable. */
+export function timeOrDay(value, now = new Date()) {
+  if (typeof value !== 'string' || !value) return NONE;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return NONE;
+  if (localDay(d) === localDay(now)) return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return localDay(d);
+}
+
+/** YYYY-MM-DD HH:MM in local time. */
+export function dateTime(value) {
+  if (typeof value !== 'string' || !value) return NONE;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return NONE;
+  return `${localDay(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}

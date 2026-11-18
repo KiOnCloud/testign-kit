@@ -1,7 +1,7 @@
 // Routes live in location.hash: #/tickets, #/tickets/DEMO-1, #/tickets/DEMO-1/trace,
-// #/templates, #/cache, #/settings, each with an optional ?query.
+// #/jobs, #/jobs/<id>, #/jobs/<id>/review, #/templates, #/cache, #/settings, each with an optional ?query.
 
-export const SCREENS = ['tickets', 'templates', 'cache', 'settings'];
+export const SCREENS = ['tickets', 'jobs', 'templates', 'cache', 'settings'];
 
 function decode(segment) {
   try {
@@ -41,6 +41,11 @@ export function parseRoute(hash) {
     if (sub === 'trace' && rest.length === 0) return { name: 'trace', params: { ticket: id }, query };
     return { name: 'notfound', params: {}, query };
   }
+  if (head === 'jobs' && id) {
+    if (!sub) return { name: 'jobs', params: { job: id }, query };
+    if (sub === 'review' && rest.length === 0) return { name: 'review', params: { job: id }, query };
+    return { name: 'notfound', params: {}, query };
+  }
   if (SCREENS.includes(head) && !id) return { name: head, params: {}, query };
   return { name: 'notfound', params: {}, query };
 }
@@ -57,5 +62,6 @@ export function href(segments, query) {
 /** Which nav item a route belongs to. */
 export function sectionOf(route) {
   if (route.name === 'report' || route.name === 'trace') return 'tickets';
+  if (route.name === 'review') return 'jobs';
   return route.name;
 }

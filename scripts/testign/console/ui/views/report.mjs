@@ -4,6 +4,7 @@
 import { h, icon, inline, mount } from '../dom.mjs';
 import { isoDate, NONE, shortSha } from '../format.mjs';
 import { href } from '../router.mjs';
+import { askTesterName, chooseTemplate, queueJob } from './job-actions.mjs';
 import {
   badge, banner, breadcrumb, conclusionBadge, emptyState, errorState, hashInline, loading, pushEscape, spacer,
 } from './shell.mjs';
@@ -208,7 +209,18 @@ function draw(ctx, body, ticket, view, latestName, crumbs) {
   ctx.topbar(crumbs(t('report_crumb', { rev: revLabel })), spacer(), revisionPicker(ctx, ticket, view, latestName), traceLink);
 
   const hashSlot = h('span');
-  const head = h('section.report-head', [
+  const triggers = h('div.stack-4.trigger-box', [
+    h('div.row-8', [
+      h('button.k-btn.k-btn--secondary', {
+        type: 'button', disabled: !isLatest, dataset: { trigger: 'close' }, on: { click: () => closeQa(ctx, id) },
+      }, t('trigger_close')),
+      h('button.k-btn.k-btn--primary', {
+        type: 'button', disabled: !isLatest, dataset: { trigger: 'write' }, on: { click: () => writeCases(ctx, id) },
+      }, [icon('plus'), t('trigger_write_tc')]),
+    ]),
+    isLatest ? null : h('span.k-note', { dataset: { olderNote: '1' } }, t('trigger_latest_only')),
+  ]);
+  const head = h('section.report-top', [h('div.report-head', [
     h('div.row-8', [
       h('span.k-id', id), conclusionBadge(t, view.conclusion),
       view.state && view.state !== 'ok' ? badge(t('tickets_inconsistent'), 'danger') : null,
@@ -222,7 +234,7 @@ function draw(ctx, body, ticket, view, latestName, crumbs) {
       h('span', [t('report_lang'), ': ', badge(lang || NONE, 'outline')]),
       h('span.num', [t('report_generated'), ' ', isoDate(fm.generated_at)]),
     ]),
-  ]);
+  ]), triggers]);
 
   const sections = view.sections || [];
   const st = stateFor(`${id}|${view.name}`);
@@ -376,4 +388,27 @@ function reportTable(table, lang) {
     h('thead', h('tr', table.header.map((x) => h('th', { lang }, x)))),
     h('tbody', table.rows.map((cells) => h('tr', cells.map((c) => h('td', { lang }, inline(c)))))),
   ])));
+}
+
+async function closeQa(ctx, id) {
+  const tester = await askTesterName(ctx);
+  if (!tester) return;
+  await queueJob(ctx, { kind: 'close', ticket: id, tester });
+}
+
+async function writeCases(ctx, id) {
+  let listing;
+  try {
+    listing = await ctx.memo('templates', () => ctx.api.templates());
+  } catch (err) {
+    ctx.toast(ctx.t('err_generic', { code: err && err.code ? err.code : 'error' }), 'danger');
+    return;
+  }
+  if (!listing.templates || !listing.templates.length) {
+    ctx.toast(ctx.t('job_err_no_template'), 'danger');
+    return;
+  }
+  const template = await chooseTemplate(ctx, listing, ctx.t('trigger_write_tc_title', { id }));
+  if (!template) return;
+  await queueJob(ctx, { kind: 'testcase', ticket: id, mode: 'write', template });
 }

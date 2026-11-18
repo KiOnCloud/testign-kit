@@ -45,3 +45,11 @@ test('report and trace belong to the Tickets section', () => {
   assert.equal(sectionOf(parseRoute('#/tickets/DEMO-1/trace')), 'tickets');
   assert.equal(sectionOf(parseRoute('#/cache')), 'cache');
 });
+
+test('job routes', () => {
+  assert.deepEqual(parseRoute('#/jobs'), { name: 'jobs', params: {}, query: {} });
+  assert.deepEqual(parseRoute('#/jobs/j-123'), { name: 'jobs', params: { job: 'j-123' }, query: {} });
+  assert.deepEqual(parseRoute('#/jobs/j-123/review'), { name: 'review', params: { job: 'j-123' }, query: {} });
+  assert.equal(parseRoute('#/jobs/j-123/other').name, 'notfound');
+  assert.equal(sectionOf(parseRoute('#/jobs/j-123/review')), 'jobs');
+});

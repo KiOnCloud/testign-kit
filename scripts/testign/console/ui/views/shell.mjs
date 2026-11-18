@@ -76,6 +76,10 @@ export function renderShell({ t, lang, section, counts, onLang, onPalette }) {
       h('span.k-kbd-group', [h('kbd.k-kbd', mod), h('kbd.k-kbd', 'K')])]),
     h('div.k-sidebar__section', t('nav_work')),
     nav('tickets', href(['tickets']), 'file', t('nav_tickets')),
+    h('a.k-nav-item', {
+      href: href(['jobs']), class: section === 'jobs' ? 'is-active' : '', 'aria-current': section === 'jobs' ? 'page' : undefined,
+      dataset: { nav: 'jobs' },
+    }, [icon('refresh'), h('span.nav-label', t('nav_jobs')), h('span.nav-jobs', { id: 'nav-jobs-badge' })]),
     h('div.k-sidebar__section', t('nav_setup')),
     nav('templates', href(['templates']), 'layers', t('nav_templates')),
     nav('cache', href(['cache']), 'folder', t('nav_cache')),
@@ -89,15 +93,118 @@ export function renderShell({ t, lang, section, counts, onLang, onPalette }) {
         }),
       ]),
       h('div.stack-2', [
-        h('div', { id: 'agent-status', hidden: true }),
+        h('div.agent-status', { id: 'agent-status', role: 'status' }),
         h('span.k-note', t('local_only')),
       ]),
     ]),
   ]);
   const topbar = h('header.k-topbar.topbar-wrap');
   const view = h('div.view', { id: 'view' });
-  const main = h('main.main', { id: 'main', tabindex: '-1' }, [topbar, view]);
+  const notices = h('div.notices', { id: 'session-notices', 'aria-live': 'polite' });
+  drawNotices(t, notices);
+  const main = h('main.main', { id: 'main', tabindex: '-1' }, [topbar, notices, view]);
   return { root: [sidebar, main], topbar, view, main };
+}
+
+/** The sidebar's agent line and Jobs badge from a console state (or a polling error). */
+export function updateAgentStatus(t, state, error) {
+  const box = document.getElementById('agent-status');
+  const badgeBox = document.getElementById('nav-jobs-badge');
+  if (box) {
+    let dot = 'dot-off';
+    let text = t('agent_none');
+    let note = t('agent_none_hint');
+    if (error) {
+      dot = 'dot-danger';
+      text = t('agent_server_lost');
+      note = errorText(t, error);
+    } else if (state && state.agent && state.agent.attached) {
+      const open = state.open;
+      if (open && open.silent) {
+        dot = 'dot-warning';
+        text = t('agent_silent', { min: Math.floor((state.agent.silent_seconds || 0) / 60) });
+        note = t('agent_silent_hint');
+      } else if (open && open.state !== 'offered') {
+        dot = 'dot-ok';
+        text = open.state === 'needs-input' ? t('agent_waiting_you') : t('agent_working');
+        note = '';
+      } else {
+        dot = 'dot-ok';
+        text = t('agent_ok');
+        note = '';
+      }
+    } else if (!state) {
+      text = t('agent_checking');
+      note = '';
+    }
+    mount(box, h('span.agent-line', [h('span.k-badge__dot', { class: dot }), text]), note ? h('span.k-note', note) : null);
+  }
+  if (badgeBox) {
+    const needs = state ? state.needs_input || 0 : 0;
+    const waiting = state ? (state.queue || []).length + (state.open ? 1 : 0) : 0;
+    mount(badgeBox, needs
+      ? h('span.k-badge.k-badge--warning', t('nav_needs_you', { n: needs }))
+      : h('span.k-nav-item__count', waiting ? String(waiting) : ''));
+  }
+}
+
+// Notices of new browser sessions stay until dismissed, across screens.
+const NOTICE_KEY = 'testign.sessionNotices';
+
+function loadNotices() {
+  try {
+    const list = JSON.parse(globalThis.sessionStorage.getItem(NOTICE_KEY) || '[]');
+    return Array.isArray(list) ? list.filter((e) => e && typeof e.when === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveNotices() {
+  try {
+    globalThis.sessionStorage.setItem(NOTICE_KEY, JSON.stringify(sessionNotices));
+  } catch {
+    // Storage blocked: the notices last until this page reloads.
+  }
+}
+
+const sessionNotices = loadNotices();
+let releaseAgent = null;
+
+function noticeNode(t, entry) {
+  const dismiss = () => {
+    const i = sessionNotices.indexOf(entry);
+    if (i >= 0) sessionNotices.splice(i, 1);
+    saveNotices();
+    note.remove();
+  };
+  const note = h('div.k-banner.k-banner--warning', { role: 'alert', dataset: { sessionNotice: '1' } }, [
+    icon('warning', 'icon-warn'),
+    h('div.k-banner__text', [h('strong', t('session_new_title', { time: entry.when })), h('span', t('session_new_body'))]),
+    h('div.row-4.notice-actions', [
+      releaseAgent ? h('button.k-btn.k-btn--secondary.k-btn--sm', {
+        type: 'button', dataset: { noticeRelease: '1' }, on: { click: () => releaseAgent() },
+      }, t('job_release')) : null,
+      h('button.k-btn.k-btn--ghost.k-btn--sm', { type: 'button', on: { click: dismiss } }, t('session_dismiss')),
+    ]),
+  ]);
+  return note;
+}
+
+function drawNotices(t, box) {
+  if (box) mount(box, sessionNotices.map((entry) => noticeNode(t, entry)));
+}
+
+/** A notice in every open tab that another browser session opened the console. */
+export function showSessionNotice(t, times, onRelease) {
+  if (onRelease) releaseAgent = onRelease;
+  const when = times.map((iso) => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? iso : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }).join(', ');
+  sessionNotices.push({ when });
+  saveNotices();
+  drawNotices(t, document.getElementById('session-notices'));
 }
 
 /** Update a sidebar count in place. */
@@ -156,6 +263,7 @@ const ERROR_KEYS = {
   inconsistent: 'err_inconsistent',
   'config-invalid': 'err_config',
   'template-error': 'err_template',
+  'workbook-unreadable': 'err_workbook_unreadable',
   forbidden: 'reopen_title',
 };
 

@@ -4,6 +4,7 @@
 import { h, icon, mount } from '../dom.mjs';
 import { isoDate, NONE } from '../format.mjs';
 import { href } from '../router.mjs';
+import { openSurveyForm, prefillFromReport } from './survey-form.mjs';
 import {
   badge, banner, conclusionBadge, emptyState, errorState, hashInline, loading, pageHead, spacer, topbarTitle,
 } from './shell.mjs';
@@ -51,12 +52,46 @@ function matches(tk, text, filter) {
   return text.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
 }
 
+function head(ctx) {
+  const { t } = ctx;
+  return pageHead(t('tickets_title'), t('tickets_subtitle'), [
+    h('button.k-btn.k-btn--primary', {
+      type: 'button', 'aria-keyshortcuts': 'C', dataset: { trigger: 'survey' },
+      on: { click: () => openSurvey(ctx) },
+    }, [icon('plus'), t('trigger_survey'), h('span.k-kbd-group', h('kbd.k-kbd.k-kbd--on-accent', 'C'))]),
+  ]);
+}
+
+function openSurvey(ctx) {
+  ctx.memo('config', () => ctx.api.config()).then(
+    (cfg) => openSurveyForm(ctx, { configLang: cfg.lang }),
+    () => openSurveyForm(ctx, {}),
+  );
+}
+
+/** "Survey again": the form prefilled from the latest report; the tester checks and confirms. */
+export function surveyAgain(ctx, ticketId) {
+  Promise.all([
+    ctx.memo(`ticket:${ticketId}`, () => ctx.api.ticket(ticketId)),
+    ctx.memo('config', () => ctx.api.config()).catch(() => ({})),
+  ]).then(([ticket, cfg]) => {
+    const fm = ticket.latest && ticket.latest.frontmatter ? ticket.latest.frontmatter : { ticket: ticketId };
+    const initial = prefillFromReport({ ticket: ticketId, ...fm }, ctx.prefs.getLastRepo(), cfg.lang);
+    openSurveyForm(ctx, { initial, again: true, configLang: cfg.lang });
+  }, () => openSurveyForm(ctx, { initial: { ticket: ticketId }, again: true }));
+}
+
 export function render(ctx) {
   const { t } = ctx;
   const body = h('div.page');
   mount(ctx.view, body);
   ctx.topbar(topbarTitle(t('nav_tickets')), spacer());
-  mount(body, pageHead(t('tickets_title'), t('tickets_subtitle')), loading(t, 3));
+  ctx.onKey((event) => {
+    if (event.key.toLowerCase() !== 'c') return false;
+    openSurvey(ctx);
+    return true;
+  });
+  mount(body, head(ctx), loading(t, 3));
 
   const load = () => ctx.memo('tickets', () => ctx.api.tickets());
   load().then((data) => {
@@ -67,7 +102,7 @@ export function render(ctx) {
     draw(ctx, body, data);
   }, (err) => {
     if (!ctx.alive()) return;
-    mount(body, pageHead(t('tickets_title'), t('tickets_subtitle')), errorState(t, err, () => ctx.refresh()));
+    mount(body, head(ctx), errorState(t, err, () => ctx.refresh()));
     ctx.ready();
   });
 }
@@ -76,7 +111,7 @@ function draw(ctx, body, data) {
   const { t } = ctx;
   const list = data.tickets || [];
   if (!list.length) {
-    mount(body, pageHead(t('tickets_title'), t('tickets_subtitle')),
+    mount(body, head(ctx),
       emptyState(t('tickets_empty_title'), t('tickets_empty_body')));
     ctx.ready();
     return;
@@ -129,14 +164,16 @@ function draw(ctx, body, data) {
   function drawBanners() {
     const stale = list.filter((tk) => (hashStates.get(tk.id) || {}).status === 'stale');
     mount(bannerBox, stale.map((tk) => banner('warning', t('tickets_stale_title', { id: tk.id, rev: `r${tk.revision}` }),
-      t('tickets_stale_body'))));
+      t('tickets_stale_body'), h('button.k-btn.k-btn--secondary.k-btn--sm', {
+        type: 'button', dataset: { trigger: 'survey-again', ticket: tk.id }, on: { click: () => surveyAgain(ctx, tk.id) },
+      }, t('trigger_survey_again', { id: tk.id })))));
   }
 
   search.addEventListener('input', redraw);
   filter.addEventListener('change', redraw);
 
   mount(body,
-    pageHead(t('tickets_title'), t('tickets_subtitle')),
+    head(ctx),
     bannerBox,
     h('div.k-table-wrap', [
       h('div.k-toolbar.toolbar-wrap', [

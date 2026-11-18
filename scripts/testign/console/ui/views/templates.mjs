@@ -42,7 +42,7 @@ function roleLabel(t, role) {
 }
 
 /** The sheet grid: column letters, rows from the header row, the role row under the header. */
-export function grid(t, preview, roles) {
+export function grid(t, preview, roles, { upload = false } = {}) {
   const letters = preview.letters || [];
   const byLetter = {};
   for (const [role, letter] of Object.entries(roles || {})) if (letter) byLetter[letter] = role;
@@ -63,10 +63,12 @@ export function grid(t, preview, roles) {
     }
   }
   const extras = [];
-  if (preview.merged && preview.merged.length) {
+  if (preview.complete === false) {
+    extras.push(h('p.k-note', { dataset: { partialPreview: '1' } }, upload ? t('tpl_partial_upload') : t('tpl_partial_large')));
+  } else if (preview.merged && preview.merged.length) {
     extras.push(h('p.k-note', [t('tpl_merged'), ' ', h('code.k-mono', preview.merged.join(', '))]));
   }
-  if (preview.dropdowns && preview.dropdowns.length) {
+  if (preview.complete !== false && preview.dropdowns && preview.dropdowns.length) {
     extras.push(h('div.stack-4', [h('span.k-note', t('tpl_dropdowns')), h('ul.plain-list', preview.dropdowns.map((d) =>
       h('li', [h('code.k-mono', d.range), ' → ', h('code.k-mono', d.formula || '')])))]));
   }
@@ -313,7 +315,7 @@ function openRegister(ctx) {
       ]);
     });
     const gridBox = h('div');
-    function drawGrid() { mount(gridBox, grid(t, preview, s.map)); }
+    function drawGrid() { mount(gridBox, grid(t, preview, s.map, { upload: true })); }
     mount(layoutBox,
       h('p.k-note', [t('tpl_uploaded'), ' ', h('code.k-mono', resp.name)]),
       h('div.form-row', [

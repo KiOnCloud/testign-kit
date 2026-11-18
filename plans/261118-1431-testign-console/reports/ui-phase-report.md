@@ -75,3 +75,81 @@ Date: 2026-11-18. Scope: the browser console on top of the existing server and r
 - The Settings console card shows version and address only; mode, idle time, sessions and agent
   state are not exposed by the read API and belong to the job bridge screens.
 - The sidebar keeps an empty, hidden `#agent-status` slot for the agent state.
+
+## Jobs and Close review
+
+Date: 2026-11-19. Scope: the job screens on top of the job bridge, and the triggers on Tickets,
+Report and Trace.
+
+### What was built
+
+- `ui/store.mjs`: polls `/api/state` every 1.5 s while the tab is visible and not at all while
+  hidden. Views redraw only when the change counter moves (or the open job turns silent, or the
+  agent attaches or leaves); the sidebar updates on every status change. New browser sessions are
+  reported once; the known set is kept in `sessionStorage` so a reload neither repeats nor loses a
+  notice. A 403 stops polling.
+- Sidebar: Jobs nav item with a needs-input badge (or the open and queued count), the agent line
+  (none attached with the `/testign:console` hint, connected, working, waiting for you, silent N
+  min, server not answering), and the tab title prefixed with the needs-input count.
+- New browser session: a warning banner in every open tab with the time, saying a new console tab
+  was opened and offering Release agent; it stays across screens and reloads until dismissed.
+- `views/jobs.mjs`: Open and History tabs, rows with Kestrel status glyphs (queued and offered
+  hollow, running and needs-input partial, done filled, failed crossed in the danger colour), the
+  open job selected by default, a detail panel with parameters, progress steps, the agent's report,
+  past questions and actions: Cancel (queued), Mark failed and Release agent (silent), Queue again
+  (failed; "Queue again on the latest revision" for `revision-moved`, with the explanation).
+  `questions` asks are answered in the panel (radio or checkbox groups, optional Other, multi-line
+  where the ask allows, Ctrl+Enter); review asks link to the review screen.
+- `views/review.mjs`: `review-rows` table (Q, class, decision with row id, decided by and date,
+  quote with its `lang`, source, page, feature, anchors) with Write, Skip and Edit; Edit opens
+  decision, anchors and page; the primary button stays disabled until every row has a choice and
+  every edit changes something. `confirm-diff` shows the server's diff per page with a "New page"
+  badge and the added, skipped, superseded and index-repaired lists; Write confirms, Back declines.
+  `views/paste-pages.mjs` shows each page with Copy and states that testign wrote nothing; Done
+  answers. Choices survive polling and language switches.
+- `views/survey-form.mjs`: ticket, repo path (remembered in `localStorage` as `testign.lastRepo`),
+  refs, fetch, feature and report language (default: config `lang`), with checks that mirror the
+  server's. "Survey again" (Tickets stale banner) prefills from the report frontmatter, prefers the
+  remembered repo, never prefills fetch, and the tester confirms in the dialog.
+- `views/job-actions.mjs`: queueing with the viewer's `ui_lang`, server error codes mapped to
+  messages (including `session-too-new`, which does not send the tab to the reopen page), the
+  tester-name prompt before Close QA (saved to Settings), the template picker when more than one
+  template is registered, and Queue again bodies.
+- Triggers: Tickets "Survey ticket" (primary, `C`); Report "Close QA" and "Write test cases"
+  (primary), both disabled with a note on an older revision; Trace "Write §7 to r{n+1}" (primary;
+  shown workbook and selected template) and "Add a case for R…" per gap. Settings shows the agent
+  state and the browser session count. One primary button per view.
+- Backend changes adopted: upload previews with `complete: false` show a note instead of merged
+  cells and dropdowns; `workbook-unreadable` has its own message.
+- 196 new keys in each dictionary (473 in all).
+
+### Results
+
+- `node --test "scripts/testign/console/ui/tests/*.test.mjs"`: 54 passed (new: `store.test.mjs`,
+  `ask-form.test.mjs`, plus job routes, times and the remembered repo).
+- `python -m pytest tests/test_console_ui_assets.py -v`: 41 passed.
+- `python -m pytest -q -p no:cacheprovider`: 334 passed, 4 skipped in 159 s (exits normally).
+- e2e: `tests/e2e/test_console_jobs_smoke.py` was added (close round in ja with the tester prompt,
+  one edited row, a diff with a new page and a superseded entry, manual pages, a late tab refused,
+  a survey waiting with no agent, a silent agent released, triggers disabled on an older revision).
+  Playwright is not installed locally: the tests skip cleanly, and with a stub `playwright` all 14
+  browser tests reach the browser step.
+- Live smoke (headless Chrome over CDP, a server in a thread on a DEMO home, the agent played with
+  `testign.console.client`): 41 checks passed with no console error or warning. Covered: no agent
+  (sidebar, Jobs banner, a queued survey, no spinner), survey form checks and the remembered repo,
+  Cancel, Close QA with an empty tester name prompted in ja, needs-input badge and `(1)` title,
+  review-rows with one edit (the agent got `{"action": "edit", "decision": …, "anchors": […]}`),
+  quote `lang="ja"` with visible bidi marks, 390 px without horizontal scroll, confirm-diff with a
+  new page and a superseded entry (the approval matched), the agent's report, paste-pages, a tab
+  opened after the job started refused with the `session-too-new` message (the job kept waiting),
+  the session warning with Release agent, a questions ask with a multi-line Other, an agent-failed
+  job, a silent agent marked failed then queued again then released, revision moved with "Queue
+  again on the latest revision", older-revision triggers disabled, Write test cases with the
+  template picker, Add a case for R2, Write §7 to r4, Survey again prefilled (repo from the
+  remembered value, report language ja, fetch off), and Jobs and Review in vi/en/ja at 1440 and
+  390 px without horizontal scroll. The server thread and every headless Chrome were stopped.
+
+### Notes
+
+- A released agent session cannot attach again (server behaviour); the smoke uses a new session
+  id after Release agent.

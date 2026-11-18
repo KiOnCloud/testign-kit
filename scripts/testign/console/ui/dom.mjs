@@ -114,6 +114,7 @@ const ICONS = {
   copy: [['rect', { x: 5.5, y: 5.5, width: 8, height: 8, rx: 1.5 }], ['path', { d: 'M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2' }]],
   branch: [['circle', { cx: 4.5, cy: 3.5, r: 1.5 }], ['circle', { cx: 4.5, cy: 12.5, r: 1.5 }], ['circle', { cx: 11.5, cy: 5.5, r: 1.5 }], ['path', { d: 'M4.5 5v6M11.5 7a4 4 0 0 1-4 4H6' }]],
   dash: [['path', { d: 'M4 8h8' }]],
+  refresh: [['path', { d: 'M13 8A5 5 0 0 1 4.3 11.3M3 8a5 5 0 0 1 8.7-3.3' }], ['path', { d: 'M11.7 2.5v2.2h-2.2M4.3 13.5v-2.2h2.2' }]],
 };
 
 /** An inline SVG icon built with createElementNS; `extra` adds classes such as 'k-icon--sm'. */
@@ -144,4 +145,30 @@ export function inline(text) {
     if (p.startsWith('`') && p.endsWith('`') && p.length > 2) return h('code.k-mono', p.slice(1, -1));
     return p;
   });
+}
+
+// Kestrel status glyphs: shape carries the state (hollow, partial, filled, crossed).
+const GLYPHS = {
+  todo: [['circle', { cx: 7, cy: 7, r: 5.5, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }]],
+  progress: [['circle', { cx: 7, cy: 7, r: 5.5, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }],
+    ['path', { d: 'M7 7 L7 3.8 A3.2 3.2 0 0 1 7 10.2 Z', fill: 'currentColor' }]],
+  done: [['circle', { cx: 7, cy: 7, r: 6.25, fill: 'currentColor' }],
+    ['path', { class: 'k-status__check', d: 'm4.4 7.3 1.8 1.8 3.6-3.9', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }]],
+  crossed: [['circle', { cx: 7, cy: 7, r: 5.5, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }],
+    ['path', { d: 'm5 5 4 4M9 5l-4 4', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5, 'stroke-linecap': 'round' }]],
+};
+
+/** A 14px status glyph: 'todo', 'progress', 'done' or 'crossed'; `extra` adds classes. */
+export function statusGlyph(shape, extra) {
+  const d = doc();
+  const svg = d.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', ['k-status', extra].filter(Boolean).join(' '));
+  svg.setAttribute('viewBox', '0 0 14 14');
+  svg.setAttribute('aria-hidden', 'true');
+  for (const [tag, attrs] of GLYPHS[shape] || GLYPHS.todo) {
+    const part = d.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs)) part.setAttribute(k, String(v));
+    svg.appendChild(part);
+  }
+  return svg;
 }
