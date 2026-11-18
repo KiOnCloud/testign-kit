@@ -94,7 +94,7 @@ def go(page, name, hash_):
 
 
 def job_id(page) -> str:
-    page.wait_for_function("location.hash.startsWith('#/jobs/')")
+    page.wait_for_function("() => location.hash.startsWith('#/jobs/')")
     return page.evaluate("location.hash").split("/")[2]
 
 
@@ -114,7 +114,7 @@ def ask_async(bridge, jid, ask, out, key, session=AGENT):
 def test_survey_waits_with_no_agent(page, console):
     bridge = console.state.bridge
     assert bridge.attached is None
-    page.wait_for_function("document.getElementById('agent-status').textContent.includes('/testign:console')")
+    page.wait_for_function("() => document.getElementById('agent-status').textContent.includes('/testign:console')")
     page.click("[data-trigger=survey]")
     page.fill("#survey-ticket", "DEMO-1")
     page.fill("#survey-repo", str(next((console.state.home.parent / "repo").iterdir())))
@@ -147,7 +147,7 @@ def test_close_round_with_prompt_edit_and_diff(page, console):
 
     assert agent_take(bridge) == jid
     t = ask_async(bridge, jid, ROWS_ASK, out, "rows")
-    page.wait_for_function("document.title.startsWith('(1)')")
+    page.wait_for_function("() => document.title.startsWith('(1)')")
     page.click("[data-open-review]")
     page.wait_for_selector(".review-table")
     send = ".review-footer .k-btn--primary"
@@ -173,7 +173,7 @@ def test_close_round_with_prompt_edit_and_diff(page, console):
     assert out["diff"]["answers"] == {"confirm": True}
     assert bridge.get(jid)["confirmed_approval"] == PREVIEW["approval"]
     bridge.done(jid, AGENT, "done", "2 行を書き込みました")
-    page.wait_for_function("document.querySelector('.agent-text') && document.querySelector('.agent-text').textContent.includes('2 行')")
+    page.wait_for_function("() => document.querySelector('.agent-text') && document.querySelector('.agent-text').textContent.includes('2 行')")
     assert not page.problems, page.problems
 
 
@@ -183,7 +183,7 @@ def test_manual_mode_shows_pages_to_paste(page, console):
     jid = bridge.create({"kind": "close", "ticket": "DEMO-1", "tester": "テスター A", "ui_lang": "ja"})["id"]
     assert agent_take(bridge) == jid
     t = ask_async(bridge, jid, client.ask_from_preview(MANUAL), out, "paste")
-    page.wait_for_function("document.title.startsWith('(1)')")
+    page.wait_for_function("() => document.title.startsWith('(1)')")
     late = page.context.browser.new_context()
     other = late.new_page()
     other.goto(f"http://127.0.0.1:{console.port}/#c={console.state.mint_launch_code()}")
@@ -214,7 +214,7 @@ def test_silent_agent_can_be_released(page, console):
     go(page, "jobs", f"#/jobs/{jid}")
     page.wait_for_selector(".k-split__panel-head .k-btn--danger")
     page.click(".k-split__panel-head .k-btn--secondary")
-    page.wait_for_function("document.getElementById('agent-status').textContent.includes('/testign:console')")
+    page.wait_for_function("() => document.getElementById('agent-status').textContent.includes('/testign:console')")
     assert bridge.get(jid)["state"] == "failed" and bridge.get(jid)["reason"] == "session-lost"
     page.wait_for_selector(".k-banner--danger")
     assert not page.problems, page.problems

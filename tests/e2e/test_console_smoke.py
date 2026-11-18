@@ -121,7 +121,7 @@ def test_language_switch_changes_chrome_not_report_text(browser, console):
         text_before = page.text_content(cell)
         assert "⟨U+202E⟩" in text_before
         page.click("[data-radio=side-lang][data-value=ja]")
-        page.wait_for_function("document.documentElement.lang === 'ja' && document.getElementById('main').dataset.ready === 'report'")
+        page.wait_for_function("() => document.documentElement.lang === 'ja' && document.getElementById('main').dataset.ready === 'report'")
         assert page.text_content("[data-nav=tickets] .nav-label") != label_before
         assert page.text_content(cell) == text_before
         assert page.evaluate("localStorage.getItem('testign.uiLang')") == "ja"
@@ -138,7 +138,7 @@ def test_palette_and_escape(browser, console):
         page.wait_for_selector(".k-palette")
         page.keyboard.type("DEMO-2")
         page.keyboard.press("Enter")
-        page.wait_for_function("location.hash === '#/tickets/DEMO-2'")
+        page.wait_for_function("() => location.hash === '#/tickets/DEMO-2'")
         go(page, "report", "#/tickets/DEMO-1")
         page.click("tr[data-row=B3]")
         page.wait_for_selector(".k-split__panel")
