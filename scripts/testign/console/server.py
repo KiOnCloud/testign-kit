@@ -20,6 +20,7 @@ import os
 import re
 import secrets
 import socket
+import socketserver
 import sys
 import threading
 import time
@@ -527,7 +528,11 @@ class ConsoleServer(ThreadingHTTPServer):
     def server_bind(self) -> None:
         if sys.platform == "win32":
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-        super().server_bind()
+        # HTTPServer.server_bind would look up socket.getfqdn("127.0.0.1"), a reverse DNS query
+        # that can take several seconds on macOS; the name is never used here.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = "127.0.0.1"
+        self.server_port = self.server_address[1]
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         exc = sys.exc_info()[1]

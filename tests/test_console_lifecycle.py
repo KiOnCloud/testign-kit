@@ -218,6 +218,10 @@ def test_foreground_serve_keeps_stderr_silent(home):
         while time.monotonic() < deadline and lifecycle.read_server_json(home) is None:
             time.sleep(0.1)
         info = lifecycle.read_server_json(home)
+        if info is None:
+            proc.kill()
+            out, err = proc.communicate(timeout=10)
+            raise AssertionError(f"server did not start; exit={proc.returncode} stderr={err.decode(errors='replace')}")
         assert info["mode"] == "foreground" and info["port"] == port
         call(port, "GET", "/health?nonce=1")
         call(port, "GET", "/api/anything")
