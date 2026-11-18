@@ -1,0 +1,22 @@
+{
+  "name": "Kestrel",
+  "source": "https://claude.ai/artifact/8zVwRX2YRdzPjEyPSVaB8i",
+  "version": "1795001967-49ce",
+  "vendored_at": "2026-11-18",
+  "sha256_note": "sha256 is taken over the file with LF line endings, so a CRLF checkout hashes the same.",
+  "files": {
+    "tokens.css": {
+      "from": "ds/kestrel/tokens.css of the approved Testign Console mockup canvas (generated from the artifact's tokens.json; sans stack extended with Hiragino, Yu Gothic UI and Meiryo)",
+      "sha256": "73bf899bb085ad02ac2900b3011974b725e4321c4698c9ba5d07f5498610af66",
+      "changes": []
+    },
+    "bundle.css": {
+      "from": "project/components/bundle.css",
+      "upstream_sha256": "cf5f74e0adbdc59bae5c4b5efcca5d8428d5944da40d1f8b95f20b54b9fd2543",
+      "sha256": "2f29d43025a95cad0624c1f14ecfaf224157514e97aecd0507650528f394b434",
+      "changes": [
+        "Removed the Google Fonts @import on line 1 and the blank line after it; Inter and JetBrains Mono are self-hosted under ui/fonts/ and declared in app.css."
+      ]
+    }
+  }
+}

@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Console UI shell, i18n and screens"
-status: pending
+status: done
 priority: P1
 effort: "3.5d"
 dependencies: [1, 2]
@@ -23,16 +23,16 @@ Templates (with registration), Scout cache and Settings, built on the read API.
 
 ## Requirements
 
-- [ ] No build step: `index.html` loads `main.mjs` as a module; every file is served from the phase 1 manifest.
-- [ ] CSP-clean: no inline `style` attributes, inline scripts or event-handler attributes; all styling through classes in `app.css` and Kestrel classes. Data goes into the DOM through `textContent` and attributes only.
-- [ ] Session bootstrap: read `#c=<code>` once, `POST /api/session`, keep the session token in `sessionStorage`, remove the code from the URL with `history.replaceState`, send `X-Testign-Session`. Without a code or on 403, show "Open the console again from /testign:console or `testign console open`". <!-- Red team 2026-11-18: credential split -->
-- [ ] i18n: `i18n/vi.json`, `en.json`, `ja.json` with the same flat keys; `t(key, params)` with `{name}` interpolation; a missing key falls back to vi, then to the key. `<html lang>` follows the choice.
-- [ ] Per-viewer settings in `localStorage`, read and written inside try/catch: `testign.uiLang` (default from `navigator.languages`: ja → ja, en → en, else vi), `testign.theme` (default light), `testign.testerName` (used as `approved_by` for close jobs in phase 5; Settings shows it as an editable field). <!-- Red team 2026-11-18: tester name, user chose Settings -->
-- [ ] Customer text with Unicode bidi control characters (U+202A–U+202E, U+2066–U+2069) is shown with those characters made visible (`⟨U+202E⟩`), through one helper used for every quote and report cell. <!-- Red team 2026-11-18: bidi -->
-- [ ] Dates show as ISO `YYYY-MM-DD`; numbers in tables use tabular figures.
-- [ ] Fonts self-hosted: Inter variable and JetBrains Mono 400/500, subsets latin, latin-ext and vietnamese, with `unicode-range`; Japanese uses the system stack (Hiragino, Yu Gothic UI, Meiryo).
-- [ ] Layout works from 390 px to 1440 px: sidebar stacks, toolbars wrap, wide tables scroll inside their box; no horizontal page scroll.
-- [ ] Keyboard: every control reachable by Tab with a visible focus ring; `Ctrl/⌘+K` opens a palette that navigates to screens and tickets; `Esc` closes the palette and the split panel; single-key shortcuts do nothing while focus is in an input, textarea, select or contenteditable element. <!-- Red team 2026-11-18: shortcut in fields -->
+- [x] No build step: `index.html` loads `main.mjs` as a module; every file is served from the phase 1 manifest.
+- [x] CSP-clean: no inline `style` attributes, inline scripts or event-handler attributes; all styling through classes in `app.css` and Kestrel classes. Data goes into the DOM through `textContent` and attributes only.
+- [x] Session bootstrap: read `#c=<code>` once, `POST /api/session`, keep the session token in `sessionStorage`, remove the code from the URL with `history.replaceState`, send `X-Testign-Session`. Without a code or on 403, show "Open the console again from /testign:console or `testign console open`". <!-- Red team 2026-11-18: credential split -->
+- [x] i18n: `i18n/vi.json`, `en.json`, `ja.json` with the same flat keys; `t(key, params)` with `{name}` interpolation; a missing key falls back to vi, then to the key. `<html lang>` follows the choice.
+- [x] Per-viewer settings in `localStorage`, read and written inside try/catch: `testign.uiLang` (default from `navigator.languages`: ja → ja, en → en, else vi), `testign.theme` (default light), `testign.testerName` (used as `approved_by` for close jobs in phase 5; Settings shows it as an editable field). <!-- Red team 2026-11-18: tester name, user chose Settings -->
+- [x] Customer text with Unicode bidi control characters (U+202A–U+202E, U+2066–U+2069) is shown with those characters made visible (`⟨U+202E⟩`), through one helper used for every quote and report cell. <!-- Red team 2026-11-18: bidi -->
+- [x] Dates show as ISO `YYYY-MM-DD`; numbers in tables use tabular figures.
+- [x] Fonts self-hosted: Inter variable and JetBrains Mono 400/500, subsets latin, latin-ext and vietnamese, with `unicode-range`; Japanese uses the system stack (Hiragino, Yu Gothic UI, Meiryo).
+- [x] Layout works from 390 px to 1440 px: sidebar stacks, toolbars wrap, wide tables scroll inside their box; no horizontal page scroll.
+- [x] Keyboard: every control reachable by Tab with a visible focus ring; `Ctrl/⌘+K` opens a palette that navigates to screens and tickets; `Esc` closes the palette and the split panel; single-key shortcuts do nothing while focus is in an input, textarea, select or contenteditable element. <!-- Red team 2026-11-18: shortcut in fields -->
 
 ## Screens
 
