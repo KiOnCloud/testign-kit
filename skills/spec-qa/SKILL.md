@@ -127,3 +127,10 @@ again. Warnings about leftover `<...>` placeholders should also be fixed.
 
 Tell the tester the report path, the conclusion line from section 1, and the questions to send (Dev
 and BrSE separately, with the ja drafts). Do not send anything to Backlog yourself.
+
+## In a console job
+
+When the `console` skill runs this skill for a `survey` job, the job's parameters replace the
+arguments (`repo` is always given) and the report is written in `report_lang`. Where a step would ask
+the tester (for example for the ticket text when Backlog MCP is unavailable), use `console ask` as
+`${CLAUDE_PLUGIN_ROOT}/references/console-bridge.md` says. Without a console job nothing here changes.

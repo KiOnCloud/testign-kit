@@ -117,3 +117,12 @@ If the report did not use the cache, it says so; that is fine.
 
 Tell the tester which entries were written to the wiki (or that they must paste them), which
 questions are still open, and the new revision path.
+
+## In a console job
+
+When the `console` skill runs this skill for a `close` job, use the report named in `base_revision`
+and the job's `tester` as `approved_by` and as the `cache-review --by` name. Pasted answers and source
+links come through a `questions` ask, the row approval through a `review-rows` ask, and the diff
+approval through `console ask --from-preview`; then write with `wiki-update --job <id> --session <id>`.
+The details and the manual-mode and Backlog-notation outcomes are in
+`${CLAUDE_PLUGIN_ROOT}/references/console-bridge.md`. Without a console job nothing here changes.

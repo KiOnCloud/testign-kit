@@ -104,3 +104,13 @@ This writes section 7 (totals, gaps, orphans, cases waiting on QA) into `r<N+1>`
 pointing at the report you read. Report to the tester: the workbook path, the new revision path, and
 the gaps, orphans and waiting cases. Explain that gaps from Block questions are expected until the
 question is answered.
+
+## In a console job
+
+When the `console` skill runs this skill for a `testcase` job, use the report named in
+`base_revision`, the job's `template`, and its `mode`: `trace` runs only
+`trace --template <t> --xlsx <workbook> --write-revision`; `write` writes cases (only for the `focus`
+rows when given, into `--into <workbook>` when a workbook is given), then runs the trace step. The
+preview confirmation and a stale hash check become `questions` asks; a missing template or unmapped
+columns fail the job with a pointer to the Templates screen, as
+`${CLAUDE_PLUGIN_ROOT}/references/console-bridge.md` says. Without a console job nothing here changes.
