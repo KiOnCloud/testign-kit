@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Jobs</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/kestrel/tokens.css">
+<link rel="stylesheet" href="ds/kestrel/components/bundle.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:var(--accent-text)}a:hover{color:var(--accent-hover)}
+</style>
+</helmet>
+<div data-theme="{{theme}}" lang="{{lang}}" style="min-height: 100vh; display: flex; flex-wrap: wrap; background: var(--surface-0); color: var(--text-1); font-family: var(--font-sans); font-size: var(--fs-small); line-height: var(--lh-ui); letter-spacing: var(--ls-ui);">
+
+  <nav class="k-sidebar" aria-label="{{t.nav_main}}" style="flex: 1 1 232px; min-height: 100%;">
+    <div class="k-sidebar__ws"><span class="k-avatar">T</span>testign<span class="k-muted" style="font-weight: var(--fw-regular);">· order-app</span></div>
+    <button class="k-btn k-btn--secondary k-btn--sm" style="justify-content: flex-start; width: 100%; margin-bottom: var(--space-8);" aria-keyshortcuts="Control+K">
+      <svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5"></circle><path d="m13 13-2.6-2.6"></path></svg>
+      <span style="flex: 1; text-align: left;">{{t.nav_search}}</span>
+      <span class="k-kbd-group"><kbd class="k-kbd">Ctrl</kbd><kbd class="k-kbd">K</kbd></span>
+    </button>
+    <div class="k-sidebar__section">{{t.nav_work}}</div>
+    <a class="k-nav-item" href="Tickets.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5h5l3 3v8H4v-11Z"></path><path d="M9 2.5v3h3M6 8h4M6 10.5h4"></path></svg>{{t.nav_tickets}}<span class="k-nav-item__count">3</span></a>
+    <a class="k-nav-item is-active" href="Jobs.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 8A5 5 0 0 1 4.3 11.3M3 8a5 5 0 0 1 8.7-3.3"></path><path d="M11.7 2.5v2.2h-2.2M4.3 13.5v-2.2h2.2"></path></svg>{{t.nav_jobs}}<span class="k-badge k-badge--warning" style="margin-left: auto;">{{t.nav_waiting}}</span></a>
+    <div class="k-sidebar__section">{{t.nav_setup}}</div>
+    <a class="k-nav-item" href="Templates.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 2.5 5.5 3L8 8.5l-5.5-3Z"></path><path d="m2.5 8.5 5.5 3 5.5-3"></path><path d="m2.5 11 5.5 3 5.5-3"></path></svg>{{t.nav_templates}}<span class="k-nav-item__count">2</span></a>
+    <a class="k-nav-item" href="Cache.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-7.5Z"></path></svg>{{t.nav_cache}}</a>
+    <a class="k-nav-item" href="Settings.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2"></circle><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.8 3.8l1 1M11.2 11.2l1 1M3.8 12.2l1-1M11.2 4.8l1-1"></path></svg>{{t.nav_settings}}</a>
+    <div style="margin-top: auto; padding: var(--space-8); border-top: var(--hairline) solid var(--border-1); display: flex; flex-direction: column; gap: var(--space-8);">
+      <div style="display: flex; flex-direction: column; gap: var(--space-4);">
+        <span class="k-section-label">{{t.ui_lang}}</span>
+        <div class="k-tabs k-tabs--segmented" role="radiogroup" aria-label="{{t.ui_lang}}">
+          <button class="k-tab {{viOn}}" role="radio" aria-checked="{{viSel}}" lang="vi" onClick="{{setVi}}">Tiếng Việt</button>
+          <button class="k-tab {{enOn}}" role="radio" aria-checked="{{enSel}}" lang="en" onClick="{{setEn}}">English</button>
+          <button class="k-tab {{jaOn}}" role="radio" aria-checked="{{jaSel}}" lang="ja" onClick="{{setJa}}">日本語</button>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+        <span style="display: flex; align-items: center; gap: var(--space-6); color: var(--text-2);"><span class="k-badge__dot" style="color: var(--success);"></span>{{t.agent_ok}}</span>
+        <span class="k-note">{{t.local_only}}</span>
+      </div>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column;">
+    <header class="k-topbar">
+      <span class="k-topbar__title">{{t.nav_jobs}}</span>
+      <div class="k-topbar__spacer"></div>
+      <span class="k-note">{{t.one_at_a_time}}</span>
+    </header>
+
+    <div style="padding: var(--space-24); display: flex; flex-direction: column; gap: var(--space-16); max-width: 1400px; width: 100%; box-sizing: border-box;">
+      <section style="display: flex; flex-direction: column; gap: var(--space-4);">
+        <h1 style="margin: 0; font-size: var(--fs-title-1); line-height: var(--lh-body); font-weight: var(--fw-semibold); letter-spacing: var(--ls-title);">{{t.title}}</h1>
+        <p class="k-note">{{t.subtitle}}</p>
+      </section>
+
+      <div class="k-split" style="display: flex; flex-wrap: wrap;">
+        <div class="k-split__main" style="flex: 999 1 520px;">
+          <div class="k-toolbar">
+            <div class="k-toolbar__group"><div class="k-tabs k-tabs--segmented" role="tablist" aria-label="{{t.filter}}"><button class="k-tab is-active" role="tab" aria-selected="true">{{t.open}} 2</button><button class="k-tab" role="tab" aria-selected="false">{{t.history}}</button></div></div>
+            <div class="k-toolbar__spacer"></div>
+          </div>
+          <div class="k-list">
+            <div class="k-issue-row is-selected" style="gap: var(--space-12);">
+              <svg class="k-status k-status--progress" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M7 7 L7 3.8 A3.2 3.2 0 0 1 7 10.2 Z" fill="currentColor"></path></svg>
+              <span class="k-id">#7</span>
+              <span class="k-issue-row__title">{{t.kind_close}} · DEMO-1 r2</span>
+              <span class="k-badge k-badge--warning">{{t.st_waiting}}</span>
+              <span class="k-issue-row__date">11:42</span>
+            </div>
+            <div class="k-issue-row" style="gap: var(--space-12);">
+              <svg class="k-status k-status--todo" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle></svg>
+              <span class="k-id">#8</span>
+              <span class="k-issue-row__title">{{t.kind_tc}} · DEMO-12 r3 · {{t.add_r3}}</span>
+              <span class="k-note">{{t.st_after7}}</span>
+              <span class="k-issue-row__date">11:45</span>
+            </div>
+            <div style="padding: var(--space-12) var(--space-12) var(--space-4); color: var(--text-3); font-size: var(--fs-micro); font-weight: var(--fw-medium); letter-spacing: var(--ls-caps); text-transform: uppercase;">{{t.today}}</div>
+            <div class="k-issue-row" style="gap: var(--space-12);">
+              <svg class="k-status k-status--canceled" viewBox="0 0 14 14" aria-hidden="true" style="color: var(--danger);"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="m5 5 4 4M9 5l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>
+              <span class="k-id">#6</span>
+              <span class="k-issue-row__title">{{t.kind_tc}} · DEMO-12 r2</span>
+              <span class="k-note" style="color: var(--danger);">{{t.st_failed}}</span>
+              <button class="k-btn k-btn--ghost k-btn--xs">{{t.requeue}}</button>
+              <span class="k-issue-row__date">09:10</span>
+            </div>
+            <div class="k-issue-row" style="gap: var(--space-12);">
+              <svg class="k-status k-status--done" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6.25" fill="currentColor"></circle><path class="k-status__check" d="m4.4 7.3 1.8 1.8 3.6-3.9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+              <span class="k-id">#5</span>
+              <span class="k-issue-row__title">{{t.kind_survey}} · DEMO-1 → r2</span>
+              <span class="k-note">{{t.done5}}</span>
+              <span class="k-issue-row__date">08:31</span>
+            </div>
+            <div class="k-issue-row" style="gap: var(--space-12);">
+              <svg class="k-status k-status--done" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6.25" fill="currentColor"></circle><path class="k-status__check" d="m4.4 7.3 1.8 1.8 3.6-3.9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+              <span class="k-id">#4</span>
+              <span class="k-issue-row__title">{{t.kind_survey}} · DEMO-2 → r1</span>
+              <span class="k-note">{{t.done4}}</span>
+              <span class="k-issue-row__date">08:02</span>
+            </div>
+          </div>
+        </div>
+
+        <aside class="k-split__panel" aria-label="#7" style="flex: 1 1 400px; min-width: 0;">
+          <div class="k-split__panel-head"><span class="k-id">#7</span>{{t.kind_close}} · DEMO-1 r2</div>
+          <div style="padding: var(--space-12); display: flex; flex-direction: column; gap: var(--space-16);">
+            <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--space-6);">
+              <li style="display: flex; gap: var(--space-8); align-items: center; color: var(--text-2);"><svg class="k-status k-status--done" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6.25" fill="currentColor"></circle><path class="k-status__check" d="m4.4 7.3 1.8 1.8 3.6-3.9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>{{t.s1}}</li>
+              <li style="display: flex; gap: var(--space-8); align-items: center; color: var(--text-2);"><svg class="k-status k-status--done" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6.25" fill="currentColor"></circle><path class="k-status__check" d="m4.4 7.3 1.8 1.8 3.6-3.9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>{{t.s2}}</li>
+              <li style="display: flex; gap: var(--space-8); align-items: center; color: var(--text-1); font-weight: var(--fw-medium);"><svg class="k-status k-status--progress" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M7 7 L7 3.8 A3.2 3.2 0 0 1 7 10.2 Z" fill="currentColor"></path></svg>{{t.s3}}</li>
+              <li style="display: flex; gap: var(--space-8); align-items: center; color: var(--text-3);"><svg class="k-status k-status--todo" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle></svg><a href="Review.dc.html" style="color: inherit;">{{t.s4}}</a></li>
+              <li style="display: flex; gap: var(--space-8); align-items: center; color: var(--text-3);"><svg class="k-status k-status--todo" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle></svg>{{t.s5}}</li>
+              <li style="display: flex; gap: var(--space-8); align-items: center; color: var(--text-3);"><svg class="k-status k-status--todo" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle></svg>{{t.s6}}</li>
+            </ol>
+
+            <form style="display: flex; flex-direction: column; gap: var(--space-12); padding: var(--space-12); border: var(--hairline) solid var(--border-2); border-radius: var(--radius-8); background: var(--surface-raised);">
+              <div style="display: flex; flex-direction: column; gap: var(--space-4);">
+                <span class="k-section-label">{{t.agent_asks}}</span>
+                <p style="margin: 0; color: var(--text-1);">{{t.agent_q}}</p>
+              </div>
+              <div role="radiogroup" aria-label="Q2" style="display: flex; flex-direction: column; gap: var(--space-8);">
+                <label class="k-radio is-checked" style="align-items: flex-start;"><input type="radio" name="q2" checked><span class="k-radio__dot"></span><span style="display: flex; flex-direction: column; gap: var(--space-2);"><span><a href="#">#comment-1015</a> · 2026-11-17 · {{t.newer}}</span><span lang="ja" class="k-note" style="color: var(--text-2);">「端数は切り上げで確定です。」</span></span></label>
+                <label class="k-radio" style="align-items: flex-start;"><input type="radio" name="q2"><span class="k-radio__dot"></span><span style="display: flex; flex-direction: column; gap: var(--space-2);"><span><a href="#">#comment-1012</a> · 2026-11-15</span><span lang="ja" class="k-note" style="color: var(--text-2);">「端数処理は現行どおりでお願いします。」</span></span></label>
+                <label class="k-radio"><input type="radio" name="q2"><span class="k-radio__dot"></span><span>{{t.undecided}}</span></label>
+              </div>
+              <label class="k-field"><span class="k-field__label">{{t.note}} <span class="k-muted" style="font-weight: var(--fw-regular);">{{t.optional}}</span></span><textarea class="k-textarea" rows="2" placeholder="{{t.note_ph}}"></textarea></label>
+              <div style="display: flex; gap: var(--space-8); justify-content: flex-end; align-items: center; flex-wrap: wrap;">
+                <span class="k-note" style="margin-right: auto;">{{t.only_this_job}}</span>
+                <button class="k-btn k-btn--ghost" type="button">{{t.cancel_job}}</button>
+                <button class="k-btn k-btn--primary" type="submit">{{t.send}}<span class="k-kbd-group" style="margin-left: var(--space-4);"><kbd class="k-kbd">Ctrl</kbd><kbd class="k-kbd">↵</kbd></span></button>
+              </div>
+            </form>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"lang":{"editor":"enum","options":["vi","en","ja"],"default":"vi"},"$preview":{"width":1440,"height":960}}'>
+const NAV = {
+  vi: { nav_main: "Điều hướng chính", nav_search: "Tìm hoặc chạy lệnh", nav_work: "Làm việc", nav_tickets: "Tickets", nav_jobs: "Jobs", nav_waiting: "1 chờ bạn", nav_setup: "Thiết lập", nav_templates: "Templates", nav_cache: "Scout cache", nav_settings: "Cấu hình", ui_lang: "Ngôn ngữ giao diện", agent_ok: "Agent đã kết nối", local_only: "127.0.0.1 · chỉ máy này truy cập" },
+  en: { nav_main: "Main navigation", nav_search: "Search or run a command", nav_work: "Work", nav_tickets: "Tickets", nav_jobs: "Jobs", nav_waiting: "1 needs you", nav_setup: "Setup", nav_templates: "Templates", nav_cache: "Scout cache", nav_settings: "Settings", ui_lang: "Interface language", agent_ok: "Agent connected", local_only: "127.0.0.1 · this machine only" },
+  ja: { nav_main: "メインナビゲーション", nav_search: "検索・コマンド実行", nav_work: "作業", nav_tickets: "チケット", nav_jobs: "ジョブ", nav_waiting: "1件 回答待ち", nav_setup: "設定", nav_templates: "テンプレート", nav_cache: "スカウトキャッシュ", nav_settings: "環境設定", ui_lang: "表示言語", agent_ok: "エージェント接続中", local_only: "127.0.0.1 · このPCのみ" }
+};
+const PAGE = {
+  vi: { one_at_a_time: "Một job một lúc · agent phản hồi 20 giây trước", title: "Hàng đợi job", subtitle: "Survey, Close và Testcase cần LLM nên chạy qua phiên Claude Code đang mở. Console không tự sửa report, workbook hay wiki.", filter: "Lọc job", open: "Đang mở", history: "Lịch sử", kind_close: "Close QA", kind_tc: "Testcase", kind_survey: "Survey", add_r3: "thêm case cho R3", st_waiting: "Chờ bạn trả lời", st_after7: "Chạy sau #7", today: "Hôm nay", st_failed: "Thất bại: agent mất kết nối", requeue: "Xếp lại", done5: "Cache hit · 6 phút", done4: "Cache miss · 14 phút", s1: "Đọc 12 comment Backlog của DEMO-1", s2: "Phân loại Q1", s3: "Phân loại Q2 · cần bạn chọn", s4: "Bạn duyệt từng dòng", s5: "Ghi decisions log lên Backlog wiki", s6: "Viết report r3", agent_asks: "Agent hỏi", agent_q: "Q2 có hai comment của BrSE nói khác nhau về làm tròn. Lấy comment nào làm căn cứ?", newer: "mới hơn", undecided: "Chưa chốt · để Q2 là undecided", note: "Ghi chú cho agent", optional: "(không bắt buộc)", note_ph: "Ví dụ: BrSE xác nhận qua chat", only_this_job: "Câu trả lời chỉ dùng cho job này", cancel_job: "Huỷ job", send: "Gửi trả lời" },
+  en: { one_at_a_time: "One job at a time · agent replied 20 seconds ago", title: "Job queue", subtitle: "Survey, Close and Testcase need an LLM, so they run through the open Claude Code session. The console never edits reports, workbooks or the wiki itself.", filter: "Filter jobs", open: "Open", history: "History", kind_close: "Close QA", kind_tc: "Testcase", kind_survey: "Survey", add_r3: "add a case for R3", st_waiting: "Waiting for your answer", st_after7: "Runs after #7", today: "Today", st_failed: "Failed: agent disconnected", requeue: "Queue again", done5: "Cache hit · 6 min", done4: "Cache miss · 14 min", s1: "Read 12 Backlog comments on DEMO-1", s2: "Classify Q1", s3: "Classify Q2 · needs your choice", s4: "You review each row", s5: "Write the decisions log to the Backlog wiki", s6: "Write report r3", agent_asks: "Agent asks", agent_q: "Q2 has two BrSE comments that disagree on rounding. Which one should be the basis?", newer: "newer", undecided: "Not decided · keep Q2 undecided", note: "Note for the agent", optional: "(optional)", note_ph: "e.g. BrSE confirmed in chat", only_this_job: "This answer is used for this job only", cancel_job: "Cancel job", send: "Send answer" },
+  ja: { one_at_a_time: "ジョブは 1件ずつ · エージェント応答 20秒前", title: "ジョブキュー", subtitle: "調査・QA 締め・テストケース作成は LLM を使うため、起動中の Claude Code セッションで実行します。コンソールがレポート・ブック・Wiki を直接編集することはありません。", filter: "ジョブの絞り込み", open: "未完了", history: "履歴", kind_close: "QA 締め", kind_tc: "テストケース", kind_survey: "調査", add_r3: "R3 のケース追加", st_waiting: "あなたの回答待ち", st_after7: "#7 の後に実行", today: "今日", st_failed: "失敗: エージェント切断", requeue: "再投入", done5: "キャッシュヒット · 6分", done4: "キャッシュミス · 14分", s1: "DEMO-1 の Backlog コメント 12件を読み込み", s2: "Q1 を分類", s3: "Q2 を分類 · 選択が必要", s4: "1行ずつ承認", s5: "決定ログを Backlog Wiki に記録", s6: "レポート r3 を作成", agent_asks: "エージェントからの質問", agent_q: "Q2 について端数処理の BrSE コメントが 2件あり、内容が異なります。どちらを根拠にしますか？", newer: "新しい方", undecided: "未決定 · Q2 は undecided のまま", note: "エージェントへのメモ", optional: "(任意)", note_ph: "例: BrSE にチャットで確認済み", only_this_job: "この回答はこのジョブでのみ使用します", cancel_job: "ジョブを中止", send: "回答を送信" }
+};
+class Component extends DCLogic {
+  renderVals() {
+    const lang = (this.state && this.state.lang) || this.props.lang || 'vi';
+    const pick = (l) => () => this.setState({ lang: l });
+    return {
+      theme: this.props.theme ?? 'light',
+      lang: lang,
+      t: Object.assign({}, NAV[lang] || NAV.vi, PAGE[lang] || PAGE.vi),
+      viOn: lang === 'vi' ? 'is-active' : '', enOn: lang === 'en' ? 'is-active' : '', jaOn: lang === 'ja' ? 'is-active' : '',
+      viSel: lang === 'vi', enSel: lang === 'en', jaSel: lang === 'ja',
+      setVi: pick('vi'), setEn: pick('en'), setJa: pick('ja')
+    };
+  }
+}
+</script>
+</body>
+</html>

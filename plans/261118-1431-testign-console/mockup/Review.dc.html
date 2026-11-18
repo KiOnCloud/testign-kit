@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>DEMO-1 close review</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/kestrel/tokens.css">
+<link rel="stylesheet" href="ds/kestrel/components/bundle.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:var(--accent-text)}a:hover{color:var(--accent-hover)}
+</style>
+</helmet>
+<div data-theme="{{theme}}" lang="{{lang}}" style="min-height: 100vh; display: flex; flex-wrap: wrap; background: var(--surface-0); color: var(--text-1); font-family: var(--font-sans); font-size: var(--fs-small); line-height: var(--lh-ui); letter-spacing: var(--ls-ui);">
+
+  <nav class="k-sidebar" aria-label="{{t.nav_main}}" style="flex: 1 1 232px; min-height: 100%;">
+    <div class="k-sidebar__ws"><span class="k-avatar">T</span>testign<span class="k-muted" style="font-weight: var(--fw-regular);">· order-app</span></div>
+    <button class="k-btn k-btn--secondary k-btn--sm" style="justify-content: flex-start; width: 100%; margin-bottom: var(--space-8);" aria-keyshortcuts="Control+K">
+      <svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5"></circle><path d="m13 13-2.6-2.6"></path></svg>
+      <span style="flex: 1; text-align: left;">{{t.nav_search}}</span>
+      <span class="k-kbd-group"><kbd class="k-kbd">Ctrl</kbd><kbd class="k-kbd">K</kbd></span>
+    </button>
+    <div class="k-sidebar__section">{{t.nav_work}}</div>
+    <a class="k-nav-item" href="Tickets.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5h5l3 3v8H4v-11Z"></path><path d="M9 2.5v3h3M6 8h4M6 10.5h4"></path></svg>{{t.nav_tickets}}<span class="k-nav-item__count">3</span></a>
+    <a class="k-nav-item is-active" href="Jobs.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 8A5 5 0 0 1 4.3 11.3M3 8a5 5 0 0 1 8.7-3.3"></path><path d="M11.7 2.5v2.2h-2.2M4.3 13.5v-2.2h2.2"></path></svg>{{t.nav_jobs}}<span class="k-badge k-badge--warning" style="margin-left: auto;">{{t.nav_waiting}}</span></a>
+    <div class="k-sidebar__section">{{t.nav_setup}}</div>
+    <a class="k-nav-item" href="Templates.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 2.5 5.5 3L8 8.5l-5.5-3Z"></path><path d="m2.5 8.5 5.5 3 5.5-3"></path><path d="m2.5 11 5.5 3 5.5-3"></path></svg>{{t.nav_templates}}<span class="k-nav-item__count">2</span></a>
+    <a class="k-nav-item" href="Cache.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-7.5Z"></path></svg>{{t.nav_cache}}</a>
+    <a class="k-nav-item" href="Settings.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2"></circle><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.8 3.8l1 1M11.2 11.2l1 1M3.8 12.2l1-1M11.2 4.8l1-1"></path></svg>{{t.nav_settings}}</a>
+    <div style="margin-top: auto; padding: var(--space-8); border-top: var(--hairline) solid var(--border-1); display: flex; flex-direction: column; gap: var(--space-8);">
+      <div style="display: flex; flex-direction: column; gap: var(--space-4);">
+        <span class="k-section-label">{{t.ui_lang}}</span>
+        <div class="k-tabs k-tabs--segmented" role="radiogroup" aria-label="{{t.ui_lang}}">
+          <button class="k-tab {{viOn}}" role="radio" aria-checked="{{viSel}}" lang="vi" onClick="{{setVi}}">Tiếng Việt</button>
+          <button class="k-tab {{enOn}}" role="radio" aria-checked="{{enSel}}" lang="en" onClick="{{setEn}}">English</button>
+          <button class="k-tab {{jaOn}}" role="radio" aria-checked="{{jaSel}}" lang="ja" onClick="{{setJa}}">日本語</button>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+        <span style="display: flex; align-items: center; gap: var(--space-6); color: var(--text-2);"><span class="k-badge__dot" style="color: var(--success);"></span>{{t.agent_ok}}</span>
+        <span class="k-note">{{t.local_only}}</span>
+      </div>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column;">
+    <header class="k-topbar" style="flex-wrap: wrap; height: auto; min-height: var(--topbar-height);">
+      <nav class="k-breadcrumb" aria-label="Breadcrumb"><a href="Jobs.dc.html">{{t.nav_jobs}}</a><svg class="k-sep k-icon k-icon--sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 4 4 4-4 4"></path></svg><a href="Jobs.dc.html">#7 {{t.kind_close}}</a><svg class="k-sep k-icon k-icon--sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 4 4 4-4 4"></path></svg><span class="k-breadcrumb__item is-current">{{t.bc_review}}</span></nav>
+      <div class="k-topbar__spacer"></div>
+      <span class="k-note">DEMO-1 · {{t.report}} r2 · {{t.content_lang}}: vi</span>
+    </header>
+
+    <div style="padding: var(--space-24); display: flex; flex-direction: column; gap: var(--space-20); max-width: 1400px; width: 100%; box-sizing: border-box;">
+      <section style="display: flex; flex-wrap: wrap; gap: var(--space-12); align-items: flex-end; justify-content: space-between;">
+        <div style="display: flex; flex-direction: column; gap: var(--space-4);">
+          <h1 style="margin: 0; font-size: var(--fs-title-1); line-height: var(--lh-body); font-weight: var(--fw-semibold); letter-spacing: var(--ls-title);">{{t.title}}</h1>
+          <p class="k-note">{{t.subtitle}}</p>
+        </div>
+        <div class="k-tabs k-tabs--segmented" role="tablist" aria-label="{{t.steps}}"><button class="k-tab is-active" role="tab" aria-selected="true">{{t.step1}}</button><button class="k-tab" role="tab" aria-selected="false">{{t.step2}}</button></div>
+      </section>
+
+      <div class="k-table-wrap">
+        <div style="overflow-x: auto;">
+          <table class="k-table" style="min-width: 980px;">
+            <thead><tr><th style="width: 48px;">Q</th><th style="width: 112px;">{{t.th_class}}</th><th>{{t.th_decision}}</th><th>{{t.th_quote}}</th><th style="width: 184px;">{{t.th_page}}</th><th style="width: 176px;">{{t.th_review}}</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="k-id" style="vertical-align: top; padding-top: var(--space-12);">Q1</td>
+                <td style="vertical-align: top; padding-top: var(--space-12);"><span class="k-badge k-badge--success">decided</span></td>
+                <td style="vertical-align: top; padding-top: var(--space-12); padding-bottom: var(--space-12);"><span lang="vi" style="color: var(--text-1);">請求書 cũng trừ giảm giá, cùng công thức với màn 注文確定.</span><br><span class="k-note">D-DEMO-1-001 · BrSE · 2026-11-16</span></td>
+                <td style="vertical-align: top; padding-top: var(--space-12); padding-bottom: var(--space-12);"><span lang="ja" style="display: block; padding-left: var(--space-8); border-left: var(--hairline-2) solid var(--border-3); color: var(--text-2);">請求書にも割引を反映してください。</span><a class="k-note" href="#" style="color: var(--accent-text);">#comment-1009</a></td>
+                <td style="vertical-align: top; padding-top: var(--space-12);"><code class="k-mono">QA/Decisions/common</code><br><span class="k-note">{{t.shared_logic}}</span></td>
+                <td style="vertical-align: top; padding-top: var(--space-8);">
+                  <div class="k-tabs k-tabs--segmented" role="radiogroup" aria-label="Q1"><button class="k-tab is-active" role="radio" aria-checked="true"><svg class="k-icon k-icon--sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"></path></svg>{{t.write}}</button><button class="k-tab" role="radio" aria-checked="false">{{t.skip}}</button></div>
+                </td>
+              </tr>
+              <tr class="is-selected">
+                <td class="k-id" style="vertical-align: top; padding-top: var(--space-12);">Q2</td>
+                <td style="vertical-align: top; padding-top: var(--space-12);"><span class="k-badge k-badge--success">decided</span></td>
+                <td style="vertical-align: top; padding-top: var(--space-12); padding-bottom: var(--space-12);"><span lang="vi" style="color: var(--text-1);">Làm tròn lên (切り上げ). Production đang làm tròn xuống nên đây là thay đổi hành vi.</span><br><span class="k-note">D-DEMO-1-002 · BrSE · 2026-11-17 · {{t.chosen_in}}</span></td>
+                <td style="vertical-align: top; padding-top: var(--space-12); padding-bottom: var(--space-12);"><span lang="ja" style="display: block; padding-left: var(--space-8); border-left: var(--hairline-2) solid var(--border-3); color: var(--text-2);">端数は切り上げで確定です。</span><a class="k-note" href="#" style="color: var(--accent-text);">#comment-1015</a></td>
+                <td style="vertical-align: top; padding-top: var(--space-12);"><code class="k-mono">QA/Decisions/order-confirm</code></td>
+                <td style="vertical-align: top; padding-top: var(--space-8);">
+                  <div class="k-tabs k-tabs--segmented" role="radiogroup" aria-label="Q2"><button class="k-tab" role="radio" aria-checked="false">{{t.write}}</button><button class="k-tab" role="radio" aria-checked="false">{{t.skip}}</button></div>
+                  <span class="k-note" style="display: block; margin-top: var(--space-4);">{{t.not_chosen}}</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <section style="display: flex; flex-direction: column; gap: var(--space-8);">
+        <div style="display: flex; align-items: center; gap: var(--space-8); flex-wrap: wrap;">
+          <span class="k-section-label">{{t.diff_title}}</span>
+          <span class="k-note">{{t.diff_note}}</span>
+        </div>
+        <div style="border: var(--hairline) solid var(--border-1); border-radius: var(--radius-8); overflow: hidden;">
+          <div style="display: flex; align-items: center; gap: var(--space-8); padding: var(--space-8) var(--space-12); background: var(--surface-1); border-bottom: var(--hairline) solid var(--border-1);">
+            <svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5h5l3 3v8H4v-11Z"></path><path d="M9 2.5v3h3M6 8h4M6 10.5h4"></path></svg>
+            <code class="k-mono" style="color: var(--text-1);">QA/Decisions/common</code><span class="k-badge k-badge--success">+9</span>
+          </div>
+          <pre lang="ja" style="margin: 0; padding: var(--space-8) 0; font-family: var(--font-mono); font-size: var(--fs-mini); line-height: var(--lh-ui); overflow-x: auto; background: var(--surface-0); color: var(--text-2);"><span style="display: block; padding: 0 var(--space-12);">  ## DEMO-1 · 注文確定画面：割引を合計金額に反映する</span><span style="display: block; padding: 0 var(--space-12); background: var(--success-soft); color: var(--text-1);">+ ### D-DEMO-1-001 · Q1</span><span style="display: block; padding: 0 var(--space-12); background: var(--success-soft); color: var(--text-1);">+ - Date: 2026-11-16</span><span style="display: block; padding: 0 var(--space-12); background: var(--success-soft); color: var(--text-1);">+ - Question: 請求書の合計金額にも割引額を反映するか</span><span style="display: block; padding: 0 var(--space-12); background: var(--success-soft); color: var(--text-1);">+ - Decision: 請求書 cũng trừ giảm giá, cùng công thức với màn 注文確定.</span><span style="display: block; padding: 0 var(--space-12); background: var(--success-soft); color: var(--text-1);">+ - Quote:</span><span style="display: block; padding: 0 var(--space-12); background: var(--success-soft); color: var(--text-1);">+   &gt; 請求書にも割引を反映してください。</span><span style="display: block; padding: 0 var(--space-12); background: var(--success-soft); color: var(--text-1);">+ - Source: https://demo.backlog.com/view/DEMO-1#comment-1009</span><span style="display: block; padding: 0 var(--space-12); background: var(--success-soft); color: var(--text-1);">+ - Report: DEMO-1-survey-r2.md</span><span style="display: block; padding: 0 var(--space-12); background: var(--success-soft); color: var(--text-1);">+ - Status: active</span></pre>
+        </div>
+        <p class="k-note">{{t.index_note}}</p>
+      </section>
+
+      <div style="display: flex; gap: var(--space-8); justify-content: flex-end; align-items: center; padding-top: var(--space-16); border-top: var(--hairline) solid var(--border-1); flex-wrap: wrap;">
+        <span class="k-note" style="margin-right: auto; display: inline-flex; gap: var(--space-4); align-items: center;"><svg class="k-icon k-icon--sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="5.5"></circle><path d="M8 7v4M8 5.2v.1"></path></svg>{{t.remaining}}</span>
+        <a class="k-btn k-btn--ghost" href="Jobs.dc.html">{{t.back}}</a>
+        <button class="k-btn k-btn--primary" disabled>{{t.write_wiki}}</button>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"lang":{"editor":"enum","options":["vi","en","ja"],"default":"vi"},"$preview":{"width":1440,"height":960}}'>
+const NAV = {
+  vi: { nav_main: "Điều hướng chính", nav_search: "Tìm hoặc chạy lệnh", nav_work: "Làm việc", nav_tickets: "Tickets", nav_jobs: "Jobs", nav_waiting: "1 chờ bạn", nav_setup: "Thiết lập", nav_templates: "Templates", nav_cache: "Scout cache", nav_settings: "Cấu hình", ui_lang: "Ngôn ngữ giao diện", agent_ok: "Agent đã kết nối", local_only: "127.0.0.1 · chỉ máy này truy cập" },
+  en: { nav_main: "Main navigation", nav_search: "Search or run a command", nav_work: "Work", nav_tickets: "Tickets", nav_jobs: "Jobs", nav_waiting: "1 needs you", nav_setup: "Setup", nav_templates: "Templates", nav_cache: "Scout cache", nav_settings: "Settings", ui_lang: "Interface language", agent_ok: "Agent connected", local_only: "127.0.0.1 · this machine only" },
+  ja: { nav_main: "メインナビゲーション", nav_search: "検索・コマンド実行", nav_work: "作業", nav_tickets: "チケット", nav_jobs: "ジョブ", nav_waiting: "1件 回答待ち", nav_setup: "設定", nav_templates: "テンプレート", nav_cache: "スカウトキャッシュ", nav_settings: "環境設定", ui_lang: "表示言語", agent_ok: "エージェント接続中", local_only: "127.0.0.1 · このPCのみ" }
+};
+const PAGE = {
+  vi: { kind_close: "Close QA", bc_review: "Duyệt từng dòng", report: "Report", content_lang: "nội dung", title: "Duyệt quyết định trước khi ghi lên wiki", subtitle: "Chỉ dòng bạn duyệt mới được ghi. Sau đó bạn xem diff lần nữa trước khi ghi thật.", steps: "Bước", step1: "1 · Duyệt 2 dòng", step2: "2 · Diff wiki", th_class: "Phân loại", th_decision: "Quyết định đề xuất", th_quote: "Trích nguyên văn", th_page: "Trang wiki", th_review: "Duyệt", shared_logic: "logic dùng chung", write: "Ghi", skip: "Bỏ", chosen_in: "bạn chọn ở job #7", not_chosen: "Chưa chọn", diff_title: "Diff sẽ ghi", diff_note: "Tính lại ngay trước khi ghi; nếu trang wiki đổi sau lúc xem, testign dừng để bạn xem lại.", index_note: "Trang QA/Decisions/index cũng thêm một dòng cho mỗi quyết định được ghi.", remaining: "Còn 1 dòng chưa duyệt", back: "Quay lại job", write_wiki: "Ghi lên wiki" },
+  en: { kind_close: "Close QA", bc_review: "Review each row", report: "Report", content_lang: "content", title: "Review decisions before writing to the wiki", subtitle: "Only the rows you approve are written. You see the diff once more before anything is written.", steps: "Steps", step1: "1 · Review 2 rows", step2: "2 · Wiki diff", th_class: "Class", th_decision: "Proposed decision", th_quote: "Verbatim quote", th_page: "Wiki page", th_review: "Review", shared_logic: "shared logic", write: "Write", skip: "Skip", chosen_in: "you chose it in job #7", not_chosen: "Not chosen yet", diff_title: "Diff to be written", diff_note: "Recomputed right before writing; if the wiki page changed since you looked, testign stops so you can review again.", index_note: "The QA/Decisions/index page also gains one row per decision written.", remaining: "1 row not reviewed yet", back: "Back to job", write_wiki: "Write to wiki" },
+  ja: { kind_close: "QA 締め", bc_review: "1行ずつ承認", report: "レポート", content_lang: "内容の言語", title: "Wiki に書き込む前に決定事項を承認", subtitle: "承認した行だけが書き込まれます。実際に書き込む前に差分をもう一度確認します。", steps: "ステップ", step1: "1 · 2行を承認", step2: "2 · Wiki 差分", th_class: "分類", th_decision: "決定案", th_quote: "原文引用", th_page: "Wiki ページ", th_review: "承認", shared_logic: "共通ロジック", write: "書き込む", skip: "除外", chosen_in: "ジョブ #7 で選択", not_chosen: "未選択", diff_title: "書き込む差分", diff_note: "書き込み直前に再計算します。確認後に Wiki ページが変わっていた場合は停止し、再確認を求めます。", index_note: "QA/Decisions/index ページにも決定ごとに 1行追加されます。", remaining: "未承認の行が 1件あります", back: "ジョブに戻る", write_wiki: "Wiki に書き込む" }
+};
+class Component extends DCLogic {
+  renderVals() {
+    const lang = (this.state && this.state.lang) || this.props.lang || 'vi';
+    const pick = (l) => () => this.setState({ lang: l });
+    return {
+      theme: this.props.theme ?? 'light',
+      lang: lang,
+      t: Object.assign({}, NAV[lang] || NAV.vi, PAGE[lang] || PAGE.vi),
+      viOn: lang === 'vi' ? 'is-active' : '', enOn: lang === 'en' ? 'is-active' : '', jaOn: lang === 'ja' ? 'is-active' : '',
+      viSel: lang === 'vi', enSel: lang === 'en', jaSel: lang === 'ja',
+      setVi: pick('vi'), setEn: pick('en'), setJa: pick('ja')
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Settings</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/kestrel/tokens.css">
+<link rel="stylesheet" href="ds/kestrel/components/bundle.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:var(--accent-text)}a:hover{color:var(--accent-hover)}
+</style>
+</helmet>
+<div data-theme="{{theme}}" lang="{{lang}}" style="min-height: 100vh; display: flex; flex-wrap: wrap; background: var(--surface-0); color: var(--text-1); font-family: var(--font-sans); font-size: var(--fs-small); line-height: var(--lh-ui); letter-spacing: var(--ls-ui);">
+
+  <nav class="k-sidebar" aria-label="{{t.nav_main}}" style="flex: 1 1 232px; min-height: 100%;">
+    <div class="k-sidebar__ws"><span class="k-avatar">T</span>testign<span class="k-muted" style="font-weight: var(--fw-regular);">· order-app</span></div>
+    <button class="k-btn k-btn--secondary k-btn--sm" style="justify-content: flex-start; width: 100%; margin-bottom: var(--space-8);" aria-keyshortcuts="Control+K">
+      <svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5"></circle><path d="m13 13-2.6-2.6"></path></svg>
+      <span style="flex: 1; text-align: left;">{{t.nav_search}}</span>
+      <span class="k-kbd-group"><kbd class="k-kbd">Ctrl</kbd><kbd class="k-kbd">K</kbd></span>
+    </button>
+    <div class="k-sidebar__section">{{t.nav_work}}</div>
+    <a class="k-nav-item" href="Tickets.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5h5l3 3v8H4v-11Z"></path><path d="M9 2.5v3h3M6 8h4M6 10.5h4"></path></svg>{{t.nav_tickets}}<span class="k-nav-item__count">3</span></a>
+    <a class="k-nav-item" href="Jobs.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 8A5 5 0 0 1 4.3 11.3M3 8a5 5 0 0 1 8.7-3.3"></path><path d="M11.7 2.5v2.2h-2.2M4.3 13.5v-2.2h2.2"></path></svg>{{t.nav_jobs}}<span class="k-badge k-badge--warning" style="margin-left: auto;">{{t.nav_waiting}}</span></a>
+    <div class="k-sidebar__section">{{t.nav_setup}}</div>
+    <a class="k-nav-item" href="Templates.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 2.5 5.5 3L8 8.5l-5.5-3Z"></path><path d="m2.5 8.5 5.5 3 5.5-3"></path><path d="m2.5 11 5.5 3 5.5-3"></path></svg>{{t.nav_templates}}<span class="k-nav-item__count">2</span></a>
+    <a class="k-nav-item" href="Cache.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-7.5Z"></path></svg>{{t.nav_cache}}<span class="k-nav-item__count">4</span></a>
+    <a class="k-nav-item is-active" href="Settings.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2"></circle><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.8 3.8l1 1M11.2 11.2l1 1M3.8 12.2l1-1M11.2 4.8l1-1"></path></svg>{{t.nav_settings}}</a>
+    <div style="margin-top: auto; padding: var(--space-8); border-top: var(--hairline) solid var(--border-1); display: flex; flex-direction: column; gap: var(--space-2);">
+      <span style="display: flex; align-items: center; gap: var(--space-6); color: var(--text-2);"><span class="k-badge__dot" style="color: var(--success);"></span>{{t.agent_ok}}</span>
+      <span class="k-note">{{t.local_only}}</span>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column;">
+    <header class="k-topbar">
+      <span class="k-topbar__title">{{t.nav_settings}}</span>
+      <div class="k-topbar__spacer"></div>
+    </header>
+
+    <div style="padding: var(--space-24); display: flex; flex-direction: column; gap: var(--space-24); max-width: 1100px; width: 100%; box-sizing: border-box;">
+      <section style="display: flex; flex-direction: column; gap: var(--space-4);">
+        <h1 style="margin: 0; font-size: var(--fs-title-1); line-height: var(--lh-body); font-weight: var(--fw-semibold); letter-spacing: var(--ls-title);">{{t.nav_settings}}</h1>
+        <p class="k-note">{{t.subtitle}}</p>
+      </section>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: var(--space-16); align-items: start;">
+
+        <section class="k-card" aria-labelledby="s-browser" style="gap: var(--space-16);">
+          <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+            <h2 id="s-browser" class="k-card__title" style="font-size: var(--fs-small);">{{t.s_browser}}</h2>
+            <p class="k-note">{{t.s_browser_note}}</p>
+          </div>
+          <div class="k-field">
+            <span class="k-field__label" id="lbl-lang">{{t.ui_lang}}</span>
+            <div class="k-tabs k-tabs--segmented" role="radiogroup" aria-labelledby="lbl-lang">
+              <button class="k-tab {{viOn}}" role="radio" aria-checked="{{viSel}}" lang="vi" onClick="{{setVi}}">Tiếng Việt</button>
+              <button class="k-tab {{enOn}}" role="radio" aria-checked="{{enSel}}" lang="en" onClick="{{setEn}}">English</button>
+              <button class="k-tab {{jaOn}}" role="radio" aria-checked="{{jaSel}}" lang="ja" onClick="{{setJa}}">日本語</button>
+            </div>
+            <span class="k-field__help">{{t.lang_help}}</span>
+          </div>
+          <div class="k-field">
+            <span class="k-field__label" id="lbl-theme">{{t.theme}}</span>
+            <div class="k-tabs k-tabs--segmented" role="radiogroup" aria-labelledby="lbl-theme">
+              <button class="k-tab {{lightOn}}" role="radio" aria-checked="{{lightSel}}" onClick="{{setLight}}">{{t.light}}</button>
+              <button class="k-tab {{darkOn}}" role="radio" aria-checked="{{darkSel}}" onClick="{{setDark}}">{{t.dark}}</button>
+            </div>
+          </div>
+          <label class="k-field">
+            <span class="k-field__label">{{t.tester}}</span>
+            <input class="k-input" type="text" value="Tester A" autocomplete="name">
+            <span class="k-field__help">{{t.tester_help}}</span>
+          </label>
+          <span class="k-note" style="display: inline-flex; align-items: center; gap: var(--space-4); color: var(--success);"><svg class="k-icon k-icon--sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"></path></svg>{{t.saved}}</span>
+        </section>
+
+        <section class="k-card" aria-labelledby="s-console" style="gap: var(--space-12);">
+          <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+            <h2 id="s-console" class="k-card__title" style="font-size: var(--fs-small);">{{t.s_console}}</h2>
+            <p class="k-note">{{t.s_console_note}}</p>
+          </div>
+          <dl class="k-props" style="padding: 0; grid-template-columns: 140px 1fr;">
+            <dt>{{t.c_version}}</dt><dd><span class="k-chip">0.3.0</span></dd>
+            <dt>{{t.c_port}}</dt><dd><span class="k-chip"><code class="k-mono">127.0.0.1:4791</code></span></dd>
+            <dt>{{t.c_mode}}</dt><dd><span class="k-chip">{{t.c_mode_val}}</span></dd>
+            <dt>{{t.c_idle}}</dt><dd><span class="k-chip">{{t.c_idle_val}}</span></dd>
+            <dt>{{t.c_sessions}}</dt><dd><span class="k-chip">{{t.c_sessions_val}}</span></dd>
+            <dt>{{t.c_agent}}</dt><dd><span class="k-chip"><span class="k-badge__dot" style="color: var(--success);"></span>{{t.c_agent_val}}</span></dd>
+          </dl>
+          <p class="k-note">{{t.reopen}} <code class="k-mono">testign console open</code></p>
+        </section>
+
+        <section class="k-card" aria-labelledby="s-config" style="gap: var(--space-12); grid-column: 1 / -1;">
+          <div style="display: flex; flex-wrap: wrap; gap: var(--space-8); align-items: baseline; justify-content: space-between;">
+            <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+              <h2 id="s-config" class="k-card__title" style="font-size: var(--fs-small);">{{t.s_config}}</h2>
+              <p class="k-note">{{t.s_config_note}} <code class="k-mono">~/.testign-kit/config.json</code></p>
+            </div>
+            <span class="k-badge k-badge--outline">{{t.readonly}}</span>
+          </div>
+          <div style="overflow-x: auto;">
+            <table class="k-table k-table--compact" style="min-width: 640px;">
+              <thead><tr><th style="width: 260px;">{{t.th_key}}</th><th>{{t.th_value}}</th><th>{{t.th_meaning}}</th></tr></thead>
+              <tbody>
+                <tr><td class="k-mono">output_dir</td><td class="k-mono" style="color: var(--text-1);">~/Downloads</td><td class="k-muted">{{t.m_output}}</td></tr>
+                <tr><td class="k-mono">lang</td><td class="k-mono" style="color: var(--text-1);">vi</td><td class="k-muted">{{t.m_lang}}</td></tr>
+                <tr><td class="k-mono">master_ref · develop_ref</td><td class="k-mono" style="color: var(--text-1);">master · develop</td><td class="k-muted">{{t.m_refs}}</td></tr>
+                <tr><td class="k-mono">ticket_id_regex</td><td class="k-mono" style="color: var(--text-1);">\b[A-Z][A-Z0-9_]+-\d+\b</td><td class="k-muted">{{t.m_regex}}</td></tr>
+                <tr><td class="k-mono">backlog.space · project_key</td><td class="k-mono" style="color: var(--text-1);">demo.backlog.com · DEMO</td><td class="k-muted">{{t.m_backlog}}</td></tr>
+                <tr><td class="k-mono">backlog.decisions_log_prefix</td><td class="k-mono" style="color: var(--text-1);">QA/Decisions</td><td class="k-muted">{{t.m_prefix}}</td></tr>
+                <tr><td class="k-mono">backlog.text_format</td><td class="k-mono" style="color: var(--text-1);">markdown</td><td class="k-muted">{{t.m_format}}</td></tr>
+                <tr><td class="k-mono">console.port · idle_minutes</td><td class="k-mono" style="color: var(--text-1);">4791 · 30</td><td class="k-muted">{{t.m_console}}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"lang":{"editor":"enum","options":["vi","en","ja"],"default":"vi"},"$preview":{"width":1440,"height":960}}'>
+const NAV = {
+  vi: { nav_main: "Điều hướng chính", nav_search: "Tìm hoặc chạy lệnh", nav_work: "Làm việc", nav_tickets: "Tickets", nav_jobs: "Jobs", nav_waiting: "1 chờ bạn", nav_setup: "Thiết lập", nav_templates: "Templates", nav_cache: "Scout cache", nav_settings: "Cấu hình", ui_lang: "Ngôn ngữ giao diện", agent_ok: "Agent đã kết nối", local_only: "127.0.0.1 · chỉ máy này truy cập" },
+  en: { nav_main: "Main navigation", nav_search: "Search or run a command", nav_work: "Work", nav_tickets: "Tickets", nav_jobs: "Jobs", nav_waiting: "1 needs you", nav_setup: "Setup", nav_templates: "Templates", nav_cache: "Scout cache", nav_settings: "Settings", ui_lang: "Interface language", agent_ok: "Agent connected", local_only: "127.0.0.1 · this machine only" },
+  ja: { nav_main: "メインナビゲーション", nav_search: "検索・コマンド実行", nav_work: "作業", nav_tickets: "チケット", nav_jobs: "ジョブ", nav_waiting: "1件 回答待ち", nav_setup: "設定", nav_templates: "テンプレート", nav_cache: "スカウトキャッシュ", nav_settings: "環境設定", ui_lang: "表示言語", agent_ok: "エージェント接続中", local_only: "127.0.0.1 · このPCのみ" }
+};
+const PAGE = {
+  vi: { subtitle: "Thiết lập của trình duyệt này, trạng thái console và cấu hình testign.", s_browser: "Trình duyệt này", s_browser_note: "Lưu trong trình duyệt, chỉ áp dụng cho bạn trên máy này.", lang_help: "Đổi nhãn và nút của console. Nội dung report giữ ngôn ngữ của report; câu agent hỏi theo ngôn ngữ này.", theme: "Giao diện", light: "Sáng", dark: "Tối", tester: "Tên tester", tester_help: "Ghi vào approved_by của decisions log khi Close QA. Bắt buộc trước khi xếp job Close.", saved: "Đã lưu", s_console: "Console", s_console_note: "Server cục bộ do /testign:console khởi động.", c_version: "Phiên bản", c_port: "Địa chỉ", c_mode: "Chế độ", c_mode_val: "Chạy nền", c_idle: "Tự tắt", c_idle_val: "sau 30 phút không dùng, khi không có job", c_sessions: "Phiên trình duyệt", c_sessions_val: "1 (tab này)", c_agent: "Agent", c_agent_val: "Đã kết nối · phản hồi 20 giây trước", reopen: "Mất tab hoặc gặp lỗi 403: mở lại bằng /testign:console hoặc", s_config: "Cấu hình testign", s_config_note: "Sửa trong file rồi tải lại trang:", readonly: "Chỉ đọc", th_key: "Khoá", th_value: "Giá trị", th_meaning: "Dùng cho", m_output: "Thư mục report và workbook của từng ticket", m_lang: "Ngôn ngữ mặc định của report khi survey", m_refs: "Nhánh Production và nhánh phase hiện tại", m_regex: "Nhận diện ID ticket và thư mục ticket", m_backlog: "Backlog dùng cho comment và decisions log", m_prefix: "Tiền tố các trang decisions log", m_format: "Định dạng văn bản của project Backlog", m_console: "Cổng của console và thời gian tự tắt" },
+  en: { subtitle: "Settings of this browser, console status and testign configuration.", s_browser: "This browser", s_browser_note: "Stored in the browser; applies to you on this machine only.", lang_help: "Changes the console's labels and buttons. Report content keeps the report's language; agent questions use this language.", theme: "Theme", light: "Light", dark: "Dark", tester: "Tester name", tester_help: "Written to approved_by in the decisions log on Close QA. Required before a Close job is queued.", saved: "Saved", s_console: "Console", s_console_note: "The local server started by /testign:console.", c_version: "Version", c_port: "Address", c_mode: "Mode", c_mode_val: "Background", c_idle: "Stops itself", c_idle_val: "after 30 idle minutes, when no job is open", c_sessions: "Browser sessions", c_sessions_val: "1 (this tab)", c_agent: "Agent", c_agent_val: "Connected · replied 20 seconds ago", reopen: "Lost the tab or got a 403: reopen with /testign:console or", s_config: "testign configuration", s_config_note: "Edit the file, then reload the page:", readonly: "Read-only", th_key: "Key", th_value: "Value", th_meaning: "Used for", m_output: "Folder for each ticket's reports and workbooks", m_lang: "Default report language for surveys", m_refs: "Production branch and current phase branch", m_regex: "Recognises ticket IDs and ticket folders", m_backlog: "Backlog used for comments and the decisions log", m_prefix: "Prefix of the decisions log pages", m_format: "Text format of the Backlog project", m_console: "Console port and idle stop time" },
+  ja: { subtitle: "このブラウザの設定、コンソールの状態、testign の構成です。", s_browser: "このブラウザ", s_browser_note: "ブラウザに保存され、このPCのあなたにのみ適用されます。", lang_help: "コンソールのラベルとボタンが切り替わります。レポート本文はレポートの言語のまま、エージェントの質問はこの言語になります。", theme: "テーマ", light: "ライト", dark: "ダーク", tester: "テスター名", tester_help: "QA 締めの際、決定ログの approved_by に記録されます。QA 締めジョブの投入前に必須です。", saved: "保存しました", s_console: "コンソール", s_console_note: "/testign:console が起動したローカルサーバーです。", c_version: "バージョン", c_port: "アドレス", c_mode: "モード", c_mode_val: "バックグラウンド", c_idle: "自動停止", c_idle_val: "ジョブがない状態で 30分操作がない場合", c_sessions: "ブラウザセッション", c_sessions_val: "1 (このタブ)", c_agent: "エージェント", c_agent_val: "接続中 · 20秒前に応答", reopen: "タブを閉じた・403 になった場合は /testign:console または次で開き直してください:", s_config: "testign の構成", s_config_note: "ファイルを編集してからページを再読み込みしてください:", readonly: "閲覧のみ", th_key: "キー", th_value: "値", th_meaning: "用途", m_output: "チケットごとのレポートとブックのフォルダ", m_lang: "調査時のレポート既定言語", m_refs: "本番ブランチと今フェーズのブランチ", m_regex: "チケット ID とチケットフォルダの判定", m_backlog: "コメントと決定ログに使う Backlog", m_prefix: "決定ログページの接頭辞", m_format: "Backlog プロジェクトのテキスト書式", m_console: "コンソールのポートと自動停止時間" }
+};
+class Component extends DCLogic {
+  renderVals() {
+    const lang = (this.state && this.state.lang) || this.props.lang || 'vi';
+    const theme = (this.state && this.state.theme) || this.props.theme || 'light';
+    const pick = (l) => () => this.setState({ lang: l });
+    const pickTheme = (m) => () => this.setState({ theme: m });
+    return {
+      theme: theme,
+      lang: lang,
+      t: Object.assign({}, NAV[lang] || NAV.vi, PAGE[lang] || PAGE.vi),
+      viOn: lang === 'vi' ? 'is-active' : '', enOn: lang === 'en' ? 'is-active' : '', jaOn: lang === 'ja' ? 'is-active' : '',
+      viSel: lang === 'vi', enSel: lang === 'en', jaSel: lang === 'ja',
+      setVi: pick('vi'), setEn: pick('en'), setJa: pick('ja'),
+      lightOn: theme === 'light' ? 'is-active' : '', darkOn: theme === 'dark' ? 'is-active' : '',
+      lightSel: theme === 'light', darkSel: theme === 'dark',
+      setLight: pickTheme('light'), setDark: pickTheme('dark')
+    };
+  }
+}
+</script>
+</body>
+</html>

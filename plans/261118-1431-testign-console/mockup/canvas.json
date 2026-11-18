@@ -1,0 +1,26 @@
+{
+  "v": 3,
+  "createdOnFiles": {"v": 1, "at": "2026-11-18T11:48:00Z"},
+  "title": "Testign Console",
+  "launch": {"view": "canvas"},
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {"x": 0, "y": 0, "w": 1440, "h": 960, "title": "Report · Hiện trạng (B*)", "expand": "fill", "is_interactive": true},
+    "Tickets.dc.html": {"x": 1520, "y": 0, "w": 1440, "h": 960, "title": "Tickets", "expand": "fill", "is_interactive": true},
+    "Trace.dc.html": {"x": 3040, "y": 0, "w": 1440, "h": 960, "title": "Trace & hash check", "expand": "fill", "is_interactive": true},
+    "Templates.dc.html": {"x": 0, "y": 1400, "w": 1440, "h": 960, "title": "Templates", "expand": "fill", "is_interactive": true},
+    "Jobs.dc.html": {"x": 1520, "y": 1400, "w": 1440, "h": 960, "title": "Jobs", "expand": "fill", "is_interactive": true},
+    "Review.dc.html": {"x": 3040, "y": 1400, "w": 1440, "h": 960, "title": "Close · duyệt từng dòng", "expand": "fill", "is_interactive": true},
+    "Cache.dc.html": {"x": 0, "y": 2800, "w": 1440, "h": 960, "title": "Scout cache", "expand": "fill", "is_interactive": true},
+    "Settings.dc.html": {"x": 1520, "y": 2800, "w": 1440, "h": 960, "title": "Settings", "expand": "fill", "is_interactive": true}
+  },
+  "order": ["Main.dc.html", "Tickets.dc.html", "Trace.dc.html", "Templates.dc.html", "Jobs.dc.html", "Review.dc.html", "Cache.dc.html", "Settings.dc.html"],
+  "notes": {
+    "row1": {"x": 0, "y": -300, "text": "Survey: report, tickets, trace", "kind": "title1", "maxW": 4480},
+    "row2": {"x": 0, "y": 1100, "text": "Templates, job bridge, close", "kind": "title1", "maxW": 4480},
+    "row3": {"x": 0, "y": 2500, "text": "Scout cache, settings", "kind": "title1", "maxW": 2960}
+  },
+  "designSystems": [
+    {"title": "Kestrel", "namespace": "kestrel", "artifact": "https://claude.ai/artifact/8zVwRX2YRdzPjEyPSVaB8i", "version": "1795001967-49ce", "copiedAt": "2026-11-18T11:48:00Z"}
+  ]
+}

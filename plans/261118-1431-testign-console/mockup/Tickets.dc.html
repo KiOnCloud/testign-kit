@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Tickets</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/kestrel/tokens.css">
+<link rel="stylesheet" href="ds/kestrel/components/bundle.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:var(--accent-text)}a:hover{color:var(--accent-hover)}
+</style>
+</helmet>
+<div data-theme="{{theme}}" lang="{{lang}}" style="min-height: 100vh; display: flex; flex-wrap: wrap; background: var(--surface-0); color: var(--text-1); font-family: var(--font-sans); font-size: var(--fs-small); line-height: var(--lh-ui); letter-spacing: var(--ls-ui);">
+
+  <nav class="k-sidebar" aria-label="{{t.nav_main}}" style="flex: 1 1 232px; min-height: 100%;">
+    <div class="k-sidebar__ws"><span class="k-avatar">T</span>testign<span class="k-muted" style="font-weight: var(--fw-regular);">· order-app</span></div>
+    <button class="k-btn k-btn--secondary k-btn--sm" style="justify-content: flex-start; width: 100%; margin-bottom: var(--space-8);" aria-keyshortcuts="Control+K">
+      <svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5"></circle><path d="m13 13-2.6-2.6"></path></svg>
+      <span style="flex: 1; text-align: left;">{{t.nav_search}}</span>
+      <span class="k-kbd-group"><kbd class="k-kbd">Ctrl</kbd><kbd class="k-kbd">K</kbd></span>
+    </button>
+    <div class="k-sidebar__section">{{t.nav_work}}</div>
+    <a class="k-nav-item is-active" href="Tickets.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5h5l3 3v8H4v-11Z"></path><path d="M9 2.5v3h3M6 8h4M6 10.5h4"></path></svg>{{t.nav_tickets}}<span class="k-nav-item__count">3</span></a>
+    <a class="k-nav-item" href="Jobs.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 8A5 5 0 0 1 4.3 11.3M3 8a5 5 0 0 1 8.7-3.3"></path><path d="M11.7 2.5v2.2h-2.2M4.3 13.5v-2.2h2.2"></path></svg>{{t.nav_jobs}}<span class="k-badge k-badge--warning" style="margin-left: auto;">{{t.nav_waiting}}</span></a>
+    <div class="k-sidebar__section">{{t.nav_setup}}</div>
+    <a class="k-nav-item" href="Templates.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 2.5 5.5 3L8 8.5l-5.5-3Z"></path><path d="m2.5 8.5 5.5 3 5.5-3"></path><path d="m2.5 11 5.5 3 5.5-3"></path></svg>{{t.nav_templates}}<span class="k-nav-item__count">2</span></a>
+    <a class="k-nav-item" href="Cache.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-7.5Z"></path></svg>{{t.nav_cache}}</a>
+    <a class="k-nav-item" href="Settings.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2"></circle><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.8 3.8l1 1M11.2 11.2l1 1M3.8 12.2l1-1M11.2 4.8l1-1"></path></svg>{{t.nav_settings}}</a>
+    <div style="margin-top: auto; padding: var(--space-8); border-top: var(--hairline) solid var(--border-1); display: flex; flex-direction: column; gap: var(--space-8);">
+      <div style="display: flex; flex-direction: column; gap: var(--space-4);">
+        <span class="k-section-label">{{t.ui_lang}}</span>
+        <div class="k-tabs k-tabs--segmented" role="radiogroup" aria-label="{{t.ui_lang}}">
+          <button class="k-tab {{viOn}}" role="radio" aria-checked="{{viSel}}" lang="vi" onClick="{{setVi}}">Tiếng Việt</button>
+          <button class="k-tab {{enOn}}" role="radio" aria-checked="{{enSel}}" lang="en" onClick="{{setEn}}">English</button>
+          <button class="k-tab {{jaOn}}" role="radio" aria-checked="{{jaSel}}" lang="ja" onClick="{{setJa}}">日本語</button>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+        <span style="display: flex; align-items: center; gap: var(--space-6); color: var(--text-2);"><span class="k-badge__dot" style="color: var(--success);"></span>{{t.agent_ok}}</span>
+        <span class="k-note">{{t.local_only}}</span>
+      </div>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column;">
+    <header class="k-topbar">
+      <span class="k-topbar__title">{{t.nav_tickets}}</span>
+      <div class="k-topbar__spacer"></div>
+      <span class="k-note">{{t.output}} <code class="k-mono">~/Downloads/&lt;TICKET&gt;/</code></span>
+    </header>
+
+    <div style="padding: var(--space-24); display: flex; flex-direction: column; gap: var(--space-16); max-width: 1400px; width: 100%; box-sizing: border-box;">
+      <section style="display: flex; flex-wrap: wrap; gap: var(--space-12); align-items: center; justify-content: space-between;">
+        <div style="display: flex; flex-direction: column; gap: var(--space-4);">
+          <h1 style="margin: 0; font-size: var(--fs-title-1); line-height: var(--lh-body); font-weight: var(--fw-semibold); letter-spacing: var(--ls-title);">{{t.title}}</h1>
+          <p class="k-note">{{t.subtitle}}</p>
+        </div>
+        <button class="k-btn k-btn--primary"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v10M3 8h10"></path></svg>{{t.survey_new}}<span class="k-kbd-group" style="margin-left: var(--space-4);"><kbd class="k-kbd">C</kbd></span></button>
+      </section>
+
+      <div class="k-table-wrap">
+        <div class="k-toolbar" style="flex-wrap: wrap; height: auto; min-height: var(--control-lg);">
+          <div class="k-toolbar__group">
+            <label class="k-input-wrap" style="width: 240px;"><svg class="k-icon k-icon--sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5"></circle><path d="m13 13-2.6-2.6"></path></svg><input class="k-input k-input--sm" type="search" placeholder="{{t.filter_ph}}" aria-label="{{t.filter_ph}}"></label>
+          </div>
+          <div class="k-toolbar__group">
+            <span class="k-filter-chip"><span>{{t.th_conclusion}}</span><span class="k-op">=</span><span class="k-val">{{t.all}}</span></span>
+          </div>
+          <div class="k-toolbar__spacer"></div>
+          <div class="k-toolbar__group"><span class="k-note">{{t.count}}</span></div>
+        </div>
+        <div style="overflow-x: auto;">
+          <table class="k-table" style="min-width: 960px;">
+            <thead><tr><th style="width: 84px;">{{t.th_ticket}}</th><th>{{t.th_name}}</th><th>{{t.th_conclusion}}</th><th class="k-td-num" style="width: 48px;">Rev</th><th>{{t.th_open}}</th><th>{{t.th_tc}}</th><th>Hash</th><th class="k-td-num">{{t.th_updated}}</th></tr></thead>
+            <tbody>
+              <tr class="is-selected">
+                <td class="k-id">DEMO-1</td>
+                <td class="k-cell-title" lang="ja"><a href="Main.dc.html" style="color: var(--text-1);">注文確定画面：割引を合計金額に反映する</a></td>
+                <td><span class="k-badge k-badge--warning">{{t.c_open}}</span></td>
+                <td class="k-td-num">r2</td>
+                <td>2 <span class="k-muted">· 0 Block</span></td>
+                <td class="k-muted">{{t.not_written}}</td>
+                <td><span style="display: inline-flex; align-items: center; gap: var(--space-4); color: var(--success);"><svg class="k-icon k-icon--sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"></path></svg>{{t.match}}</span></td>
+                <td class="k-muted k-td-num">2026-11-17</td>
+              </tr>
+              <tr>
+                <td class="k-id">DEMO-2</td>
+                <td class="k-cell-title" lang="ja">ポイント利用時の割引計算</td>
+                <td><span class="k-badge k-badge--danger">{{t.c_wait}}</span></td>
+                <td class="k-td-num">r1</td>
+                <td>3 <span style="color: var(--danger);">· 1 Block</span></td>
+                <td class="k-muted">{{t.not_written}}</td>
+                <td><span style="display: inline-flex; align-items: center; gap: var(--space-4); color: var(--text-2);"><svg class="k-icon k-icon--sm" viewBox="0 0 16 16" fill="none" stroke="var(--warning)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.1 3 2.2 11.5a1 1 0 0 0 .9 1.5h9.8a1 1 0 0 0 .9-1.5L8.9 3a1 1 0 0 0-1.8 0Z"></path><path d="M8 6.5v3M8 11.5v.1"></path></svg>{{t.moved}}</span></td>
+                <td class="k-muted k-td-num">2026-11-16</td>
+              </tr>
+              <tr>
+                <td class="k-id">DEMO-12</td>
+                <td class="k-cell-title" lang="ja">注文確定画面の確認ダイアログ</td>
+                <td><span class="k-badge k-badge--success">{{t.c_clear}}</span></td>
+                <td class="k-td-num">r3</td>
+                <td class="k-muted">0</td>
+                <td><a href="Trace.dc.html" style="color: var(--text-1);">14 TC</a> <span style="color: var(--danger);">· 1 gap · 1 orphan</span></td>
+                <td><span style="display: inline-flex; align-items: center; gap: var(--space-4); color: var(--success);"><svg class="k-icon k-icon--sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"></path></svg>{{t.match}}</span></td>
+                <td class="k-muted k-td-num">2026-11-15</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="k-banner k-banner--info" role="note">
+        <svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="5.5"></circle><path d="M8 7v4M8 5.2v.1"></path></svg>
+        <div class="k-banner__text"><strong>{{t.banner_title}}</strong><span>{{t.banner_body}}</span></div>
+        <button class="k-btn k-btn--secondary k-btn--sm">{{t.banner_btn}}</button>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"lang":{"editor":"enum","options":["vi","en","ja"],"default":"vi"},"$preview":{"width":1440,"height":960}}'>
+const NAV = {
+  vi: { nav_main: "Điều hướng chính", nav_search: "Tìm hoặc chạy lệnh", nav_work: "Làm việc", nav_tickets: "Tickets", nav_jobs: "Jobs", nav_waiting: "1 chờ bạn", nav_setup: "Thiết lập", nav_templates: "Templates", nav_cache: "Scout cache", nav_settings: "Cấu hình", ui_lang: "Ngôn ngữ giao diện", agent_ok: "Agent đã kết nối", local_only: "127.0.0.1 · chỉ máy này truy cập" },
+  en: { nav_main: "Main navigation", nav_search: "Search or run a command", nav_work: "Work", nav_tickets: "Tickets", nav_jobs: "Jobs", nav_waiting: "1 needs you", nav_setup: "Setup", nav_templates: "Templates", nav_cache: "Scout cache", nav_settings: "Settings", ui_lang: "Interface language", agent_ok: "Agent connected", local_only: "127.0.0.1 · this machine only" },
+  ja: { nav_main: "メインナビゲーション", nav_search: "検索・コマンド実行", nav_work: "作業", nav_tickets: "チケット", nav_jobs: "ジョブ", nav_waiting: "1件 回答待ち", nav_setup: "設定", nav_templates: "テンプレート", nav_cache: "スカウトキャッシュ", nav_settings: "環境設定", ui_lang: "表示言語", agent_ok: "エージェント接続中", local_only: "127.0.0.1 · このPCのみ" }
+};
+const PAGE = {
+  vi: { output: "Output:", title: "Tickets đã survey", subtitle: "Mỗi ticket là một thư mục report trong output_dir. Revision không bao giờ bị ghi đè.", survey_new: "Survey ticket", filter_ph: "Lọc theo ID hoặc tên", all: "Tất cả", count: "3 tickets", th_ticket: "Ticket", th_name: "Tên", th_conclusion: "Kết luận", th_open: "Câu hỏi mở", th_tc: "Test case", th_updated: "Cập nhật", c_open: "Còn điểm mở", c_wait: "Chờ QA trước khi viết TC", c_clear: "Clear", not_written: "Chưa viết", match: "Khớp", moved: "develop có 3 commit mới", banner_title: "DEMO-2: develop đã đi tiếp sau r1", banner_body: "Report vẫn mở được, nhưng trước khi viết test case nên survey lại để có revision mới với hash hiện tại.", banner_btn: "Survey lại DEMO-2" },
+  en: { output: "Output:", title: "Surveyed tickets", subtitle: "Each ticket is a report folder in output_dir. Revisions are never overwritten.", survey_new: "Survey a ticket", filter_ph: "Filter by ID or name", all: "All", count: "3 tickets", th_ticket: "Ticket", th_name: "Name", th_conclusion: "Conclusion", th_open: "Open questions", th_tc: "Test cases", th_updated: "Updated", c_open: "Open points remain", c_wait: "Needs QA before test cases", c_clear: "Clear", not_written: "Not written", match: "Match", moved: "3 new develop commits", banner_title: "DEMO-2: develop moved on after r1", banner_body: "The report still opens, but survey again before writing test cases so the new revision pins the current hashes.", banner_btn: "Survey DEMO-2 again" },
+  ja: { output: "出力先:", title: "調査済みチケット", subtitle: "チケットごとに output_dir 内のレポートフォルダがあります。リビジョンは上書きされません。", survey_new: "チケットを調査", filter_ph: "ID・件名で絞り込み", all: "すべて", count: "3件", th_ticket: "チケット", th_name: "件名", th_conclusion: "結論", th_open: "未回答の質問", th_tc: "テストケース", th_updated: "更新日", c_open: "未決事項あり", c_wait: "TC作成前に QA 待ち", c_clear: "クリア", not_written: "未作成", match: "一致", moved: "develop に新規コミット 3件", banner_title: "DEMO-2: r1 以降に develop が進んでいます", banner_body: "レポートは開けますが、テストケース作成前に再調査し、現在のハッシュで新しいリビジョンを作成してください。", banner_btn: "DEMO-2 を再調査" }
+};
+class Component extends DCLogic {
+  renderVals() {
+    const lang = (this.state && this.state.lang) || this.props.lang || 'vi';
+    const pick = (l) => () => this.setState({ lang: l });
+    return {
+      theme: this.props.theme ?? 'light',
+      lang: lang,
+      t: Object.assign({}, NAV[lang] || NAV.vi, PAGE[lang] || PAGE.vi),
+      viOn: lang === 'vi' ? 'is-active' : '', enOn: lang === 'en' ? 'is-active' : '', jaOn: lang === 'ja' ? 'is-active' : '',
+      viSel: lang === 'vi', enSel: lang === 'en', jaSel: lang === 'ja',
+      setVi: pick('vi'), setEn: pick('en'), setJa: pick('ja')
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Scout cache</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/kestrel/tokens.css">
+<link rel="stylesheet" href="ds/kestrel/components/bundle.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:var(--accent-text)}a:hover{color:var(--accent-hover)}
+</style>
+</helmet>
+<div data-theme="{{theme}}" lang="{{lang}}" style="min-height: 100vh; display: flex; flex-wrap: wrap; background: var(--surface-0); color: var(--text-1); font-family: var(--font-sans); font-size: var(--fs-small); line-height: var(--lh-ui); letter-spacing: var(--ls-ui);">
+
+  <nav class="k-sidebar" aria-label="{{t.nav_main}}" style="flex: 1 1 232px; min-height: 100%;">
+    <div class="k-sidebar__ws"><span class="k-avatar">T</span>testign<span class="k-muted" style="font-weight: var(--fw-regular);">· order-app</span></div>
+    <button class="k-btn k-btn--secondary k-btn--sm" style="justify-content: flex-start; width: 100%; margin-bottom: var(--space-8);" aria-keyshortcuts="Control+K">
+      <svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5"></circle><path d="m13 13-2.6-2.6"></path></svg>
+      <span style="flex: 1; text-align: left;">{{t.nav_search}}</span>
+      <span class="k-kbd-group"><kbd class="k-kbd">Ctrl</kbd><kbd class="k-kbd">K</kbd></span>
+    </button>
+    <div class="k-sidebar__section">{{t.nav_work}}</div>
+    <a class="k-nav-item" href="Tickets.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5h5l3 3v8H4v-11Z"></path><path d="M9 2.5v3h3M6 8h4M6 10.5h4"></path></svg>{{t.nav_tickets}}<span class="k-nav-item__count">3</span></a>
+    <a class="k-nav-item" href="Jobs.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 8A5 5 0 0 1 4.3 11.3M3 8a5 5 0 0 1 8.7-3.3"></path><path d="M11.7 2.5v2.2h-2.2M4.3 13.5v-2.2h2.2"></path></svg>{{t.nav_jobs}}<span class="k-badge k-badge--warning" style="margin-left: auto;">{{t.nav_waiting}}</span></a>
+    <div class="k-sidebar__section">{{t.nav_setup}}</div>
+    <a class="k-nav-item" href="Templates.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 2.5 5.5 3L8 8.5l-5.5-3Z"></path><path d="m2.5 8.5 5.5 3 5.5-3"></path><path d="m2.5 11 5.5 3 5.5-3"></path></svg>{{t.nav_templates}}<span class="k-nav-item__count">2</span></a>
+    <a class="k-nav-item is-active" href="Cache.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-7.5Z"></path></svg>{{t.nav_cache}}<span class="k-nav-item__count">4</span></a>
+    <a class="k-nav-item" href="Settings.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2"></circle><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.8 3.8l1 1M11.2 11.2l1 1M3.8 12.2l1-1M11.2 4.8l1-1"></path></svg>{{t.nav_settings}}</a>
+    <div style="margin-top: auto; padding: var(--space-8); border-top: var(--hairline) solid var(--border-1); display: flex; flex-direction: column; gap: var(--space-8);">
+      <div style="display: flex; flex-direction: column; gap: var(--space-4);">
+        <span class="k-section-label">{{t.ui_lang}}</span>
+        <div class="k-tabs k-tabs--segmented" role="radiogroup" aria-label="{{t.ui_lang}}">
+          <button class="k-tab {{viOn}}" role="radio" aria-checked="{{viSel}}" lang="vi" onClick="{{setVi}}">Tiếng Việt</button>
+          <button class="k-tab {{enOn}}" role="radio" aria-checked="{{enSel}}" lang="en" onClick="{{setEn}}">English</button>
+          <button class="k-tab {{jaOn}}" role="radio" aria-checked="{{jaSel}}" lang="ja" onClick="{{setJa}}">日本語</button>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+        <span style="display: flex; align-items: center; gap: var(--space-6); color: var(--text-2);"><span class="k-badge__dot" style="color: var(--success);"></span>{{t.agent_ok}}</span>
+        <span class="k-note">{{t.local_only}}</span>
+      </div>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column;">
+    <header class="k-topbar">
+      <span class="k-topbar__title">{{t.nav_cache}}</span>
+      <div class="k-topbar__spacer"></div>
+      <span class="k-note">{{t.stored_at}} <code class="k-mono">~/.testign-kit/cache/&lt;root&gt;/&lt;feature&gt;/</code></span>
+    </header>
+
+    <div style="padding: var(--space-24); display: flex; flex-direction: column; gap: var(--space-16); max-width: 1400px; width: 100%; box-sizing: border-box;">
+      <section style="display: flex; flex-direction: column; gap: var(--space-4);">
+        <h1 style="margin: 0; font-size: var(--fs-title-1); line-height: var(--lh-body); font-weight: var(--fw-semibold); letter-spacing: var(--ls-title);">{{t.title}}</h1>
+        <p class="k-note">{{t.subtitle}}</p>
+      </section>
+
+      <div class="k-banner" role="note">
+        <svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="5.5"></circle><path d="M8 7v4M8 5.2v.1"></path></svg>
+        <div class="k-banner__text"><strong>{{t.readonly_title}}</strong><span>{{t.readonly_body}}</span></div>
+      </div>
+
+      <div class="k-split" style="display: flex; flex-wrap: wrap;">
+        <div class="k-split__main" style="flex: 999 1 600px;">
+          <div class="k-toolbar" style="flex-wrap: wrap; height: auto; min-height: var(--control-lg);">
+            <div class="k-toolbar__group">
+              <span class="k-filter-chip"><span>{{t.th_repo}}</span><span class="k-op">=</span><span class="k-val">{{t.all}}</span></span>
+            </div>
+            <div class="k-toolbar__spacer"></div>
+            <span class="k-note">{{t.count}}</span>
+          </div>
+          <div style="overflow-x: auto;">
+            <table class="k-table" style="min-width: 760px;">
+              <thead><tr><th>{{t.th_feature}}</th><th>{{t.th_repo}}</th><th class="k-td-num">{{t.th_files}}</th><th>{{t.th_rows}}</th><th>{{t.th_model}}</th><th class="k-td-num">{{t.th_saved}}</th><th>{{t.th_reviewed}}</th></tr></thead>
+              <tbody>
+                <tr class="is-selected"><td class="k-cell-title"><code class="k-mono" style="color: var(--text-1);">order-confirm</code></td><td class="k-id">a91c2e0</td><td class="k-td-num">4</td><td class="k-mono">B1–B5</td><td>sonnet</td><td class="k-muted k-td-num">2026-11-17</td><td><span style="display: inline-flex; align-items: center; gap: var(--space-4); color: var(--success);"><svg class="k-icon k-icon--sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"></path></svg>Tester A</span></td></tr>
+                <tr><td class="k-cell-title"><code class="k-mono" style="color: var(--text-1);">point-usage</code></td><td class="k-id">a91c2e0</td><td class="k-td-num">6</td><td class="k-mono">B1–B6</td><td>sonnet</td><td class="k-muted k-td-num">2026-11-16</td><td><span class="k-badge k-badge--outline">{{t.not_reviewed}}</span></td></tr>
+                <tr><td class="k-cell-title"><code class="k-mono" style="color: var(--text-1);">order-history</code></td><td class="k-id">a91c2e0</td><td class="k-td-num">3</td><td class="k-mono">B1–B3</td><td>sonnet</td><td class="k-muted k-td-num">2026-11-15</td><td><span style="display: inline-flex; align-items: center; gap: var(--space-4); color: var(--success);"><svg class="k-icon k-icon--sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"></path></svg>Tester A</span></td></tr>
+                <tr><td class="k-cell-title"><code class="k-mono" style="color: var(--text-1);">invoice</code></td><td class="k-id">7be4410</td><td class="k-td-num">2</td><td class="k-mono">B1–B2</td><td>sonnet</td><td class="k-muted k-td-num">2026-11-02</td><td><span style="display: inline-flex; align-items: center; gap: var(--space-4); color: var(--success);"><svg class="k-icon k-icon--sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"></path></svg>Tester B</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <aside class="k-split__panel" aria-label="order-confirm" style="flex: 1 1 380px; min-width: 0;">
+          <div class="k-split__panel-head"><code class="k-mono" style="color: var(--text-1);">order-confirm</code></div>
+          <dl class="k-props">
+            <dt>{{t.p_root}}</dt><dd><span class="k-chip"><code class="k-mono">a91c2e0</code></span></dd>
+            <dt>{{t.p_base}}</dt><dd><span class="k-chip"><code class="k-mono">5d0c3e8</code></span></dd>
+            <dt>{{t.th_model}}</dt><dd><span class="k-chip">sonnet</span></dd>
+            <dt>{{t.p_plugin}}</dt><dd><span class="k-chip">0.2.0</span></dd>
+            <dt>{{t.th_reviewed}}</dt><dd><span class="k-chip">Tester A · 2026-11-17</span></dd>
+            <dt>{{t.p_anchors}}</dt><dd><span class="k-chip" lang="ja">「確定」 · 合計 · 割引</span></dd>
+          </dl>
+          <hr style="margin: var(--space-4) 0; border: 0; border-top: var(--hairline) solid var(--border-1);">
+          <div style="padding: var(--space-8) var(--space-12) var(--space-16); display: flex; flex-direction: column; gap: var(--space-12);">
+            <div style="display: flex; flex-direction: column; gap: var(--space-6);">
+              <span class="k-section-label">{{t.files}}</span>
+              <table style="border-collapse: collapse; width: 100%; font-size: var(--fs-mini); line-height: var(--lh-tight);">
+                <tbody>
+                  <tr style="border-top: var(--hairline) solid var(--border-1);"><td style="padding: var(--space-6) 0;"><code class="k-mono" style="color: var(--text-2);">src/screens/OrderConfirm.cs</code></td><td class="k-id" style="text-align: right;">3f9a1c2</td><td class="k-mono" style="text-align: right; padding-left: var(--space-8);">B1</td></tr>
+                  <tr style="border-top: var(--hairline) solid var(--border-1);"><td style="padding: var(--space-6) 0;"><code class="k-mono" style="color: var(--text-2);">src/services/OrderService.cs</code></td><td class="k-id" style="text-align: right;">8b02d4e</td><td class="k-mono" style="text-align: right; padding-left: var(--space-8);">B2 B3 B4</td></tr>
+                  <tr style="border-top: var(--hairline) solid var(--border-1);"><td style="padding: var(--space-6) 0;"><code class="k-mono" style="color: var(--text-2);">src/models/Order.cs</code></td><td class="k-id" style="text-align: right;">41aa7b3</td><td class="k-mono" style="text-align: right; padding-left: var(--space-8);">B2</td></tr>
+                  <tr style="border-top: var(--hairline) solid var(--border-1);"><td style="padding: var(--space-6) 0;"><code class="k-mono" style="color: var(--text-2);">src/reports/Invoice.cs</code></td><td class="k-id" style="text-align: right;">e71c09a</td><td class="k-mono" style="text-align: right; padding-left: var(--space-8);">B5</td></tr>
+                </tbody>
+              </table>
+              <p class="k-note">{{t.files_note}}</p>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: var(--space-4);">
+              <span class="k-section-label">{{t.unread}}</span>
+              <p style="margin: 0; color: var(--text-2);"><code class="k-mono">sp_calc_tax</code> · stored procedure</p>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"lang":{"editor":"enum","options":["vi","en","ja"],"default":"vi"},"$preview":{"width":1440,"height":960}}'>
+const NAV = {
+  vi: { nav_main: "Điều hướng chính", nav_search: "Tìm hoặc chạy lệnh", nav_work: "Làm việc", nav_tickets: "Tickets", nav_jobs: "Jobs", nav_waiting: "1 chờ bạn", nav_setup: "Thiết lập", nav_templates: "Templates", nav_cache: "Scout cache", nav_settings: "Cấu hình", ui_lang: "Ngôn ngữ giao diện", agent_ok: "Agent đã kết nối", local_only: "127.0.0.1 · chỉ máy này truy cập" },
+  en: { nav_main: "Main navigation", nav_search: "Search or run a command", nav_work: "Work", nav_tickets: "Tickets", nav_jobs: "Jobs", nav_waiting: "1 needs you", nav_setup: "Setup", nav_templates: "Templates", nav_cache: "Scout cache", nav_settings: "Settings", ui_lang: "Interface language", agent_ok: "Agent connected", local_only: "127.0.0.1 · this machine only" },
+  ja: { nav_main: "メインナビゲーション", nav_search: "検索・コマンド実行", nav_work: "作業", nav_tickets: "チケット", nav_jobs: "ジョブ", nav_waiting: "1件 回答待ち", nav_setup: "設定", nav_templates: "テンプレート", nav_cache: "スカウトキャッシュ", nav_settings: "環境設定", ui_lang: "表示言語", agent_ok: "エージェント接続中", local_only: "127.0.0.1 · このPCのみ" }
+};
+const PAGE = {
+  vi: { stored_at: "Lưu tại", title: "Scout cache", subtitle: "Brief Production (master tại merge-base) được lưu theo repo và feature. Survey sau dùng lại khi blob hash của mọi file vẫn khớp ở merge-base mới; dòng có file đổi sẽ được đọc lại.", readonly_title: "Màn này chỉ đọc", readonly_body: "Muốn xoá một entry, xoá thư mục của nó; survey sau sẽ là cache miss và đọc lại toàn bộ.", th_repo: "Repo (root commit)", all: "Tất cả", count: "4 entry", th_feature: "Feature", th_files: "File", th_rows: "Dòng", th_model: "Scout model", th_saved: "Lưu lúc", th_reviewed: "Đã review", not_reviewed: "Chưa review", p_root: "Root commit", p_base: "Merge-base", p_plugin: "Plugin", p_anchors: "Anchor", files: "File nguồn và blob hash", files_note: "Một file đổi blob hash thì các dòng dùng file đó được đọc lại; các dòng khác dùng lại từ cache.", unread: "Chưa đọc được" },
+  en: { stored_at: "Stored in", title: "Scout cache", subtitle: "The Production brief (master at the merge-base) is stored per repository and feature. A later survey reuses it when every file's blob hash still matches at the new merge-base; rows whose files changed are read again.", readonly_title: "This screen is read-only", readonly_body: "To remove an entry, delete its folder; the next survey is then a cache miss and reads everything again.", th_repo: "Repo (root commit)", all: "All", count: "4 entries", th_feature: "Feature", th_files: "Files", th_rows: "Rows", th_model: "Scout model", th_saved: "Saved", th_reviewed: "Reviewed", not_reviewed: "Not reviewed", p_root: "Root commit", p_base: "Merge-base", p_plugin: "Plugin", p_anchors: "Anchors", files: "Source files and blob hashes", files_note: "When a file's blob hash changes, the rows that use it are read again; the other rows come from the cache.", unread: "Could not read" },
+  ja: { stored_at: "保存先", title: "スカウトキャッシュ", subtitle: "本番 (merge-base 時点の master) のブリーフをリポジトリ・機能ごとに保存します。次回の調査では、新しい merge-base で全ファイルの blob ハッシュが一致すれば再利用し、変更されたファイルを使う行だけ読み直します。", readonly_title: "この画面は閲覧のみです", readonly_body: "エントリを削除するにはフォルダを削除してください。次回の調査はキャッシュミスとなり、すべて読み直します。", th_repo: "リポジトリ (root commit)", all: "すべて", count: "4件", th_feature: "機能", th_files: "ファイル", th_rows: "行", th_model: "スカウトモデル", th_saved: "保存日", th_reviewed: "レビュー済み", not_reviewed: "未レビュー", p_root: "Root commit", p_base: "Merge-base", p_plugin: "プラグイン", p_anchors: "アンカー", files: "ソースファイルと blob ハッシュ", files_note: "ファイルの blob ハッシュが変わると、そのファイルを使う行を読み直します。他の行はキャッシュから再利用します。", unread: "未確認" }
+};
+class Component extends DCLogic {
+  renderVals() {
+    const lang = (this.state && this.state.lang) || this.props.lang || 'vi';
+    const pick = (l) => () => this.setState({ lang: l });
+    return {
+      theme: this.props.theme ?? 'light',
+      lang: lang,
+      t: Object.assign({}, NAV[lang] || NAV.vi, PAGE[lang] || PAGE.vi),
+      viOn: lang === 'vi' ? 'is-active' : '', enOn: lang === 'en' ? 'is-active' : '', jaOn: lang === 'ja' ? 'is-active' : '',
+      viSel: lang === 'vi', enSel: lang === 'en', jaSel: lang === 'ja',
+      setVi: pick('vi'), setEn: pick('en'), setJa: pick('ja')
+    };
+  }
+}
+</script>
+</body>
+</html>

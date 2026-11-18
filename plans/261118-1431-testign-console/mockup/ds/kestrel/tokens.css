@@ -1,0 +1,78 @@
+/* Kestrel — generated from tokens.json. Sans stack extended with system Japanese faces (Hiragino, Yu Gothic UI, Meiryo) for the testign console. */
+:root {
+  --surface-0: #08090a; --surface-1: #0f1011; --surface-2: #141516; --surface-3: #191a1b;
+  --surface-raised: #1c1c1f; --surface-control: #ffffff0d; --surface-inset: #232326; --surface-overlay: #000000d9;
+  --text-1: #f7f8f8; --text-2: #d0d6e0; --text-3: #8a8f98; --text-4: #62666d;
+  --text-on-accent: #ffffff; --text-on-danger: #ffffff;
+  --border-1: #23252a; --border-2: #34343a; --border-3: #3e3e44;
+  --border-translucent: #ffffff0d; --border-strong-translucent: #ffffff14;
+  --accent: #5e6ad2; --accent-hover: #6872db; --accent-text: #828fff; --accent-soft: #5e6ad233; --accent-selection: #5560c0;
+  --danger: #eb5757; --danger-fill: #cf3a3a; --danger-soft: #eb575726;
+  --success: #27a644; --success-soft: #27a64426;
+  --warning: #f0bf00; --warning-soft: #f0bf0026;
+  --info: #4ea7fc; --info-soft: #4ea7fc26;
+  --urgent: #fc7840;
+  --kbd-bg: #ffffff14; --scrollbar: #ffffff1a; --skeleton: #ffffff0f; --avatar-fallback: #3e3e44;
+  --shadow-none: none;
+  --shadow-sm: 0 1px 2px #00000066;
+  --shadow-md: 0 4px 16px #00000080, 0 0 0 1px #34343a;
+  --shadow-lg: 0 16px 48px #000000a6, 0 0 0 1px #34343a;
+  color-scheme: dark;
+}
+[data-theme="light"] {
+  --surface-0: #ffffff; --surface-1: #f8f8f8; --surface-2: #f4f4f4; --surface-3: #ececed;
+  --surface-raised: #ffffff; --surface-control: #00000005; --surface-inset: #f1f0f2; --surface-overlay: #ffffffa6;
+  --text-1: #282a30; --text-2: #3c4149; --text-3: #66656e; --text-4: #86848d;
+  --text-on-accent: #ffffff; --text-on-danger: #ffffff;
+  --border-1: #e9e8ea; --border-2: #dcdbdd; --border-3: #c9c8cc;
+  --border-translucent: #0000000d; --border-strong-translucent: #00000014;
+  --accent: #5e6ad2; --accent-hover: #5560c8; --accent-text: #5058c0; --accent-soft: #5e6ad226; --accent-selection: #5e6ad2;
+  --danger: #d13c3c; --danger-fill: #d13c3c; --danger-soft: #eb57571f;
+  --success: #1a7f34; --success-soft: #27a6441f;
+  --warning: #b98900; --warning-soft: #f0bf001f;
+  --info: #1f6fc0; --info-soft: #4ea7fc1f;
+  --urgent: #e0621d;
+  --kbd-bg: #00000014; --scrollbar: #0000001a; --skeleton: #0000000a; --avatar-fallback: #dcdbdd;
+  --shadow-sm: 0 1px 2px #0000000f;
+  --shadow-md: 0 4px 16px #00000014, 0 0 0 1px #e4e2e4;
+  --shadow-lg: 0 16px 48px #0000001f, 0 0 0 1px #e4e2e4;
+  color-scheme: light;
+}
+:root, [data-theme] {
+  --focus-ring: var(--accent);
+  --status-backlog: var(--text-4); --status-todo: var(--text-3); --status-progress: var(--warning);
+  --status-done: var(--accent); --status-canceled: var(--text-4);
+  --priority-on: var(--text-2); --priority-off: var(--text-4);
+}
+:root {
+  --font-sans: "Inter", "Inter Variable", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, "MS Gothic", monospace;
+  --space-2: 2px; --space-4: 4px; --space-6: 6px; --space-8: 8px; --space-12: 12px; --space-16: 16px;
+  --space-20: 20px; --space-24: 24px; --space-32: 32px; --space-40: 40px; --space-48: 48px; --space-64: 64px;
+  --radius-4: 4px; --radius-6: 6px; --radius-8: 8px; --radius-12: 12px; --radius-16: 16px; --radius-full: 9999px;
+  --hairline: 1px; --hairline-2: 2px; --focus-offset: 2px;
+  --control-xs: 24px; --control-sm: 28px; --control-md: 32px; --control-lg: 36px;
+  --row-compact: 32px; --row-default: 36px; --row-comfortable: 44px;
+  --icon-sm: 14px; --icon-md: 16px; --icon-lg: 20px;
+  --avatar-sm: 16px; --avatar-md: 20px; --avatar-lg: 32px;
+  --topbar-height: 40px; --sidebar-width: 232px; --panel-width: 360px; --palette-width: 640px;
+  --dialog-width: 480px; --dialog-width-wide: 560px; --popover-width: 280px;
+  --content-max: 1024px; --prose-max: 624px; --toggle-width: 28px; --scrollbar-size: 6px;
+  --glyph-xs: 12px; --dot: 8px; --dot-sm: 6px; --badge-height: 20px; --kbd-height: 18px;
+  --palette-input-height: 48px; --props-label-width: 96px; --toast-width: 360px; --card-min-width: 220px;
+  --empty-max-width: 320px; --menu-max-height: 320px; --id-col-width: 64px; --date-col-width: 48px;
+  --tooltip-max-width: 240px; --split-min-height: 280px;
+  --fs-micro: 11px; --fs-mini: 12px; --fs-small: 13px; --fs-regular: 15px; --fs-title-1: 17px;
+  --fs-large: 18px; --fs-title-2: 20px; --fs-title-4: 32px; --fs-avatar-sm: 8px; --fs-avatar: 10px;
+  --lh-tight: 16px; --lh-ui: 20px; --lh-body: 24px; --lh-large: 28px; --lh-title-2: 27px; --lh-title-4: 36px;
+  --ls-ui: -0.01em; --ls-body: -0.011em; --ls-title: -0.012em; --ls-display: -0.022em; --ls-caps: 0.04em;
+  --fw-regular: 400; --fw-medium: 510; --fw-semibold: 590;
+  --opacity-disabled: 0.5; --opacity-skeleton-shimmer: 0.5;
+  --duration-quick: 100ms; --duration-regular: 250ms; --duration-highlight-out: 150ms;
+  --duration-skeleton: 1400ms; --duration-spin: 800ms;
+  --ease-out-quad: cubic-bezier(0.25, 0.46, 0.45, 0.94); --ease-out-cubic: cubic-bezier(0.215, 0.61, 0.355, 1);
+  --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1); --ease-in-quad: cubic-bezier(0.55, 0.085, 0.68, 0.53);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --duration-quick: 0ms; --duration-regular: 0ms; --duration-highlight-out: 0ms; --duration-skeleton: 0ms; }
+}
