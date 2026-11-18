@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Console server and lifecycle"
-status: pending
+status: done
 priority: P1
 effort: "2.5d"
 dependencies: []
@@ -46,30 +46,30 @@ after the cap.
 
 ## Requirements
 
-- [ ] Binds `127.0.0.1` only, whatever the options; sends no `Access-Control-*` header.
-- [ ] Two credentials. <!-- Red team 2026-11-18: agent must not hold the browser credential -->
+- [x] Binds `127.0.0.1` only, whatever the options; sends no `Access-Control-*` header.
+- [x] Two credentials. <!-- Red team 2026-11-18: agent must not hold the browser credential -->
   - **Agent token**: in `server.json`; accepted on `/agent/*` only; used by the agent CLI after the `/health` proof.
   - **Browser session**: `POST /api/session {code}` exchanges a one-time launch code for a session token held in server memory only; the code is burned on first use and expires after 10 minutes. `/api/*` accepts only a browser session token (`X-Testign-Session`) and refuses the agent token.
   - Launch codes are minted by `POST /agent/launch-code` (agent token) and handed straight to `webbrowser.open("http://127.0.0.1:<port>/#c=<code>")` by `console start` and `console open`; they are never printed when the browser opens. If no browser can be opened, the URL with the code is printed once, marked single-use.
   - Every new browser session is announced in already open tabs (via `/api/state` in phase 4; a banner in stage 1 on next load).
-- [ ] Request checks, in this order, before any body is read: method known for the route (`OPTIONS` → 403); `Host` name is `127.0.0.1` or `localhost`, any port (port forwarding); `Origin`, when present, equals `http://<Host>`; `Sec-Fetch-Site`, when present, is `same-origin` or `none`; credential for the route group; `Content-Type` is `application/json` on JSON bodies and `application/octet-stream` on the upload route (else 415); body size (1 MB JSON; uploads have their own cap in phase 2). <!-- Red team 2026-11-18: reference allowlist, 415, any port -->
-- [ ] Every response carries `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`, plus `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`; API responses add `Cache-Control: no-store`.
-- [ ] `GET /health?nonce=<n>` needs no credential and answers `{version, busy, proof: HMAC-SHA256(agent token, nonce)}`.
-- [ ] One server per user. The port is `console.port` (default 4791); a busy port is never answered by taking the next one.
-- [ ] Windows: `allow_reuse_address = False` and `SO_EXCLUSIVEADDRUSE`, so another process cannot bind the same port beside the server.
-- [ ] Tokens: `secrets.token_urlsafe(32)`, made in the child after the bind succeeds; never on a command line or in the environment; compared with `hmac.compare_digest`.
-- [ ] State folder `~/.testign-kit/console/` created with mode 0700 (and its `jobs/`, `uploads/`); every state file created with `os.open(..., O_CREAT | O_EXCL | O_WRONLY, 0o600)` as a temporary sibling, then `os.replace`, retried briefly on `PermissionError` on Windows. <!-- Red team 2026-11-18: customer data at rest -->
-- [ ] `server.json`: pid, port, instance, version, started_at, mode, agent token. `server.log`: capped at 1 MB, one rotation.
-- [ ] The pid in `server.json` is the one the server reports for itself (`os.getpid()` inside `serve`, also returned by `/health`); `stop` and the stale-server check use that pid or `/agent/shutdown`, never `Popen.pid`, which belongs to a launcher when `python` is a venv shim. <!-- Updated: Windows spike 2026-11-18 - launcher pid differs from server pid -->
-- [ ] `start`: in a cloud session (`CLAUDE_CODE_REMOTE=true`) exit 2 unless `--skip-cloud-check`; under SSH (`SSH_CONNECTION`) start and say the port must be forwarded and that `console open --print` gives a single-use URL. Read `server.json`; on connection refused, delete it only if it still names the same instance; on a live server whose proof matches, reuse it, also when its version differs (report both versions and say `console stop` replaces it when no job is open); on no answer or a wrong proof, exit 2 naming the port, `lsof -i :<port>` / `netstat -ano`, and `console.port`. `start` never stops a running server. <!-- Red team 2026-11-18: no implicit restart on version mismatch -->
-- [ ] The child is started with stdio discarded: POSIX `start_new_session=True`; Windows `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB`, retried without breakaway when it is denied. `DETACHED_PROCESS` is not used: it would leave the child without a console, so every console program it runs (git) would open a window. <!-- Red team 2026-11-18: Windows git windows -->
-- [ ] `start` waits up to five seconds for a `server.json` whose server proves itself, opens the browser with a fresh launch code, and prints `{reused, version, server_version, port, mode, browser_opened}` (no token, no code unless the browser could not be opened).
-- [ ] `open` mints a launch code and opens the browser (for a lost tab or after a 403); `open --print` prints the single-use URL instead.
-- [ ] `status` prints `{running, version, port, mode, busy}`; never a token or code.
-- [ ] Idle end after `console.idle_minutes` (default 30) when there is no browser request, no agent call, no open held call and `busy()` is false; `busy()` (filled in phase 4) is true while any job is queued, offered, running or waiting for an answer. <!-- Red team 2026-11-18: queued jobs and held calls keep the server alive -->
-- [ ] `stop` proves the server, then `POST /agent/shutdown`; it waits for the port to close. While `busy()` it needs `--force`.
-- [ ] Logging: `log_message`, `log_error` and `handle_error` are overridden so nothing reaches stderr; `server.log` holds method, route pattern, status, duration and an error code; never a body, query string, token, code, path, header value or exception message. <!-- Red team 2026-11-18: stderr leaks -->
-- [ ] The server reads config without creating it (`config.load(create=False)`; missing file → defaults in memory).
+- [x] Request checks, in this order, before any body is read: method known for the route (`OPTIONS` → 403); `Host` name is `127.0.0.1` or `localhost`, any port (port forwarding); `Origin`, when present, equals `http://<Host>`; `Sec-Fetch-Site`, when present, is `same-origin` or `none`; credential for the route group; `Content-Type` is `application/json` on JSON bodies and `application/octet-stream` on the upload route (else 415); body size (1 MB JSON; uploads have their own cap in phase 2). <!-- Red team 2026-11-18: reference allowlist, 415, any port -->
+- [x] Every response carries `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`, plus `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`; API responses add `Cache-Control: no-store`.
+- [x] `GET /health?nonce=<n>` needs no credential and answers `{version, busy, proof: HMAC-SHA256(agent token, nonce)}`.
+- [x] One server per user. The port is `console.port` (default 4791); a busy port is never answered by taking the next one.
+- [x] Windows: `allow_reuse_address = False` and `SO_EXCLUSIVEADDRUSE`, so another process cannot bind the same port beside the server.
+- [x] Tokens: `secrets.token_urlsafe(32)`, made in the child after the bind succeeds; never on a command line or in the environment; compared with `hmac.compare_digest`.
+- [x] State folder `~/.testign-kit/console/` created with mode 0700 (and its `jobs/`, `uploads/`); every state file created with `os.open(..., O_CREAT | O_EXCL | O_WRONLY, 0o600)` as a temporary sibling, then `os.replace`, retried briefly on `PermissionError` on Windows. <!-- Red team 2026-11-18: customer data at rest -->
+- [x] `server.json`: pid, port, instance, version, started_at, mode, agent token. `server.log`: capped at 1 MB, one rotation.
+- [x] The pid in `server.json` is the one the server reports for itself (`os.getpid()` inside `serve`, also returned by `/health`); `stop` and the stale-server check use that pid or `/agent/shutdown`, never `Popen.pid`, which belongs to a launcher when `python` is a venv shim. <!-- Updated: Windows spike 2026-11-18 - launcher pid differs from server pid -->
+- [x] `start`: in a cloud session (`CLAUDE_CODE_REMOTE=true`) exit 2 unless `--skip-cloud-check`; under SSH (`SSH_CONNECTION`) start and say the port must be forwarded and that `console open --print` gives a single-use URL. Read `server.json`; on connection refused, delete it only if it still names the same instance; on a live server whose proof matches, reuse it, also when its version differs (report both versions and say `console stop` replaces it when no job is open); on no answer or a wrong proof, exit 2 naming the port, `lsof -i :<port>` / `netstat -ano`, and `console.port`. `start` never stops a running server. <!-- Red team 2026-11-18: no implicit restart on version mismatch -->
+- [x] The child is started with stdio discarded: POSIX `start_new_session=True`; Windows `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB`, retried without breakaway when it is denied. `DETACHED_PROCESS` is not used: it would leave the child without a console, so every console program it runs (git) would open a window. <!-- Red team 2026-11-18: Windows git windows -->
+- [x] `start` waits up to five seconds for a `server.json` whose server proves itself, opens the browser with a fresh launch code, and prints `{reused, version, server_version, port, mode, browser_opened}` (no token, no code unless the browser could not be opened).
+- [x] `open` mints a launch code and opens the browser (for a lost tab or after a 403); `open --print` prints the single-use URL instead.
+- [x] `status` prints `{running, version, port, mode, busy}`; never a token or code.
+- [x] Idle end after `console.idle_minutes` (default 30) when there is no browser request, no agent call, no open held call and `busy()` is false; `busy()` (filled in phase 4) is true while any job is queued, offered, running or waiting for an answer. <!-- Red team 2026-11-18: queued jobs and held calls keep the server alive -->
+- [x] `stop` proves the server, then `POST /agent/shutdown`; it waits for the port to close. While `busy()` it needs `--force`.
+- [x] Logging: `log_message`, `log_error` and `handle_error` are overridden so nothing reaches stderr; `server.log` holds method, route pattern, status, duration and an error code; never a body, query string, token, code, path, header value or exception message. <!-- Red team 2026-11-18: stderr leaks -->
+- [x] The server reads config without creating it (`config.load(create=False)`; missing file → defaults in memory).
 
 ## Files to Create / Modify
 

@@ -1,7 +1,7 @@
 """Tester settings stored in ~/.testign-kit/config.json.
 
 The file is created with defaults on first load. Values in the file override the defaults;
-nested objects (``backlog``) are merged key by key so a partial file keeps the other defaults.
+nested objects (``backlog``, ``console``) are merged key by key so a partial file keeps the other defaults.
 """
 
 from __future__ import annotations
@@ -47,6 +47,8 @@ def defaults(home: Path | None = None) -> dict[str, Any]:
             # decisions log; "backlog" (Backlog notation) makes the decisions commands stop with a message.
             "text_format": "markdown",
         },
+        # Local console server (testign console start). One server per user on this port.
+        "console": {"port": 4791, "idle_minutes": 30},
     }
 
 
@@ -60,11 +62,16 @@ def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     return merged
 
 
-def load(home: Path | None = None) -> dict[str, Any]:
-    """Return the effective config, creating the file with defaults if it does not exist."""
+def load(home: Path | None = None, *, create: bool = True) -> dict[str, Any]:
+    """Return the effective config, creating the file with defaults if it does not exist.
+
+    With ``create=False`` a missing file gives the defaults in memory and nothing is written.
+    """
     base = defaults(home)
     path = config_path(home)
     if not path.exists():
+        if not create:
+            return base
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(base, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return base

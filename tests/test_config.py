@@ -100,3 +100,18 @@ def test_run_py_reports_bad_config_without_traceback(tmp_path):
     assert out.returncode == 2
     assert "Traceback" not in out.stderr
     assert "JSON object" in out.stderr
+
+
+def test_load_without_create_returns_defaults_and_writes_nothing(tmp_path):
+    cfg = config.load(tmp_path, create=False)
+    assert cfg == config.defaults(tmp_path)
+    assert cfg["console"] == {"port": 4791, "idle_minutes": 30}
+    assert not config.config_path(tmp_path).exists()
+    assert not config.config_dir(tmp_path).exists()
+
+
+def test_partial_console_object_keeps_the_other_default(tmp_path):
+    path = config.config_path(tmp_path)
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"console": {"port": 5000}}), encoding="utf-8")
+    assert config.load(tmp_path, create=False)["console"] == {"port": 5000, "idle_minutes": 30}

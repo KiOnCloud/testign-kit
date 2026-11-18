@@ -1,7 +1,7 @@
 ---
 title: "testign console: local UI for tickets, templates, test cases and an agent job bridge"
 description: "A local console on 127.0.0.1 that browses survey reports, trace results and the scout cache, manages Excel templates, and queues survey, close and testcase jobs for the attached Claude Code session, in vi, en and ja."
-status: pending
+status: in-progress
 priority: P1
 effort: 17d
 branch: claude/relaxed-franklin-oikzoa
@@ -71,7 +71,7 @@ per-user plugin. Approved mockup: https://claude.ai/artifact/FbwXMaek4XshNT2nPdp
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [Console server and lifecycle](./phase-01-console-server-and-lifecycle.md) | Pending |
+| 1 | [Console server and lifecycle](./phase-01-console-server-and-lifecycle.md) | Done (macOS spike pending) |
 | 2 | [Read API and template management](./phase-02-read-api-and-template-management.md) | Pending |
 | 3 | [Console UI shell, i18n and screens](./phase-03-console-ui-shell-i18n-and-screens.md) | Pending |
 | 4 | [Job queue and agent bridge](./phase-04-job-queue-and-agent-bridge.md) | Pending |

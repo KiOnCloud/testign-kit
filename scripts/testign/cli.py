@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__, backlog_wiki, cache, config, decisions, gitscope, hashcheck, report, templates, trace, xlsx
+from .console import lifecycle
 
 
 def _cmd_config(_args: argparse.Namespace) -> int:
@@ -463,6 +464,57 @@ def _cmd_cache_review(args: argparse.Namespace) -> int:
     return _emit({"reviewed": True, "cache_dir": str(folder), "reviewed_by": manifest["reviewed_by"]})
 
 
+def _cmd_console_start(args: argparse.Namespace) -> int:
+    return _emit(lifecycle.start(browser=not args.no_browser, skip_cloud_check=args.skip_cloud_check))
+
+
+def _cmd_console_open(args: argparse.Namespace) -> int:
+    return _emit(lifecycle.open_console(print_only=args.print))
+
+
+def _cmd_console_status(_args: argparse.Namespace) -> int:
+    return _emit(lifecycle.status())
+
+
+def _cmd_console_stop(args: argparse.Namespace) -> int:
+    return _emit(lifecycle.stop(force=args.force))
+
+
+def _cmd_console_serve(args: argparse.Namespace) -> int:
+    home = Path(args.home) if args.home else None
+    return lifecycle.serve(home, port=args.port, instance=args.instance,
+                           mode="foreground" if args.foreground else "detached")
+
+
+def _add_console_parser(sub) -> None:
+    cp = sub.add_parser("console", help="local console in the browser (start, open, status, stop)")
+    csub = cp.add_subparsers(dest="console_command", required=True, metavar="{start,open,status,stop}")
+
+    st = csub.add_parser("start", help="start the console server, or reuse the running one, and open the browser")
+    st.add_argument("--no-browser", action="store_true", help="do not open a browser (use `console open` later)")
+    st.add_argument("--skip-cloud-check", action="store_true", help="start even in a cloud session")
+    st.set_defaults(func=_cmd_console_start)
+
+    op = csub.add_parser("open", help="open the console in the browser with a fresh single-use link")
+    op.add_argument("--print", action="store_true", help="print the single-use URL instead of opening a browser")
+    op.set_defaults(func=_cmd_console_open)
+
+    ss = csub.add_parser("status", help="whether the console server is running")
+    ss.set_defaults(func=_cmd_console_status)
+
+    sp = csub.add_parser("stop", help="stop the console server")
+    sp.add_argument("--force", action="store_true", help="stop even while jobs are open (they fail)")
+    sp.set_defaults(func=_cmd_console_stop)
+
+    sv = csub.add_parser("serve")
+    sv.add_argument("--port", type=int)
+    sv.add_argument("--instance")
+    sv.add_argument("--home")
+    sv.add_argument("--foreground", action="store_true",
+                    help="run in this process (for the harness's background mode)")
+    sv.set_defaults(func=_cmd_console_serve)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="testign")
     parser.add_argument("--version", action="version", version=__version__)
@@ -595,6 +647,8 @@ def build_parser() -> argparse.ArgumentParser:
     cr.add_argument("--report", required=True)
     cr.add_argument("--by", required=True, help="tester name")
     cr.set_defaults(func=_cmd_cache_review)
+
+    _add_console_parser(sub)
     return parser
 
 
@@ -609,6 +663,7 @@ def main(argv: list[str] | None = None) -> int:
         templates.TemplateError,
         decisions.DecisionsError,
         backlog_wiki.BacklogError,
+        lifecycle.ConsoleError,
         ValueError,
     ) as exc:
         print(f"testign: {exc}", file=sys.stderr)
