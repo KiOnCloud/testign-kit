@@ -347,6 +347,7 @@ class ConsoleHandler(BaseHTTPRequestHandler):
         label = "-"
         status = 500
         code = "-"
+        self._body_read = False
         try:
             route, label, response = self._handle(method)
             status = response.status
@@ -357,8 +358,11 @@ class ConsoleHandler(BaseHTTPRequestHandler):
                 response.after()
         except ApiError as exc:
             status, code = exc.status, exc.code
-            # The body may be unread; never reuse this connection.
+            # The body may be unread; never reuse this connection. A small unread body is read
+            # and dropped first, so closing does not reset the connection before the client
+            # reads the error.
             self.close_connection = True
+            self._drain_unread_body()
             self._send(Response(exc.status, _error_body(exc.code, exc.message, exc.details)), head=method == "HEAD")
         except (ConnectionError, socket.timeout):
             status, code = 499, "client-gone"
@@ -436,6 +440,7 @@ class ConsoleHandler(BaseHTTPRequestHandler):
                 self.close_connection = True
                 raise ApiError(413, "too-large", "request body too large")
             raw = self.rfile.read(length) if length else b""
+            self._body_read = True
             if route.body == "json":
                 try:
                     body = json.loads(raw.decode("utf-8")) if raw else {}
@@ -451,6 +456,21 @@ class ConsoleHandler(BaseHTTPRequestHandler):
         response = result if isinstance(result, Response) else Response(200, result)
         response.headers.setdefault("Cache-Control", "no-store")
         return route, label, response
+
+    def _drain_unread_body(self) -> None:
+        if self._body_read:
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return
+        if 0 < length <= JSON_BODY_CAP and not self.headers.get("Transfer-Encoding"):
+            try:
+                self.connection.settimeout(5)
+                self.rfile.read(length)
+            except OSError:
+                pass
+        self._body_read = True
 
     def _static(self, path: str, entry: tuple[Path, str]) -> Response:
         self.state.touch()
