@@ -66,6 +66,8 @@ per-user plugin. Approved mockup: https://claude.ai/artifact/FbwXMaek4XshNT2nPdp
 | Kestrel is vendored (tokens.css, bundle.css without its Google Fonts import); Inter and JetBrains Mono are self-hosted; Japanese falls back to system faces. | Chosen by the user on 2026-11-18. Both fonts have a vietnamese subset (verified on Google Fonts); BIZ UDPGothic does not. |
 | UI language, theme and tester name are per-viewer settings in the browser. Agent questions and progress follow the job's `ui_lang`; report content follows the report's `lang`. | Chosen by the user on 2026-11-18. |
 | "Write §7" is a testcase job in trace mode, not a server write. | It writes a report revision, which the first decision keeps out of the server. |
+| An agent can still mint itself a browser session (it runs as the tester); answers are accepted only from sessions older than the job's claim, and new sessions are announced until dismissed. | Code review 2026-11-19; user chose "document and harden lightly". |
+| `wiki-append-preview` (API mode) adds `old_content` and `new_content` per page; the server computes the shown diff and checks the approval hash from them. | Code review 2026-11-19: the shown diff was agent-supplied. User accepted the additive CLI output change. |
 
 ## Phases
 

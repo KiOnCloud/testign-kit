@@ -427,3 +427,22 @@ def _section_end(lines: list[tuple[str, str]], heading_line: int) -> int:
         if text.strip():
             last = idx
     return last
+
+
+def page_diff(name: str, old: str, new: str) -> str:
+    """Unified diff of one wiki page, as the preview shows it to the tester."""
+    import difflib  # noqa: PLC0415
+
+    def keepends(text: str) -> list[str]:
+        return [line + eol for line, eol in split_lines(text)]
+
+    return "".join(difflib.unified_diff(keepends(old), keepends(new), f"{name} (now)", f"{name} (after append)"))
+
+
+def approval_hash(writes: list[tuple[str, str | None, str]]) -> str:
+    """Hash of (page name, page updated time, new content) for every page to write, in order."""
+    import hashlib  # noqa: PLC0415
+    import json  # noqa: PLC0415
+
+    return hashlib.sha256(json.dumps([[n, updated, new] for n, updated, new in writes],
+                                     ensure_ascii=False).encode("utf-8")).hexdigest()

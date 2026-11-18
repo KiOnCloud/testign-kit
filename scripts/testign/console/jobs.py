@@ -18,6 +18,7 @@ queue. Records live in ``~/.testign-kit/console/jobs/<id>.json`` (mode 0600).
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import re
 import secrets
@@ -27,6 +28,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from .. import decisions
 from .server import ApiError
 
 LANGS = ("vi", "en", "ja")
@@ -181,15 +183,22 @@ def validate_ask(ask: Any) -> dict:
         if not isinstance(preview, dict) or not isinstance(preview.get("approval"), str):
             raise bad("confirm-diff needs the preview JSON with its approval")
         pages = preview.get("pages")
-        if not isinstance(pages, list):
+        if not isinstance(pages, list) or not pages:
             raise bad("confirm-diff preview needs pages")
-        clean_pages = []
+        clean_pages, writes = [], []
         for p in pages:
-            if not isinstance(p, dict) or not isinstance(p.get("diff"), str):
-                raise bad("every confirm-diff page needs a diff")
-            clean_pages.append({"name": data_text(p.get("name"), "page name", cap=500),
-                                "exists": bool(p.get("exists")), "updated": p.get("updated"),
-                                "diff": data_text(p.get("diff"), "diff")})
+            if not isinstance(p, dict) or not all(isinstance(p.get(k), str) for k in ("name", "old_content", "new_content")):
+                raise bad("every confirm-diff page needs name, old_content and new_content from wiki-append-preview")
+            updated = p.get("updated") if isinstance(p.get("updated"), str) else None
+            name = data_text(p["name"], "page name", cap=500)
+            old, new = data_text(p["old_content"], "old_content"), data_text(p["new_content"], "new_content")
+            writes.append((name, updated, new))
+            # The tester sees the diff the server computed from the contents the approval hash covers.
+            clean_pages.append({"name": name, "exists": bool(p.get("exists")), "updated": updated,
+                                "diff": decisions.page_diff(name, old, new)})
+        if not hmac.compare_digest(decisions.approval_hash(writes), preview["approval"]):
+            raise bad("the preview's approval does not match its pages; run wiki-append-preview again",
+                      "approval-mismatch")
         lists = {k: preview.get(k) if isinstance(preview.get(k), list) else [] for k in
                  ("added", "skipped", "superseded", "index_repaired")}
         return {"type": kind, "id": ask_id, "body": agent_text(ask.get("body"), "body", required=False),
@@ -644,11 +653,19 @@ class Bridge:
             self.cond.notify_all()
             return {"released": True}
 
-    def answer(self, job_id: str, body: Any, browser_session: str | None) -> dict:
+    def answer(self, job_id: str, body: Any, browser_session: str | None,
+               session_created: float | None = None) -> dict:
         if not isinstance(body, dict):
             raise bad("answer must be an object")
         with self.cond:
             job = self._job(job_id)
+            claimed = job.get("started_ts")
+            if session_created is not None and claimed is not None and session_created >= claimed:
+                # A tab opened after the job started cannot answer it, so a session minted
+                # by the agent during the job cannot approve its own questions.
+                raise ApiError(403, "session-too-new",
+                               "this console tab was opened after the job started; answer from an older tab "
+                               "or queue the job again")
             ask = job.get("ask")
             if job["state"] != "needs-input" or ask is None or "answer" in ask:
                 raise ApiError(409, "conflict", "this job is not waiting for an answer")
@@ -745,7 +762,7 @@ class Bridge:
             if latest is None or latest["name"] != job["base_revision"]:
                 self._fail(job, "revision-moved")
                 return {"ok": False, "reason": "revision-moved"}
-        self._move(job, "running", started_at=now_iso())
+        self._move(job, "running", started_at=now_iso(), started_ts=time.time())
         return None
 
     def wait(self, session: Any, timeout: Any) -> dict:
@@ -1010,7 +1027,8 @@ def install(state, store=None) -> Bridge:
     r.add("GET", "/api/jobs", "browser", lambda q: {"jobs": bridge.list_jobs()})
     r.add("POST", "/api/jobs", "browser", lambda q: bridge.create(q.body))
     r.add("GET", "/api/jobs/:id", "browser", lambda q: bridge.get(q.params["id"]))
-    r.add("POST", "/api/jobs/:id/answer", "browser", lambda q: bridge.answer(q.params["id"], q.body, q.session))
+    r.add("POST", "/api/jobs/:id/answer", "browser",
+          lambda q: bridge.answer(q.params["id"], q.body, q.session, state.session_created(q.session)))
     r.add("POST", "/api/jobs/:id/cancel", "browser", lambda q: bridge.cancel(q.params["id"]))
     r.add("POST", "/api/jobs/:id/fail", "browser", lambda q: bridge.mark_failed(q.params["id"]))
     r.add("POST", "/api/agent/release", "browser", lambda q: bridge.release())

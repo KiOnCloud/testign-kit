@@ -76,9 +76,10 @@ row answered. Apply edits to the rows before the preview; only `write` and `edit
 Never write these by hand. Save the `wiki-append-preview` output to a file and run
 `<run> console ask <job> --session <s> --from-preview <file>`:
 
-- API mode → `confirm-diff`: the tester sees the tool's own diffs and the `added`, `skipped`,
-  `superseded`, `index_repaired` lists. Answer `{confirm: true | false}`. On `true` the server keeps
-  the preview's approval hash as the job's confirmed approval.
+- API mode → `confirm-diff`: the server computes each page's diff from the preview's `old_content`
+  and `new_content`, checks that they give the preview's approval hash (else `approval-mismatch`),
+  and shows those diffs with the `added`, `skipped`, `superseded`, `index_repaired` lists. Answer
+  `{confirm: true | false}`. On `true` the server keeps the approval as the job's confirmed approval.
 - Manual mode (`--pages-dir`) → `paste-pages`: the tester sees each page's new content to paste.
   Answer `{done: true}`. The job ends `done` and its summary says nothing was written by testign.
 

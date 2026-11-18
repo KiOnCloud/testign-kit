@@ -340,3 +340,15 @@ def test_cli_refuses_backlog_notation(tmp_path):
     page.write_text(ORDER, encoding="utf-8")
     res = run_cli("decisions-parse", "--file", str(page), home=home)
     assert res.returncode == 2 and "Backlog notation" in res.stderr
+
+
+def test_api_preview_carries_page_contents_the_console_can_verify(server, tmp_path):
+    from testign.console import client, jobs
+
+    home = home_with_config(tmp_path)
+    rows = write_json(tmp_path, "rows.json", [ROW_POINT])
+    shown = json.loads(run_cli("wiki-append-preview", "--rows", str(rows), home=home).stdout)
+    assert all({"old_content", "new_content", "diff"} <= set(p) for p in shown["pages"])
+    ask = jobs.validate_ask(client.ask_from_preview(shown))
+    assert ask["type"] == "confirm-diff" and ask["preview"]["approval"] == shown["approval"]
+    assert [p["diff"] for p in ask["preview"]["pages"]] == [p["diff"] for p in shown["pages"]]

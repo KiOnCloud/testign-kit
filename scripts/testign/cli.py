@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import difflib
-import hashlib
 import json
 import re
 import sys
@@ -294,16 +292,8 @@ def _read_rows(path: str) -> list[dict]:
     return rows
 
 
-def _keepends(text: str) -> list[str]:
-    return [line + eol for line, eol in decisions.split_lines(text)]
-
-
 def _diff(name: str, old: str, new: str) -> str:
-    return "".join(difflib.unified_diff(_keepends(old), _keepends(new), f"{name} (now)", f"{name} (after append)"))
-
-
-def _sha(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return decisions.page_diff(name, old, new)
 
 
 def _titles(rows: list[dict]) -> dict[str, str]:
@@ -359,8 +349,7 @@ def _plan_wiki(backlog: dict, rows: list[dict]) -> dict:
     writes = [(_page_name(backlog, slug), pages[slug], new) for slug, new in sorted(changed.items())]
     if new_index != index:
         writes.append((index_name, index, new_index))  # the index is written last
-    approval = _sha(json.dumps([[n, listing.get(n, {}).get("updated"), new] for n, _old, new in writes],
-                               ensure_ascii=False))
+    approval = decisions.approval_hash([(n, listing.get(n, {}).get("updated"), new) for n, _old, new in writes])
     return {"listing": listing, "writes": writes, "result": result, "approval": approval, "project": project}
 
 
@@ -388,7 +377,7 @@ def _cmd_wiki_append_preview(args: argparse.Namespace) -> int:
     plan = _plan_wiki(backlog, rows)
     return _emit({"mode": "api", **plan["result"], "approval": plan["approval"], "pages": [
         {"name": name, "exists": name in plan["listing"], "updated": plan["listing"].get(name, {}).get("updated"),
-         "diff": _diff(name, old, new)}
+         "diff": _diff(name, old, new), "old_content": old, "new_content": new}
         for name, old, new in plan["writes"]
     ]})
 

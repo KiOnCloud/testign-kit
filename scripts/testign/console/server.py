@@ -255,6 +255,16 @@ class ConsoleState:
     def agent_ok(self, token: str | None) -> bool:
         return bool(token) and hmac.compare_digest(self.agent_token.encode(), token.encode())
 
+    def session_created(self, token: str | None) -> float | None:
+        """When a browser session was created (wall clock), or None for an unknown token."""
+        if not token:
+            return None
+        with self.lock:
+            for known, created in self._sessions.items():
+                if hmac.compare_digest(known.encode(), token.encode()):
+                    return created
+        return None
+
     def session_times(self) -> list[float]:
         """Creation times of the browser sessions, so open tabs can announce a new one."""
         with self.lock:

@@ -11,7 +11,7 @@ import pytest
 from console_helpers import RUN_PY, call, cli_env, free_port, kill_server, run_cli, serve_in_thread, write_config
 from make_report import write_report
 
-from testign import templates
+from testign import decisions, templates
 from testign.console import client, jobs, lifecycle
 from testign.console import server as srv
 
@@ -23,9 +23,11 @@ ROWS_ASK = {"type": "review-rows", "id": "rows-1", "body": "レビューして�
     {"row": "q1-b", "q": "Q1", "class": "fact", "feature": "注文確定", "page": "QA/Decisions/order",
      "anchors": [], "decision": "切り捨て", "quote": "", "source": "code", "decided_by": "Dev", "date": "2026-11-18"},
 ]}
+NEW_PAGE = "| Q1 | 割引 |\n"
 PREVIEW = {"mode": "api", "added": ["Q1"], "skipped": [], "superseded": [], "index_repaired": [],
-           "approval": "f" * 64, "pages": [{"name": "QA/Decisions/order", "exists": False, "updated": None,
-                                            "diff": "--- a\n+++ b\n+| Q1 | 割引 |"}]}
+           "approval": decisions.approval_hash([("QA/Decisions/order", None, NEW_PAGE)]),
+           "pages": [{"name": "QA/Decisions/order", "exists": False, "updated": None, "diff": "--- a\n+++ b",
+                      "old_content": "", "new_content": NEW_PAGE}]}
 
 
 @pytest.fixture
@@ -110,14 +112,14 @@ def test_full_close_round_through_the_bridge(server, home):
                {"ask_id": job["ask"]["id"], "answer": {"confirm": True}})[0] == 200
     agent.join(10)
     assert result["diff"]["answers"] == {"confirm": True}
-    assert client.approval(job_id, S, home=home) == {"approval": "f" * 64}
+    assert client.approval(job_id, S, home=home) == {"approval": PREVIEW["approval"]}
 
     assert client.done(job_id, S, "done", "2 行を書きました", home=home) == {"ok": True}
     job = api(server, "GET", f"/api/jobs/{job_id}")[2]
     assert job["state"] == "done" and job["summary"] == "2 行を書きました"
     assert [a["type"] for a in job["asked"]] == ["review-rows", "confirm-diff"]
     assert job["progress"][0]["message"] == "レポートを読んでいます"
-    assert job["confirmed_approval"] == "f" * 64
+    assert job["confirmed_approval"] == PREVIEW["approval"]
     listing = api(server, "GET", "/api/jobs")[2]["jobs"]
     assert listing[0]["id"] == job_id
 
@@ -281,3 +283,22 @@ def test_start_prints_a_new_session_each_time(home):
     second = json.loads(run_cli(home, "console", "start", "--no-browser").stdout)
     assert first["session"] != second["session"] and second["reused"] is True
     assert first["session"].startswith("s-")
+
+
+def test_a_browser_session_opened_during_the_job_cannot_answer(server, home):
+    job_id = queue_close(server)
+    client.wait(S, 5, home=home)
+    client.claim(job_id, S, home=home)
+    out = {}
+    t = threading.Thread(target=lambda: out.setdefault("a", client.ask(job_id, S, ROWS_ASK, 5, home=home)),
+                         daemon=True)
+    t.start()
+    job = wait_for_state(server, job_id, "needs-input")
+    code = server["state"].mint_launch_code()
+    new_tab = call(server["port"], "POST", "/api/session", body={"code": code})[2]["session"]
+    answer = {"ask_id": job["ask"]["id"], "answer": {"rows": {"q1-a": {"action": "skip"}, "q1-b": {"action": "skip"}}}}
+    status, _, data = call(server["port"], "POST", f"/api/jobs/{job_id}/answer", body=answer,
+                           headers={srv.SESSION_HEADER: new_tab})
+    assert status == 403 and data["error"]["code"] == "session-too-new"
+    assert api(server, "POST", f"/api/jobs/{job_id}/answer", answer)[0] == 200
+    t.join(10)

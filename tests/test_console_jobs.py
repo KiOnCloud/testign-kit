@@ -5,6 +5,7 @@ import time
 
 import pytest
 
+from testign import decisions
 from testign.console import jobs
 from testign.console.server import ApiError
 
@@ -82,6 +83,18 @@ ROWS = {"type": "review-rows", "id": "rows1", "rows": [
      "source": "Backlog comment", "decided_by": "BrSE", "date": "2026-11-18"},
     {"row": "r2", "q": "Q1", "class": "fact", "decision": "Rounding down", "quote": "", "source": "",
      "decided_by": "Dev", "date": "2026-11-18"}]}
+
+
+def preview_of(*pages, approval=None):
+    """A wiki-append-preview (API mode) for (name, updated, old, new) pages, with its real approval."""
+    out = [{"name": n, "exists": bool(old), "updated": u, "diff": "agent text", "old_content": old, "new_content": new}
+           for n, u, old, new in pages]
+    real = decisions.approval_hash([(n, u, new) for n, u, _old, new in pages])
+    return {"pages": out, "added": ["Q1"], "skipped": [], "superseded": [], "index_repaired": [],
+            "approval": approval or real}
+
+
+PAGE = ("QA/Decisions/order", None, "", "| Q1 | discount |\n")
 
 
 def test_every_transition_pair(bridge):
@@ -231,12 +244,13 @@ def test_second_answer_to_the_same_ask_is_refused(bridge):
 
 def test_confirm_diff_stores_the_confirmed_approval(bridge):
     job_id = running(bridge)
-    preview = {"pages": [{"name": "QA/Decisions/order", "exists": False, "updated": None, "diff": "+ row"}],
-               "added": ["Q1"], "skipped": [], "superseded": [], "index_repaired": [], "approval": "abc123"}
+    preview = preview_of(PAGE)
     bridge.ask(job_id, A, {"type": "confirm-diff", "id": "confirm-abc", "preview": preview}, 0)
     assert bridge.approval(job_id, A) == {"approval": None}
+    shown = bridge.get(job_id)["ask"]["preview"]["pages"][0]["diff"]
+    assert shown != "agent text" and "+| Q1 | discount |" in shown
     bridge.answer(job_id, {"ask_id": "confirm-abc", "answer": {"confirm": True}}, "t")
-    assert bridge.approval(job_id, A) == {"approval": "abc123"}
+    assert bridge.approval(job_id, A) == {"approval": preview["approval"]}
 
 
 @pytest.mark.parametrize("ask", [
@@ -423,10 +437,10 @@ def test_an_answer_sent_to_a_dead_call_can_be_fetched_again(live):
 
 def test_approval_is_withheld_once_the_job_is_closed_or_released(bridge):
     job_id = running(bridge)
-    preview = {"pages": [{"name": "p", "exists": True, "updated": "x", "diff": "+a"}], "approval": "h1"}
+    preview = preview_of(PAGE)
     bridge.ask(job_id, A, {"type": "confirm-diff", "id": "c1", "preview": preview}, 0)
     bridge.answer(job_id, {"ask_id": "c1", "answer": {"confirm": True}}, "t")
-    assert bridge.approval(job_id, A) == {"approval": "h1"}
+    assert bridge.approval(job_id, A) == {"approval": preview["approval"]}
     bridge.release()
     with pytest.raises(ApiError) as err:
         bridge.approval(job_id, A)
@@ -438,7 +452,7 @@ def test_approval_is_withheld_once_the_job_is_closed_or_released(bridge):
 
 def test_approval_is_none_after_done(bridge):
     job_id = running(bridge)
-    preview = {"pages": [{"name": "p", "exists": True, "updated": "x", "diff": "+a"}], "approval": "h1"}
+    preview = preview_of(PAGE)
     bridge.ask(job_id, A, {"type": "confirm-diff", "id": "c1", "preview": preview}, 0)
     bridge.answer(job_id, {"ask_id": "c1", "answer": {"confirm": True}}, "t")
     bridge.ask(job_id, A, {"type": "confirm-diff", "id": "c1", "preview": preview}, 0)
@@ -460,3 +474,26 @@ def test_pruning_keeps_jobs_created_in_the_same_second_in_order(world, clock):
     b2 = jobs.Bridge(store, world.context(), clock=clock)
     b2.startup()
     assert set(b2.jobs) == set(ids[-jobs.KEEP_FINISHED:])
+
+
+def test_confirm_diff_refuses_a_preview_whose_hash_does_not_match(bridge):
+    job_id = running(bridge)
+    forged = preview_of(PAGE, approval="0" * 64)
+    with pytest.raises(ApiError) as err:
+        bridge.ask(job_id, A, {"type": "confirm-diff", "id": "c1", "preview": forged}, 0)
+    assert err.value.code == "approval-mismatch"
+    old_shape = {"pages": [{"name": "p", "exists": True, "updated": "x", "diff": "+a"}], "approval": "h1"}
+    with pytest.raises(ApiError):
+        bridge.ask(job_id, A, {"type": "confirm-diff", "id": "c2", "preview": old_shape}, 0)
+
+
+def test_a_tab_opened_after_the_claim_cannot_answer(bridge):
+    job_id = running(bridge)
+    bridge.ask(job_id, A, QUESTIONS, 0)
+    claimed = bridge.jobs[job_id]["started_ts"]
+    answer = {"ask_id": "q1", "answer": [{"selected": ["Skip"]}]}
+    with pytest.raises(ApiError) as err:
+        bridge.answer(job_id, answer, "new-tab", session_created=claimed + 1)
+    assert err.value.code == "session-too-new" and err.value.status == 403
+    bridge.answer(job_id, answer, "old-tab", session_created=claimed - 1)
+    assert bridge.jobs[job_id]["state"] == "running"

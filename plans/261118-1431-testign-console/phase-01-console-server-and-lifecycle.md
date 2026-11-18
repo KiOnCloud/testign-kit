@@ -109,5 +109,5 @@ Acceptance criteria 1 and 2 of the plan pass in CI on Windows and macOS, and the
 ## Security Considerations
 
 - The agent's credential reaches `/agent/*` only, so text injected into the agent cannot answer the tester's approval asks with a token it already sees.
-- A same-user process that deliberately mints a launch code can still open a browser session; that is outside this design's reach (it could also read the browser's storage). Every new session is announced in open tabs so it is visible.
+- A same-user process that deliberately mints a launch code can still open a browser session; that is outside this design's reach (it could also read the browser's storage). Every new session is announced in open tabs so it is visible. <!-- Updated: 2026-11-19 - user decision after code review --> The code review showed an injected agent can do this with two HTTP calls; the user chose to document the limit and harden lightly: a browser session created after a job was claimed cannot answer that job (`session-too-new`), and the new-session notice stays until dismissed.
 - DNS rebinding is blocked by the `Host` check; CSRF by the custom credential header, which a cross-origin page cannot send without CORS, plus the fetch-metadata and content-type checks.
