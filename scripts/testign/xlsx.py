@@ -141,7 +141,11 @@ def add_sheet(workbook: Path, layout: dict, cases: list[dict], sheet_name: str) 
 
 def pick_sheet(path: Path, layout: dict, sheet: str | None = None) -> str:
     """The sheet to trace: the given one, else the newest ``TC-*`` sheet, else the mapped sheet."""
-    names = _openpyxl().load_workbook(path, read_only=True).sheetnames
+    wb = _openpyxl().load_workbook(path, read_only=True)
+    try:
+        names = list(wb.sheetnames)
+    finally:
+        wb.close()
     if sheet:
         if sheet not in names:
             raise TemplateError(f"sheet '{sheet}' not found; sheets: {', '.join(names)}")

@@ -313,3 +313,11 @@ def test_git_runs_without_a_window_on_windows(monkeypatch):
     with pytest.raises(gitscope.GitError):
         gitscope._git(os.getcwd() + "\\does-not-exist", "rev-parse", "--git-dir")
     assert seen["flags"] == subprocess.CREATE_NO_WINDOW
+
+
+def test_corrupt_workbook_in_the_ticket_folder_is_a_400(console, home, tmp_path):
+    write_report(out_dir(home) / "DEMO-1", tmp_path, "d" * 40, "b" * 40)
+    templates.register(SHIPPED_SAMPLE, "mẫu", home=home)
+    (out_dir(home) / "DEMO-1" / "broken.xlsx").write_bytes(b"PK\x03\x04 not really a zip")
+    status, _, data = get(console, "/api/tickets/DEMO-1/trace?workbook=broken.xlsx")
+    assert status == 400 and data["error"]["code"] in ("workbook-unreadable", "template-error")

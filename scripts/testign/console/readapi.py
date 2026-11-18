@@ -526,6 +526,10 @@ def install(state: ConsoleState) -> None:
             raise ApiError(400, "template-error", "the workbook does not fit the template") from None
         except report.ReportError:
             raise ApiError(422, "unreadable", "the latest revision cannot be read") from None
+        except ApiError:
+            raise
+        except Exception:  # noqa: BLE001 - openpyxl and zipfile raise many types for a broken file
+            raise ApiError(400, "workbook-unreadable", "the workbook cannot be read") from None
 
     def get_cache(req: Request) -> dict:
         return cache_view(req.state.home)

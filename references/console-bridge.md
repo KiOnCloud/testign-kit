@@ -31,7 +31,8 @@ holding it, so never run a held call longer than the command may run:
   session replaces the older one, so a lost call never blocks anything.
 
 `console ask` with the same ask `id` returns the answer once the tester gave it, also when the earlier
-call timed out. After the answer was returned, that `id` is used up: the next question needs a new `id`.
+call timed out or its answer was lost with a killed command. An answered `id` keeps returning the same
+answer, so the next question always needs a new `id`.
 
 ## Ask files
 
@@ -113,7 +114,7 @@ refuses unless the tester confirmed exactly that approval in the console.
 | `no-server` | The console is not running | Run `console start` again (it keeps the queue's records) and tell the tester |
 | `not-this-server` | Another program answers on the console port | Relay the message and stop |
 | `session-refused` | Another Claude Code session is attached | Tell the tester; they can press "Release agent" in the console |
-| `session-replaced` | Another session took over, or the tester released this one | Stop working on the job; tell the tester |
+| `session-replaced` | Another session took over, or the tester released this one | Stop working on the job; tell the tester. This session id stays refused: run `console start` for a new one |
 | `transport` | The call was cut off | Call again once; if it repeats at a fixed interval, lower `--timeout` |
 | `bad-request` | The ask or parameters are not valid | Fix the file (the message says what) and call again |
 | `conflict`, `revision-moved` | The job is no longer open, or the report moved on | Leave the job; go back to `wait` |

@@ -11,6 +11,7 @@ from testign.console.server import ApiError
 STATES = ("queued", "offered", "running", "needs-input", "done", "failed", "cancelled")
 A = "s-aaaaaaaaaaaaaaaa"
 B = "s-bbbbbbbbbbbbbbbb"
+C = "s-cccccccccccccccc"
 
 
 class Clock:
@@ -212,9 +213,9 @@ def test_ask_answer_round_trip_with_edit(bridge):
     assert got["answers"]["rows"]["r1"]["decision"] == "Discount applies to 請求書 too"
     asked = bridge.jobs[job_id]["asked"][0]
     assert asked["answered_by"] == jobs.fingerprint("browser-token") and "browser-token" not in str(asked)
-    with pytest.raises(ApiError) as err:
-        bridge.ask(job_id, A, ROWS, 0)
-    assert err.value.code == "bad-request"
+    # Asking the same id again hands out the same answer (its first delivery may have hit a dead client).
+    assert bridge.ask(job_id, A, ROWS, 0) == got
+    assert bridge.jobs[job_id]["state"] == "running"
 
 
 def test_second_answer_to_the_same_ask_is_refused(bridge):
@@ -294,12 +295,16 @@ def test_takeover_rules(bridge, clock):
     clock.t += jobs.SILENT_NO_JOB
     assert bridge.wait(B, 0)["session"] == B
 
+    with pytest.raises(ApiError) as err:
+        bridge.wait(A, 0)
+    assert err.value.code == "session-replaced"
+
     job_id = running(bridge, B)
     clock.t += jobs.SILENT_NO_JOB
     with pytest.raises(ApiError):
-        bridge.wait(A, 0)
+        bridge.wait(C, 0)
     clock.t += jobs.SILENT_WITH_JOB
-    bridge.wait(A, 0)
+    bridge.wait(C, 0)
     assert bridge.jobs[job_id]["state"] == "failed" and bridge.jobs[job_id]["reason"] == "session-lost"
     with pytest.raises(ApiError) as err:
         bridge.progress(job_id, B, "still here")
@@ -403,3 +408,55 @@ def test_pruning_keeps_the_newest_finished_jobs(world, clock):
     b2 = jobs.Bridge(store, world.context(), clock=clock)
     b2.startup()
     assert len(b2.jobs) == jobs.KEEP_FINISHED
+
+
+def test_an_answer_sent_to_a_dead_call_can_be_fetched_again(live):
+    job_id = running(live)
+    out = {}
+    t = spawn(lambda: out.setdefault("first", live.ask(job_id, A, QUESTIONS, 30)))
+    time.sleep(0.3)
+    live.answer(job_id, {"ask_id": "q1", "answer": [{"selected": ["Paste"]}]}, "t")
+    t.join(5)
+    # The first call got the answer; pretend its client died and ask again with the same id.
+    assert live.ask(job_id, A, QUESTIONS, 0) == {"answers": [{"selected": ["Paste"]}]}
+
+
+def test_approval_is_withheld_once_the_job_is_closed_or_released(bridge):
+    job_id = running(bridge)
+    preview = {"pages": [{"name": "p", "exists": True, "updated": "x", "diff": "+a"}], "approval": "h1"}
+    bridge.ask(job_id, A, {"type": "confirm-diff", "id": "c1", "preview": preview}, 0)
+    bridge.answer(job_id, {"ask_id": "c1", "answer": {"confirm": True}}, "t")
+    assert bridge.approval(job_id, A) == {"approval": "h1"}
+    bridge.release()
+    with pytest.raises(ApiError) as err:
+        bridge.approval(job_id, A)
+    assert err.value.code == "session-replaced"
+    with pytest.raises(ApiError):
+        bridge.wait(A, 0)
+    assert bridge.wait(B, 0)["session"] == B
+
+
+def test_approval_is_none_after_done(bridge):
+    job_id = running(bridge)
+    preview = {"pages": [{"name": "p", "exists": True, "updated": "x", "diff": "+a"}], "approval": "h1"}
+    bridge.ask(job_id, A, {"type": "confirm-diff", "id": "c1", "preview": preview}, 0)
+    bridge.answer(job_id, {"ask_id": "c1", "answer": {"confirm": True}}, "t")
+    bridge.ask(job_id, A, {"type": "confirm-diff", "id": "c1", "preview": preview}, 0)
+    bridge.done(job_id, A, "done", None)
+    assert bridge.approval(job_id, A) == {"approval": None}
+
+
+def test_pruning_keeps_jobs_created_in_the_same_second_in_order(world, clock):
+    store = jobs.MemoryStore()
+    b = jobs.Bridge(store, world.context(), clock=clock)
+    b.startup()
+    ids = []
+    for _ in range(jobs.KEEP_FINISHED + 5):
+        job = close_job(b)
+        b.cancel(job["id"])
+        ids.append(job["id"])
+        b.jobs[job["id"]]["created_at"] = "2026-11-19T00:00:00+07:00"
+        store.save(b.jobs[job["id"]])
+    b2 = jobs.Bridge(store, world.context(), clock=clock)
+    b2.startup()
+    assert set(b2.jobs) == set(ids[-jobs.KEEP_FINISHED:])

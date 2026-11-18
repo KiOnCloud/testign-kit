@@ -76,7 +76,8 @@ def test_upload_detects_layout_and_previews(console):
     assert grid["rows"][0]["header"] is True and grid["rows"][0]["cells"][7] == "備考"
     assert len(grid["rows"]) <= 8
     assert {"letter": "H", "header": "備考", "role": "trace"} in grid["columns"]
-    assert grid["dropdowns"] and grid["dropdowns"][0]["range"].startswith("F5")
+    # An upload is read read-only and bounded, so merged ranges and dropdowns wait for registration.
+    assert grid["complete"] is False and grid["dropdowns"] == []
     stored = templates_api.uploads_dir(console.home) / data["upload"] / JA_NAME
     assert stored.exists()
 
@@ -113,6 +114,8 @@ def test_list_preview_default_and_remove(console):
 
     status, _, grid = call(console.port, "GET", "/api/templates/b/preview", headers=console.headers)
     assert status == 200 and grid["sheet"] == "テストケース" and grid["header_row"] == 4
+    assert grid["complete"] is True and grid["dropdowns"][0]["range"].startswith("F5")
+    assert grid["merged"] == ["A1:H1"]
 
     status, _, listing = post(console, "/api/templates/b/default", {})
     assert status == 200 and listing["default"] == "b"
@@ -244,3 +247,37 @@ def test_upload_preview_for_another_header_row(console):
     assert data["preview"]["rows"][0]["cells"][:2] == ["Case", "What to check"]
     assert post(console, f"/api/templates/uploads/{up['upload']}/preview", {"sheet": "Nope"})[0] == 400
     assert post(console, "/api/templates/uploads/zzz/preview", {})[0] == 404
+
+
+def _padded_bomb(sheet_size: int, padding: int) -> bytes:
+    """One huge, very compressible sheet hidden behind stored random padding."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("[Content_Types].xml", "<Types/>", compress_type=zipfile.ZIP_DEFLATED)
+        zf.writestr("xl/worksheets/sheet1.xml", b"<c>0</c>" * (sheet_size // 8), compress_type=zipfile.ZIP_DEFLATED)
+        zf.writestr("xl/media/pad.bin", os.urandom(padding), compress_type=zipfile.ZIP_STORED)
+    return buf.getvalue()
+
+
+def test_padding_does_not_hide_one_huge_sheet(console, monkeypatch):
+    def boom(*_a, **_k):
+        raise AssertionError("openpyxl must not open this file")
+
+    monkeypatch.setattr(templates, "detect_layout_bounded", boom)
+    status, _, data = upload(console, _padded_bomb(8 * 1024 * 1024, 2 * 1024 * 1024), name="padded.xlsx")
+    assert status == 400 and data["error"]["code"] == "zip-ratio"
+    monkeypatch.setattr(templates_api, "ENTRY_CAP", 1024 * 1024)
+    status, _, data = upload(console, _padded_bomb(4 * 1024 * 1024, 2 * 1024 * 1024), name="padded.xlsx")
+    assert status == 400 and data["error"]["code"] == "too-large-unzipped"
+
+
+def test_registration_from_the_console_reads_only_the_first_rows(console, monkeypatch):
+    def full_load(*_a, **_k):
+        raise AssertionError("registration of an upload must not fully load it")
+
+    up = upload(console, SHIPPED_SAMPLE.read_bytes())[2]
+    monkeypatch.setattr(templates, "detect_layout", full_load)
+    status, _, data = post(console, "/api/templates", {"upload": up["upload"], "name": "a", "sheet": "テストケース",
+                                                       "header_row": 4})
+    assert status == 200, data
+    assert data["template"]["columns"]["trace"] == "H"

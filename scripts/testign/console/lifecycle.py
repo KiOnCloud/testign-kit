@@ -390,15 +390,17 @@ def serve(home: Path | None = None, *, port: int | None = None, instance: str | 
     root = ensure_state_dirs(home)
     instance = instance or secrets.token_hex(8)
     state = srv.ConsoleState(version=version, agent_token="", home=home, log_path=root / LOG_FILE)
-    srv.install_base_routes(state)
-    install_routes(state)
-    if setup is not None:
-        setup(state)
     try:
         httpd = srv.ConsoleServer(port, state)
     except OSError:
         state.log.write("-", "bind", 0, "0ms", "port-busy")
         return 2
+    # Routes (and the job store, which fails open jobs of a dead server) only after the bind: a
+    # second server on a busy port must not touch the live server's records.
+    srv.install_base_routes(state)
+    install_routes(state)
+    if setup is not None:
+        setup(state)
     state.agent_token = secrets.token_urlsafe(32)
     bound_port = httpd.server_address[1]
     info = {

@@ -190,7 +190,17 @@ def detect_layout_bounded(path: Path, sheet: str | None = None, max_rows: int = 
         wb.close()
 
 
-def headers_at(path: Path, sheet: str, header_row: int) -> dict[str, str]:
+def headers_at(path: Path, sheet: str, header_row: int, *, bounded: bool = False) -> dict[str, str]:
+    if bounded:
+        wb = _openpyxl().load_workbook(path, read_only=True)
+        try:
+            if sheet not in wb.sheetnames:
+                raise TemplateError(f"sheet '{sheet}' not found; sheets: {', '.join(wb.sheetnames)}")
+            rows = _sheet_rows(wb[sheet], header_row)
+        finally:
+            wb.close()
+        values = rows[header_row - 1] if len(rows) >= header_row else ()
+        return {_col_letter(i): str(v) for i, v in enumerate(values, start=1) if v is not None}
     ws = _openpyxl().load_workbook(path)[sheet]
     return {c.column_letter: str(c.value) for c in ws[header_row] if c.value is not None}
 
@@ -211,11 +221,13 @@ def register(
     home: Path | None = None,
     *,
     source_name: str | None = None,
+    bounded: bool = False,
 ) -> dict[str, Any]:
     """Copy ``file`` into the registry under ``name`` with its column mapping.
 
     ``source_name`` is the file name recorded for the template (default: ``file``'s own name); the
-    console passes the name the tester uploaded.
+    console passes the name the tester uploaded. ``bounded`` reads only the first rows read-only, for
+    untrusted uploads.
     """
     file = Path(file).expanduser()
     if not file.exists():
@@ -226,12 +238,12 @@ def register(
     if name in data["templates"] and not replace:
         raise TemplateNameTaken(f"a template named '{name}' is already registered; pass --replace to update it")
 
-    layout = detect_layout(file, sheet)
+    layout = detect_layout_bounded(file, sheet) if bounded else detect_layout(file, sheet)
     if header_row:
         if not layout["sheet"]:
             raise TemplateError("pass --sheet together with --header-row when headers cannot be detected")
         layout["header_row"] = header_row
-        layout["headers"] = headers_at(file, layout["sheet"], header_row)
+        layout["headers"] = headers_at(file, layout["sheet"], header_row, bounded=bounded)
         layout["columns"] = {r: c for c, h in layout["headers"].items() if (r := _role_for(h))}
     columns = dict(layout["columns"])
     for role, letter in (overrides or {}).items():
@@ -379,29 +391,60 @@ def _grid_text(value: Any) -> str:
     return "" if value is None else str(value).replace("\r", "")
 
 
+FULL_LOAD_CAP = 5 * 1024 * 1024
+
+
+def _unzipped_size(path: Path) -> int:
+    import zipfile  # noqa: PLC0415
+
+    try:
+        with zipfile.ZipFile(path) as zf:
+            return sum(i.file_size for i in zf.infolist())
+    except (OSError, zipfile.BadZipFile):
+        return 0
+
+
 def preview_grid(path: Path, sheet: str | None = None, header_row: int | None = None,
-                 columns: dict[str, str] | None = None, rows: int = 8, max_cols: int = 12) -> dict[str, Any]:
+                 columns: dict[str, str] | None = None, rows: int = 8, max_cols: int = 12,
+                 *, full: bool | None = None) -> dict[str, Any]:
     """A template's layout as data for the console: header, a few rows, merged ranges, dropdowns.
 
-    Rows run from the header row (row 1 when there is none) for at most ``rows`` rows.
+    Rows run from the header row (row 1 when there is none) for at most ``rows`` rows. Merged ranges
+    and dropdowns need a full load; ``full=False`` (or a workbook over 5 MB unzipped when ``full`` is
+    None) reads only those rows read-only and leaves them out.
     """
-    wb = _openpyxl().load_workbook(path)
-    if sheet and sheet not in wb.sheetnames:
-        raise TemplateError(f"sheet '{sheet}' not found; sheets: {', '.join(wb.sheetnames)}")
-    sheet = sheet or wb.sheetnames[0]
-    ws = wb[sheet]
-    columns = columns or {}
-    last_col = min(ws.max_column, max_cols)
-    letters = [_col_letter(i) for i in range(1, last_col + 1)]
-    roles_by_letter = {letter: role for role, letter in columns.items()}
-    heads = {c.column_letter: c.value for c in ws[header_row]} if header_row else {}
-    first = header_row or 1
-    last = min(ws.max_row, first + rows - 1)
-    grid = [
-        {"row": r, "header": r == header_row,
-         "cells": [_grid_text(ws.cell(row=r, column=c).value) for c in range(1, last_col + 1)]}
-        for r in range(first, last + 1)
-    ]
+    if full is None:
+        full = _unzipped_size(Path(path)) <= FULL_LOAD_CAP
+    wb = _openpyxl().load_workbook(path, read_only=not full)
+    try:
+        if sheet and sheet not in wb.sheetnames:
+            raise TemplateError(f"sheet '{sheet}' not found; sheets: {', '.join(wb.sheetnames)}")
+        sheet = sheet or wb.sheetnames[0]
+        ws = wb[sheet]
+        columns = columns or {}
+        first = header_row or 1
+        values = [tuple(r) for r in ws.iter_rows(min_row=first, max_row=first + rows - 1, max_col=max_cols,
+                                                    values_only=True)]
+        width = max([len(v) for v in values] + [0]) if not full else min(ws.max_column, max_cols)
+        last_col = min(width, max_cols)
+        letters = [_col_letter(i) for i in range(1, last_col + 1)]
+        roles_by_letter = {letter: role for role, letter in columns.items()}
+        head_values = values[0] if header_row and values else ()
+        heads = {_col_letter(i): v for i, v in enumerate(head_values, start=1)}
+        grid = [
+            {"row": first + i, "header": first + i == header_row,
+             "cells": [_grid_text(v[c] if c < len(v) else None) for c in range(last_col)]}
+            for i, v in enumerate(values)
+        ]
+        merged = [str(m) for m in ws.merged_cells.ranges][:50] if full else []
+        dropdowns = [
+            {"range": str(dv.sqref), "formula": dv.formula1}
+            for dv in ws.data_validations.dataValidation if dv.type == "list"
+        ][:20] if full else []
+        size = {"rows": ws.max_row, "cols": ws.max_column}
+    finally:
+        if not full:
+            wb.close()
     return {
         "sheet": sheet,
         "sheets": list(wb.sheetnames),
@@ -412,10 +455,8 @@ def preview_grid(path: Path, sheet: str | None = None, header_row: int | None = 
             for letter in letters
         ],
         "rows": grid,
-        "size": {"rows": ws.max_row, "cols": ws.max_column},
-        "merged": [str(m) for m in ws.merged_cells.ranges][:50],
-        "dropdowns": [
-            {"range": str(dv.sqref), "formula": dv.formula1}
-            for dv in ws.data_validations.dataValidation if dv.type == "list"
-        ][:20],
+        "size": size,
+        "merged": merged,
+        "dropdowns": dropdowns,
+        "complete": bool(full),
     }

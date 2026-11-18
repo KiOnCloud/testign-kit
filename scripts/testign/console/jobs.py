@@ -442,6 +442,8 @@ class Bridge:
         self.offered_to: dict[str, int] = {}  # job id → held token it was offered to
         self.offered_at: dict[str, float] = {}
         self._token = 0
+        self._seq = 0
+        self.released: set[str] = set()  # sessions the tester released or another session took over
         self.closed = False
         self.on_change = on_change
 
@@ -457,11 +459,12 @@ class Bridge:
                     job["finished_at"] = now_iso()
                     self.store.save(job)
                 self.jobs[job["id"]] = job
+            self._seq = max([j.get("seq") or 0 for j in self.jobs.values()] + [0])
             self._prune()
 
     def _prune(self) -> None:
         finished = sorted((j for j in self.jobs.values() if j.get("state") in FINISHED),
-                          key=lambda j: j.get("created_at") or "", reverse=True)
+                          key=lambda j: (j.get("created_at") or "", j.get("seq") or 0), reverse=True)
         cutoff = datetime.now(timezone.utc).timestamp() - PRUNE_AGE
         for i, job in enumerate(finished):
             try:
@@ -584,6 +587,7 @@ class Bridge:
             "ui_lang": ui_lang,
             "report_lang": checked.get("report_lang"),
             "state": "queued",
+            "seq": 0,
             "created_at": now_iso(), "offered_at": None, "started_at": None, "finished_at": None,
             "session": None,
             "progress": [],
@@ -597,6 +601,8 @@ class Bridge:
         with self.cond:
             while job["id"] in self.jobs:
                 job["id"] = new_job_id()
+            self._seq += 1
+            job["seq"] = self._seq
             self.jobs[job["id"]] = job
             self._save(job)
             self._prune()
@@ -632,6 +638,7 @@ class Bridge:
                 else:
                     self._fail(job, "session-lost")
             self.attached = None
+            self.released.add(session)
             self._replace(session)
             self.change += 1
             self.cond.notify_all()
@@ -666,6 +673,8 @@ class Bridge:
     def _contact(self, session: Any) -> str:
         if not isinstance(session, str) or not _SESSION.match(session):
             raise bad("session id is missing or malformed")
+        if session in self.released:
+            raise ApiError(409, "session-replaced", "this session was released; start the console again")
         if self.attached is not None and session != self.attached:
             silence = self._silence() or 0.0
             job = self.open_job()
@@ -673,6 +682,7 @@ class Bridge:
             if silence < limit:
                 raise ApiError(409, "session-refused", "another Claude Code session is attached to the console")
             old = self.attached
+            self.released.add(old)
             if job is not None and job["session"] == old:
                 if job["state"] == "offered":
                     self._move(job, "queued", session=None, offered_at=None)
@@ -696,7 +706,7 @@ class Bridge:
         """Contact for calls other than ``wait``: the caller must be the attached session."""
         if not isinstance(session, str) or not _SESSION.match(session):
             raise bad("session id is missing or malformed")
-        if self.attached is not None and session != self.attached:
+        if session in self.released or (self.attached is not None and session != self.attached):
             raise ApiError(409, "session-replaced", "another session took over the console")
         return self._contact(session)
 
@@ -808,8 +818,12 @@ class Bridge:
         with self.cond:
             session, job = self._running(job_id, session)
             current = job.get("ask")
-            if any(a["id"] == clean["id"] for a in job["asked"]):
-                raise bad("this ask id was already answered; use a new id")
+            earlier = next((a for a in job["asked"] if a["id"] == clean["id"]), None)
+            if earlier is not None:
+                if earlier.get("outcome") == "answered":
+                    # The answer may have gone to a call whose client had died; hand it out again.
+                    return {"answers": earlier["answer"]}
+                raise bad("this ask id was closed without an answer; use a new id")
             if current is not None and current["id"] != clean["id"]:
                 raise bad("another question is still open on this job")
             if current is None:
@@ -867,6 +881,8 @@ class Bridge:
         with self.cond:
             session = self._agent(session)
             job = self._owned(job_id, session)
+            if job["state"] not in ("running", "needs-input"):
+                return {"approval": None}
             return {"approval": job.get("confirmed_approval")}
 
     def _agent_view(self, job: dict) -> dict:
@@ -959,7 +975,10 @@ def install(state, store=None) -> Bridge:
     def ticker() -> None:
         while not bridge.closed:
             time.sleep(1.0)
-            bridge.tick()
+            try:
+                bridge.tick()
+            except Exception:  # noqa: BLE001 - keep offering timeouts going; nothing goes to stderr
+                pass
 
     threading.Thread(target=ticker, daemon=True).start()
 

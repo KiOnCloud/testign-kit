@@ -23,7 +23,9 @@ from .server import ApiError, ConsoleState, Request
 
 UPLOAD_CAP = 10 * 1024 * 1024
 UNZIPPED_CAP = 200 * 1024 * 1024
+ENTRY_CAP = 20 * 1024 * 1024
 RATIO_CAP = 100
+RATIO_FLOOR = 64 * 1024  # entries smaller than this may compress better (empty styles, shared strings)
 UPLOAD_TTL = 3600.0
 SWEEP_EVERY = 3600.0
 RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
@@ -72,11 +74,12 @@ def check_zip(data: bytes) -> None:
     except (zipfile.BadZipFile, ValueError, OSError):
         raise ApiError(400, "not-a-workbook", "the file is not an Excel workbook") from None
     unzipped = sum(i.file_size for i in infos)
-    zipped = sum(i.compress_size for i in infos)
-    if unzipped > UNZIPPED_CAP:
-        raise ApiError(400, "too-large-unzipped", "the workbook expands past 200 MB")
-    if zipped and unzipped / zipped > RATIO_CAP:
-        raise ApiError(400, "zip-ratio", "the workbook compresses suspiciously well")
+    if unzipped > UNZIPPED_CAP or any(i.file_size > ENTRY_CAP for i in infos):
+        raise ApiError(400, "too-large-unzipped", "the workbook expands past the size limit")
+    for info in infos:
+        # Checked per entry: padding the zip with stored data must not hide one huge sheet.
+        if info.file_size > RATIO_FLOOR and info.file_size > RATIO_CAP * max(info.compress_size, 1):
+            raise ApiError(400, "zip-ratio", "the workbook compresses suspiciously well")
     if not any(i.filename == "[Content_Types].xml" for i in infos):
         raise ApiError(400, "not-a-workbook", "the file is not an Excel workbook")
 
@@ -132,7 +135,7 @@ def upload(home: Path | None, filename_header: str | None, data: bytes) -> dict:
     lifecycle.write_secure(path, data)
     try:
         layout = templates.detect_layout_bounded(path)
-        grid = templates.preview_grid(path, layout["sheet"], layout["header_row"], layout["columns"])
+        grid = templates.preview_grid(path, layout["sheet"], layout["header_row"], layout["columns"], full=False)
     except Exception:  # noqa: BLE001 - openpyxl raises many types for broken files
         shutil.rmtree(folder, ignore_errors=True)
         raise ApiError(400, "not-a-workbook", "the workbook cannot be read") from None
@@ -152,14 +155,14 @@ def upload_preview(home: Path | None, upload_id: str, sheet: str | None, header_
         layout = templates.detect_layout_bounded(path, sheet)
         if header_row:
             layout["header_row"] = header_row
-            grid = templates.preview_grid(path, layout["sheet"], header_row, None)
+            grid = templates.preview_grid(path, layout["sheet"], header_row, None, full=False)
             layout["headers"] = {c["letter"]: c["header"] for c in grid["columns"] if c["header"]}
             layout["columns"] = {}
             for letter, text in layout["headers"].items():
                 role = templates._role_for(text)
                 if role and role not in layout["columns"]:
                     layout["columns"][role] = letter
-        grid = templates.preview_grid(path, layout["sheet"], layout["header_row"], layout["columns"])
+        grid = templates.preview_grid(path, layout["sheet"], layout["header_row"], layout["columns"], full=False)
     except templates.TemplateError:
         raise ApiError(400, "template-error", "that sheet is not in the workbook") from None
     return {"upload": upload_id, "name": path.name, "sheets": layout.get("sheets", []),
@@ -185,7 +188,7 @@ def register(home: Path | None, body: dict) -> dict:
             entry = templates.register(
                 path, name.strip(), sheet=sheet, header_row=header_row, overrides=mapping,
                 make_default=bool(body.get("make_default")), replace=bool(body.get("replace")),
-                home=home, source_name=path.name,
+                home=home, source_name=path.name, bounded=True,
             )
         except templates.TemplateNameTaken:
             raise ApiError(409, "name-taken", "a template with this name is already registered") from None
@@ -206,9 +209,11 @@ def install(state: ConsoleState) -> None:
     lifecycle.ensure_state_dirs(home)
     sweep(home)
 
+    stopped = threading.Event()
+    state.shutdown_hooks.append(stopped.set)
+
     def sweeper() -> None:
-        while True:
-            time.sleep(SWEEP_EVERY)
+        while not stopped.wait(SWEEP_EVERY):
             sweep(home)
 
     threading.Thread(target=sweeper, daemon=True).start()

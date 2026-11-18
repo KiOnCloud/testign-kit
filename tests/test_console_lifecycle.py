@@ -262,3 +262,18 @@ def test_server_reads_config_without_creating_it(tmp_path):
     lifecycle.stop(home)
     thread.join(5)
     assert not config.config_path(home).exists()
+
+
+def test_second_serve_on_a_busy_port_leaves_the_live_servers_jobs_alone(home):
+    thread, holder = serve_in_thread(home)
+    info = lifecycle.read_server_json(home)
+    folder = lifecycle.console_dir(home) / "jobs"
+    record = {"id": "j20261119-000000-aaaa", "kind": "close", "ticket": "DEMO-1", "state": "queued", "ask": None,
+              "asked": [], "created_at": "2026-11-19T00:00:00+07:00", "finished_at": None, "reason": None}
+    lifecycle.write_secure(folder / f"{record['id']}.json", json.dumps(record))
+    assert lifecycle.serve(home, port=info["port"]) == 2
+    on_disk = json.loads((folder / f"{record['id']}.json").read_text(encoding="utf-8"))
+    assert on_disk["state"] == "queued"
+    assert lifecycle.read_server_json(home)["instance"] == info["instance"]
+    lifecycle.stop(home, force=True)
+    thread.join(5)
