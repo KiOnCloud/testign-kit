@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from . import config
+from . import config, fsutil
 
 ROLES = ["no", "item", "steps", "expected", "evidence", "trace"]
 REQUIRED_ROLES = ["item", "trace"]
@@ -36,6 +36,23 @@ HEADER_SCAN_ROWS = 30
 
 class TemplateError(Exception):
     """A template cannot be registered, found or read. The message is meant for the tester."""
+
+
+class TemplateNameTaken(TemplateError):
+    """A template with this name is already registered and ``replace`` was not asked for."""
+
+
+class TemplateMappingFailed(TemplateError):
+    """The columns could not be mapped; ``headers`` holds the header cells that were found."""
+
+    def __init__(self, message: str, headers: dict[str, str], missing: list[str]) -> None:
+        super().__init__(message)
+        self.headers = headers
+        self.missing = missing
+
+
+class TemplateFileClash(TemplateError):
+    """The stored file name of this template already belongs to another template."""
 
 
 def _openpyxl():
@@ -72,7 +89,7 @@ def load_index(home: Path | None = None) -> dict[str, Any]:
 def _save_index(data: dict[str, Any], home: Path | None = None) -> None:
     path = index_path(home)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    fsutil.atomic_write_bytes(path, (json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
 
 
 def _norm(value: Any) -> str:
@@ -102,6 +119,47 @@ def _col_index(letter: str) -> int:
         raise TemplateError(f"'{letter}' is not a column letter") from exc
 
 
+def _scan_layout(sheets: list[tuple[str, list[tuple]]]) -> dict[str, Any]:
+    """Pick sheet, header row and role mapping from the first rows (values only) of each sheet.
+
+    The header row is the first row that has a 備考/Remarks-like header. When no sheet has one, the
+    first sheet's row with the most text cells is guessed so the tester can map it.
+    """
+    for name, rows in sheets:
+        for number, values in enumerate(rows, start=1):
+            roles: dict[str, str] = {}
+            headers: dict[str, str] = {}
+            for col, value in enumerate(values, start=1):
+                if value is None:
+                    continue
+                letter = _col_letter(col)
+                headers[letter] = str(value)
+                role = _role_for(value)
+                if role and role not in roles:
+                    roles[role] = letter
+            if "trace" in roles:
+                return {"sheet": name, "header_row": number, "columns": roles, "headers": headers}
+    first_name, first_rows = sheets[0]
+    best, best_number, best_count = None, None, 1
+    for number, values in enumerate(first_rows, start=1):
+        count = sum(1 for v in values if isinstance(v, str) and v.strip())
+        if count > best_count:
+            best, best_number, best_count = values, number, count
+    if best is None:
+        return {"sheet": first_name, "header_row": None, "columns": {}, "headers": {}}
+    headers = {_col_letter(i): str(v) for i, v in enumerate(best, start=1) if v is not None}
+    roles = {}
+    for letter, text in headers.items():
+        role = _role_for(text)
+        if role and role not in roles:
+            roles[role] = letter
+    return {"sheet": first_name, "header_row": best_number, "columns": roles, "headers": headers}
+
+
+def _sheet_rows(ws, max_rows: int) -> list[tuple]:
+    return [tuple(row) for row in ws.iter_rows(min_row=1, max_row=max_rows, values_only=True)]
+
+
 def detect_layout(path: Path, sheet: str | None = None) -> dict[str, Any]:
     """Find the sheet, header row and role → column letter mapping by header names.
 
@@ -113,35 +171,23 @@ def detect_layout(path: Path, sheet: str | None = None) -> dict[str, Any]:
     for name in names:
         if name not in wb.sheetnames:
             raise TemplateError(f"sheet '{name}' not found; sheets: {', '.join(wb.sheetnames)}")
-        ws = wb[name]
-        for row in ws.iter_rows(min_row=1, max_row=min(ws.max_row, HEADER_SCAN_ROWS)):
-            roles: dict[str, str] = {}
-            headers: dict[str, str] = {}
-            for cell in row:
-                if cell.value is None:
-                    continue
-                headers[cell.column_letter] = str(cell.value)
-                role = _role_for(cell.value)
-                if role and role not in roles:
-                    roles[role] = cell.column_letter
-            if "trace" in roles:
-                return {"sheet": name, "header_row": row[0].row, "columns": roles, "headers": headers}
-    # No trace-like header anywhere: guess the row with the most text cells so the tester can map it.
-    ws = wb[names[0]]
-    best, best_count = None, 1
-    for row in ws.iter_rows(min_row=1, max_row=min(ws.max_row, HEADER_SCAN_ROWS)):
-        count = sum(1 for c in row if isinstance(c.value, str) and c.value.strip())
-        if count > best_count:
-            best, best_count = row, count
-    if best is None:
-        return {"sheet": names[0], "header_row": None, "columns": {}, "headers": {}}
-    headers = {c.column_letter: str(c.value) for c in best if c.value is not None}
-    roles = {}
-    for letter, text in headers.items():
-        role = _role_for(text)
-        if role and role not in roles:
-            roles[role] = letter
-    return {"sheet": names[0], "header_row": best[0].row, "columns": roles, "headers": headers}
+    return _scan_layout([(n, _sheet_rows(wb[n], min(wb[n].max_row, HEADER_SCAN_ROWS))) for n in names])
+
+
+def detect_layout_bounded(path: Path, sheet: str | None = None, max_rows: int = 50) -> dict[str, Any]:
+    """Like ``detect_layout`` for an untrusted upload: read-only, at most ``max_rows`` rows per sheet."""
+    wb = _openpyxl().load_workbook(path, read_only=True)
+    try:
+        names = [sheet] if sheet else wb.sheetnames
+        for name in names:
+            if name not in wb.sheetnames:
+                raise TemplateError(f"sheet '{name}' not found; sheets: {', '.join(wb.sheetnames)}")
+        scan = min(max_rows, HEADER_SCAN_ROWS)
+        layout = _scan_layout([(n, _sheet_rows(wb[n], scan)) for n in names])
+        layout["sheets"] = list(wb.sheetnames)
+        return layout
+    finally:
+        wb.close()
 
 
 def headers_at(path: Path, sheet: str, header_row: int) -> dict[str, str]:
@@ -163,8 +209,14 @@ def register(
     make_default: bool = False,
     replace: bool = False,
     home: Path | None = None,
+    *,
+    source_name: str | None = None,
 ) -> dict[str, Any]:
-    """Copy ``file`` into the registry under ``name`` with its column mapping."""
+    """Copy ``file`` into the registry under ``name`` with its column mapping.
+
+    ``source_name`` is the file name recorded for the template (default: ``file``'s own name); the
+    console passes the name the tester uploaded.
+    """
     file = Path(file).expanduser()
     if not file.exists():
         raise TemplateError(f"template file not found: {file}")
@@ -172,7 +224,7 @@ def register(
         raise TemplateError("only .xlsx and .xlsm templates are supported")
     data = load_index(home)
     if name in data["templates"] and not replace:
-        raise TemplateError(f"a template named '{name}' is already registered; pass --replace to update it")
+        raise TemplateNameTaken(f"a template named '{name}' is already registered; pass --replace to update it")
 
     layout = detect_layout(file, sheet)
     if header_row:
@@ -188,11 +240,13 @@ def register(
         columns[role] = _col_letter(_col_index(letter))
     missing = [r for r in REQUIRED_ROLES if r not in columns]
     if not layout["sheet"] or not layout["header_row"] or missing:
-        raise TemplateError(
+        raise TemplateMappingFailed(
             "could not map the template columns automatically"
             + (f" (missing: {', '.join(missing)})" if missing else "")
             + f". Headers found: {json.dumps(layout['headers'], ensure_ascii=False)}. "
-            "Pass --sheet, --header-row and --map role=COLUMN (roles: " + ", ".join(ROLES) + ")."
+            "Pass --sheet, --header-row and --map role=COLUMN (roles: " + ", ".join(ROLES) + ").",
+            headers=dict(layout["headers"]),
+            missing=missing,
         )
 
     folder = templates_dir(home)
@@ -200,12 +254,19 @@ def register(
     stored = folder / f"{_slug(name)}{file.suffix.lower()}"
     old = data["templates"].get(name)
     if stored.exists() and (not old or old["file"] != stored.name):
-        raise TemplateError(f"{stored} already exists for another template; choose another name")
-    shutil.copyfile(file, stored)
+        raise TemplateFileClash(f"{stored} already exists for another template; choose another name")
+    # Copy to a temporary sibling and replace in one step, so a replaced template is never half written.
+    tmp = fsutil.temp_sibling(stored)
+    try:
+        shutil.copyfile(file, tmp)
+        fsutil.replace_retry(tmp, stored)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
 
     entry = {
         "file": stored.name,
-        "source_name": file.name,
+        "source_name": source_name or file.name,
         "sheet": layout["sheet"],
         "header_row": layout["header_row"],
         "columns": {r: columns[r] for r in ROLES if r in columns},
@@ -312,3 +373,49 @@ def preview(path: Path, sheet: str | None = None, header_row: int | None = None,
     if dvs:
         out.append("**Dropdowns:** " + "; ".join(dvs[:10]))
     return "\n".join(out) + "\n"
+
+
+def _grid_text(value: Any) -> str:
+    return "" if value is None else str(value).replace("\r", "")
+
+
+def preview_grid(path: Path, sheet: str | None = None, header_row: int | None = None,
+                 columns: dict[str, str] | None = None, rows: int = 8, max_cols: int = 12) -> dict[str, Any]:
+    """A template's layout as data for the console: header, a few rows, merged ranges, dropdowns.
+
+    Rows run from the header row (row 1 when there is none) for at most ``rows`` rows.
+    """
+    wb = _openpyxl().load_workbook(path)
+    if sheet and sheet not in wb.sheetnames:
+        raise TemplateError(f"sheet '{sheet}' not found; sheets: {', '.join(wb.sheetnames)}")
+    sheet = sheet or wb.sheetnames[0]
+    ws = wb[sheet]
+    columns = columns or {}
+    last_col = min(ws.max_column, max_cols)
+    letters = [_col_letter(i) for i in range(1, last_col + 1)]
+    roles_by_letter = {letter: role for role, letter in columns.items()}
+    heads = {c.column_letter: c.value for c in ws[header_row]} if header_row else {}
+    first = header_row or 1
+    last = min(ws.max_row, first + rows - 1)
+    grid = [
+        {"row": r, "header": r == header_row,
+         "cells": [_grid_text(ws.cell(row=r, column=c).value) for c in range(1, last_col + 1)]}
+        for r in range(first, last + 1)
+    ]
+    return {
+        "sheet": sheet,
+        "sheets": list(wb.sheetnames),
+        "header_row": header_row,
+        "letters": letters,
+        "columns": [
+            {"letter": letter, "header": _grid_text(heads.get(letter)), "role": roles_by_letter.get(letter)}
+            for letter in letters
+        ],
+        "rows": grid,
+        "size": {"rows": ws.max_row, "cols": ws.max_column},
+        "merged": [str(m) for m in ws.merged_cells.ranges][:50],
+        "dropdowns": [
+            {"range": str(dv.sqref), "formula": dv.formula1}
+            for dv in ws.data_validations.dataValidation if dv.type == "list"
+        ][:20],
+    }

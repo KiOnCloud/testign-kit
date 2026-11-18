@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Read API and template management"
-status: pending
+status: done
 priority: P1
 effort: "3d"
 dependencies: [1]
@@ -25,25 +25,25 @@ config, and that register, list, preview, set default and remove templates throu
 
 ## Requirements
 
-- [ ] Every path segment (ticket, revision, workbook, template, cache entry) is matched against a listing the server built; none is joined into a path.
-- [ ] Tickets are folders under `output_dir` whose name fully matches `ticket_id_regex` and that hold at least one revision file. A revision counts only when its frontmatter `ticket` equals the folder name and its `revision` equals the number in its file name; others are listed as `inconsistent`. <!-- Red team 2026-11-18: planted files in ~/Downloads -->
-- [ ] A ticket whose latest revision cannot be read is listed with `error: "unreadable"`; one bad file never fails the listing. <!-- Red team 2026-11-18: report parsing robustness -->
-- [ ] No route writes outside `~/.testign-kit/console/` and `~/.testign-kit/templates/`; config is read with `load(create=False)`.
-- [ ] Report text is returned as data (strings); the server never returns HTML.
-- [ ] `/api/config` returns `output_dir`, `lang`, `master_ref`, `develop_ref`, `backlog.space`, `backlog.project_key`, `backlog.decisions_log_prefix`, and never an environment variable.
-- [ ] Hash checks: at most two run at the same time (semaphore); results cached for 60 seconds per report path; git runs only in a `repo` that is an absolute existing path for which `git -C <repo> rev-parse --git-dir` succeeds; any error becomes `{status: "unknown", reason}`; the server never fetches. <!-- Red team 2026-11-18: Windows git windows, untrusted repo paths -->
-- [ ] On Windows, `gitscope._git` passes `creationflags=CREATE_NO_WINDOW` (no change for the CLI elsewhere).
-- [ ] Trace needs a template: the route takes `template` (from the template list; default: the default template) and returns `{state: "no-template"}` when none is registered; it reports `header_match: false` with both header lists when the workbook's header row differs from the template's; a missing sheet becomes `TemplateError`, never a 500. The per-case result has no status column (no such role). <!-- Red team 2026-11-18: trace template binding -->
-- [ ] Template upload <!-- Red team 2026-11-18: non-ASCII names, source_name, zip bombs -->
+- [x] Every path segment (ticket, revision, workbook, template, cache entry) is matched against a listing the server built; none is joined into a path.
+- [x] Tickets are folders under `output_dir` whose name fully matches `ticket_id_regex` and that hold at least one revision file. A revision counts only when its frontmatter `ticket` equals the folder name and its `revision` equals the number in its file name; others are listed as `inconsistent`. <!-- Red team 2026-11-18: planted files in ~/Downloads -->
+- [x] A ticket whose latest revision cannot be read is listed with `error: "unreadable"`; one bad file never fails the listing. <!-- Red team 2026-11-18: report parsing robustness -->
+- [x] No route writes outside `~/.testign-kit/console/` and `~/.testign-kit/templates/`; config is read with `load(create=False)`.
+- [x] Report text is returned as data (strings); the server never returns HTML.
+- [x] `/api/config` returns `output_dir`, `lang`, `master_ref`, `develop_ref`, `backlog.space`, `backlog.project_key`, `backlog.decisions_log_prefix`, and never an environment variable.
+- [x] Hash checks: at most two run at the same time (semaphore); results cached for 60 seconds per report path; git runs only in a `repo` that is an absolute existing path for which `git -C <repo> rev-parse --git-dir` succeeds; any error becomes `{status: "unknown", reason}`; the server never fetches. <!-- Red team 2026-11-18: Windows git windows, untrusted repo paths -->
+- [x] On Windows, `gitscope._git` passes `creationflags=CREATE_NO_WINDOW` (no change for the CLI elsewhere).
+- [x] Trace needs a template: the route takes `template` (from the template list; default: the default template) and returns `{state: "no-template"}` when none is registered; it reports `header_match: false` with both header lists when the workbook's header row differs from the template's; a missing sheet becomes `TemplateError`, never a 500. The per-case result has no status column (no such role). <!-- Red team 2026-11-18: trace template binding -->
+- [x] Template upload <!-- Red team 2026-11-18: non-ASCII names, source_name, zip bombs -->
   - body `application/octet-stream`, at most 10 MB; name in `X-Filename: UTF-8''<percent-encoded>` (RFC 5987), decoded on the server;
   - extension `.xlsx` or `.xlsm`; first bytes `PK\x03\x04`; before openpyxl runs, `zipfile` totals: uncompressed at most 200 MB and compression ratio at most 100;
   - stored as `uploads/<id>/<original base name>`, rejecting only path separators, `..` and reserved device names;
   - layout detection for uploads reads at most the first 50 rows of each sheet with `iter_rows(max_row=…)`;
   - deleted after registration; swept when older than one hour at start and hourly.
-- [ ] `templates.register` gains a keyword-only `source_name: str | None = None` (default keeps today's behaviour); the console passes the original file name, so console and CLI produce the same `index.json` entry for the same file and name, including non-ASCII names.
-- [ ] `TemplateError` gains subclasses `TemplateNameTaken`, `TemplateMappingFailed`, `TemplateFileClash` (CLI output unchanged); the API maps them to 409, 400 (with headers found), 409.
-- [ ] Template changes from the server run under one process-wide lock; `_save_index` writes a temporary sibling then replaces it (retried on Windows `PermissionError`); `register(replace=True)` writes the new workbook to a temporary sibling and replaces the stored file in one step.
-- [ ] `templates.preview()` and its CLI output stay exactly as they are; the console uses a new `preview_grid()`. <!-- Red team 2026-11-18: preview regression -->
+- [x] `templates.register` gains a keyword-only `source_name: str | None = None` (default keeps today's behaviour); the console passes the original file name, so console and CLI produce the same `index.json` entry for the same file and name, including non-ASCII names.
+- [x] `TemplateError` gains subclasses `TemplateNameTaken`, `TemplateMappingFailed`, `TemplateFileClash` (CLI output unchanged); the API maps them to 409, 400 (with headers found), 409.
+- [x] Template changes from the server run under one process-wide lock; `_save_index` writes a temporary sibling then replaces it (retried on Windows `PermissionError`); `register(replace=True)` writes the new workbook to a temporary sibling and replaces the stored file in one step.
+- [x] `templates.preview()` and its CLI output stay exactly as they are; the console uses a new `preview_grid()`. <!-- Red team 2026-11-18: preview regression -->
 
 ## Routes
 

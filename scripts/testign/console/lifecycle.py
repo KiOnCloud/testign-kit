@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from .. import __version__, config
+from .. import __version__, config, fsutil
 from . import server as srv
 
 CONSOLE_DIR_NAME = "console"
@@ -60,32 +60,7 @@ def ensure_state_dirs(home: Path | None = None) -> Path:
 
 def write_secure(path: Path, data: bytes | str) -> None:
     """Write ``data`` with mode 0600 to a fresh temporary sibling, then replace ``path``."""
-    if isinstance(data, str):
-        data = data.encode("utf-8")
-    tmp = path.with_name(f".{path.name}.{secrets.token_hex(6)}.tmp")
-    fd = os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0), 0o600)
-    try:
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(data)
-        replace_retry(tmp, path)
-    except BaseException:
-        try:
-            tmp.unlink()
-        except OSError:
-            pass
-        raise
-
-
-def replace_retry(src: Path, dst: Path, attempts: int = 20) -> None:
-    """``os.replace``, retried briefly while another process holds ``dst`` open on Windows."""
-    for i in range(attempts):
-        try:
-            os.replace(src, dst)
-            return
-        except PermissionError:
-            if os.name != "nt" or i == attempts - 1:
-                raise
-            time.sleep(0.05)
+    fsutil.atomic_write_bytes(path, data.encode("utf-8") if isinstance(data, str) else data, mode=0o600)
 
 
 def read_server_json(home: Path | None = None) -> dict | None:
@@ -389,6 +364,14 @@ def stop(home: Path | None = None, *, force: bool = False) -> dict:
 
 
 # the server process ---------------------------------------------------------------------------
+def install_routes(state: srv.ConsoleState) -> None:
+    """Every route group beyond the base routes: read API and template management."""
+    from . import readapi, templates_api  # noqa: PLC0415 - they import this module
+
+    readapi.install(state)
+    templates_api.install(state)
+
+
 def serve(home: Path | None = None, *, port: int | None = None, instance: str | None = None,
           mode: str = "detached", version: str = __version__, idle_minutes: float | None = None,
           ready: Callable[[srv.ConsoleState], None] | None = None,
@@ -401,6 +384,7 @@ def serve(home: Path | None = None, *, port: int | None = None, instance: str | 
     instance = instance or secrets.token_hex(8)
     state = srv.ConsoleState(version=version, agent_token="", home=home, log_path=root / LOG_FILE)
     srv.install_base_routes(state)
+    install_routes(state)
     if setup is not None:
         setup(state)
     try:

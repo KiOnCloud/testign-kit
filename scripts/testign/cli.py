@@ -202,14 +202,11 @@ def _cmd_xlsx_fill(args: argparse.Namespace) -> int:
 
 def _cmd_trace(args: argparse.Namespace) -> int:
     entry, _ = _layout(args)
-    meta, body = report.load(args.report)
-    rows = report.behavior_rows(body) + report.regression_rows(body)
-    sheet = xlsx.pick_sheet(Path(args.xlsx), entry, args.sheet)
-    cases = xlsx.read_trace(Path(args.xlsx), entry, sheet)
-    summary = trace.summarize(rows, cases)
+    found = trace.trace_for(Path(args.report), Path(args.xlsx), entry, args.sheet)
+    sheet, summary = found["sheet"], found["summary"]
     result = {"report": args.report, "xlsx": args.xlsx, "sheet": sheet, **summary}
     if args.write_revision:
-        new_body = report.replace_section(body, 7, trace.section7(summary, Path(args.xlsx).name, sheet))
+        new_body = report.replace_section(found["body"], 7, trace.section7(summary, Path(args.xlsx).name, sheet))
         result["revision"] = str(report.write_revision(Path(args.report), new_body))
     return _emit(result)
 

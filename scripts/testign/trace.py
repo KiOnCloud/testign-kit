@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from . import report, xlsx
+
 
 def gaps(report_rows: list[dict], cases: list[dict]) -> list[str]:
     """Report rows that need a case (deviation or impact) but no case traces to them."""
@@ -30,6 +34,19 @@ def summarize(report_rows: list[dict], cases: list[dict]) -> dict:
         "orphans": orphans(report_rows, cases),
         "waiting": [{"case": c, "questions": q} for c, q in waiting(cases)],
     }
+
+
+def trace_for(report_path: Path, xlsx_path: Path, layout: dict, sheet: str | None = None) -> dict:
+    """Read a report and a filled workbook and return the trace; nothing is written.
+
+    Returns ``sheet``, ``summary`` (as ``summarize``), ``cases`` (as ``xlsx.read_trace``) and the
+    report ``meta`` and ``body`` so a caller can write section 7 itself.
+    """
+    meta, body = report.load(report_path)
+    rows = report.behavior_rows(body) + report.regression_rows(body)
+    picked = xlsx.pick_sheet(Path(xlsx_path), layout, sheet)
+    cases = xlsx.read_trace(Path(xlsx_path), layout, picked)
+    return {"sheet": picked, "summary": summarize(rows, cases), "cases": cases, "meta": meta, "body": body}
 
 
 def section7(summary: dict, workbook_name: str, sheet: str) -> str:

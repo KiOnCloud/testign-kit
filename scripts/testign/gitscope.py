@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from pathlib import PurePosixPath
 from typing import Iterable
 
@@ -22,7 +23,10 @@ class GitError(Exception):
 def _git(repo: str, *args: str, ok_codes: tuple[int, ...] = (0,)) -> str:
     cmd = ["git", "--no-pager", "-C", str(repo), "-c", "core.quotepath=off", *args]
     try:
-        proc = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace")
+        # On Windows a console program started from a process without a visible console (the
+        # console server) would open a window; CREATE_NO_WINDOW keeps git hidden.
+        flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        proc = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", creationflags=flags)
     except FileNotFoundError as exc:
         raise GitError("git is not installed or not on PATH") from exc
     if proc.returncode not in ok_codes:

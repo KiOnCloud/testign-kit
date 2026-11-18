@@ -237,3 +237,17 @@ def test_cli_first_run_register_fill_trace(tmp_path):
     result = json.loads(proc.stdout)
     assert result["gaps"] == ["R2"] and result["orphans"] == []
     assert Path(result["revision"]).name == "DEMO-1-survey-r2.md"
+
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+
+
+def test_template_preview_output_is_pinned(tmp_path):
+    """template-preview prints exactly what it printed before the console added preview_grid."""
+    home = tmp_path / "home"
+    assert run_cli("template-register", "--file", str(SHIPPED_SAMPLE), "--name", "mẫu", home=home).returncode == 0
+    proc = run_cli("template-preview", home=home)
+    assert proc.returncode == 0
+    assert proc.stdout == (FIXTURES / "template-preview-golden.md").read_text(encoding="utf-8")
+    proc = run_cli("template-preview", "--file", str(SHIPPED_SAMPLE), home=home)
+    assert proc.stdout == (FIXTURES / "template-preview-file-golden.md").read_text(encoding="utf-8")

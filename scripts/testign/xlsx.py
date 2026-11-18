@@ -153,7 +153,10 @@ def pick_sheet(path: Path, layout: dict, sheet: str | None = None) -> str:
 def read_trace(path: Path, layout: dict, sheet: str | None = None) -> list[dict]:
     """Test case rows of a filled workbook with the B*/R* and Q IDs found in the trace column."""
     name = pick_sheet(path, layout, sheet)
-    ws = _openpyxl().load_workbook(path, data_only=True)[name]
+    wb = _openpyxl().load_workbook(path, data_only=True)
+    if name not in wb.sheetnames:
+        raise TemplateError(f"sheet '{name}' not found in {Path(path).name}; sheets: {', '.join(wb.sheetnames)}")
+    ws = wb[name]
     cols = {role: _col_index(letter) for role, letter in layout["columns"].items()}
     cases = []
     for r in range(layout["header_row"] + 1, ws.max_row + 1):

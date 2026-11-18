@@ -106,6 +106,32 @@ def section(body: str, number: int) -> str:
     return m.group(1) if m else ""
 
 
+def title(body: str) -> str:
+    """The report's H1 without the leading ``# ``; empty when there is none."""
+    m = re.search(r"^# (.+?)\s*$", body, flags=re.M)
+    return m.group(1) if m else ""
+
+
+_CONCLUSION_LINE = re.compile(
+    r"^\s*[-*]\s*\*\*(?:Kết luận|結論|Conclusion)\s*[:：]?\s*\*\*\s*[:：]?(.*)$", flags=re.M | re.I
+)
+_CONCLUSIONS = (("🔴", "needs-qa"), ("🟡", "open"), ("🟢", "clear"))
+
+
+def conclusion(body: str) -> str:
+    """Section 1's conclusion: ``needs-qa`` (🔴), ``open`` (🟡), ``clear`` (🟢) or ``unknown``.
+
+    Only the line labelled Kết luận, 結論 or Conclusion is read, so severity marks on other lines
+    never count.
+    """
+    m = _CONCLUSION_LINE.search(section(body, 1))
+    if not m:
+        return "unknown"
+    text = m.group(1)
+    hits = [(text.find(mark), value) for mark, value in _CONCLUSIONS if mark in text]
+    return min(hits)[1] if hits else "unknown"
+
+
 def table_rows(text: str) -> list[list[str]]:
     """Data rows of the Markdown tables in ``text`` (header and separator rows skipped)."""
     rows, header_seen = [], False

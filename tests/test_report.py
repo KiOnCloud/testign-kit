@@ -131,3 +131,18 @@ def test_report_path_cli(tmp_path):
     res = json.loads(run_cli("report-path", "--ticket", "DEMO-9", home=home).stdout)
     assert res["latest"] is None
     assert Path(res["next"]) == tmp_path / "out" / "DEMO-9" / "DEMO-9-survey-r1.md"
+
+
+@pytest.mark.parametrize("lang,expected", [("vi", "open"), ("ja", "needs-qa"), ("en", "clear")])
+def test_conclusion_reads_only_the_labelled_line(tmp_path, lang, expected):
+    path = write_report(tmp_path, tmp_path, "d" * 40, "b" * 40, lang=lang)
+    _, body = report.load(path)
+    assert report.conclusion(body) == expected
+    assert report.title(body) == "[DEMO-1] Survey report — 注文確定"
+
+
+def test_conclusion_unknown_without_the_line():
+    body = "# T\n\n## 1. Tóm tắt\n\n- **Finding:** 🔴 1 Blocking\n\n## 2. X\n\n- **Kết luận:** 🟢 Clear\n"
+    assert report.conclusion(body) == "unknown"
+    assert report.conclusion("## 1. Tóm tắt\n- **Kết luận:** <placeholder>\n") == "unknown"
+    assert report.title("no heading") == ""

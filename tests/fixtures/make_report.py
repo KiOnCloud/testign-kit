@@ -10,6 +10,8 @@ BODY = """
 ## 1. Tóm tắt
 
 - **Ticket thay đổi gì:** Trừ giảm giá khi tính tổng tiền.
+- **Finding:** 🔴 0 Blocking · 🟠 1 Major · 🟡 0 Minor
+{conclusion}
 
 ---
 
@@ -77,13 +79,22 @@ BODY = """
 """
 
 
-def write_report(folder: Path, repo: Path, develop_head: str, merge_base: str, revision: int = 1) -> Path:
+# The conclusion line comes after a severity line with other colour marks on purpose.
+CONCLUSIONS = {
+    "vi": "- **Kết luận:** 🟡 Viết được, còn điểm mở",
+    "ja": "- **結論：** 🔴 QA回答待ち",
+    "en": "- **Conclusion:** 🟢 Clear",
+}
+
+
+def write_report(folder: Path, repo: Path, develop_head: str, merge_base: str, revision: int = 1,
+                 lang: str = "vi", ticket: str = "DEMO-1") -> Path:
     folder.mkdir(parents=True, exist_ok=True)
-    path = folder / f"DEMO-1-survey-r{revision}.md"
+    path = folder / f"{ticket}-survey-r{revision}.md"
     front = "\n".join(
         [
             "---",
-            "ticket: DEMO-1",
+            f"ticket: {ticket}",
             f"repo: {repo.as_posix()}",
             "master_ref: master",
             "develop_ref: develop",
@@ -92,10 +103,11 @@ def write_report(folder: Path, repo: Path, develop_head: str, merge_base: str, r
             f"revision: {revision}",
             "previous: null",
             "plugin_version: 0.1.0",
-            "lang: vi",
+            f"lang: {lang}",
             "generated_at: 2026-01-01T00:00:00+00:00",
             "---",
         ]
     )
-    path.write_text(front + "\n" + BODY, encoding="utf-8", newline="\n")
+    body = BODY.replace("{conclusion}", CONCLUSIONS[lang])
+    path.write_text(front + "\n" + body, encoding="utf-8", newline="\n")
     return path

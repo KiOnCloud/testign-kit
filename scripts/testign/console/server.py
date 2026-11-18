@@ -69,11 +69,12 @@ KNOWN_METHODS = ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")
 class ApiError(Exception):
     """An error answered as ``{error: {code, message}}``. Messages never hold customer text."""
 
-    def __init__(self, status: int, code: str, message: str = "") -> None:
+    def __init__(self, status: int, code: str, message: str = "", details: dict | None = None) -> None:
         super().__init__(message or code)
         self.status = status
         self.code = code
         self.message = message or code
+        self.details = details
 
 
 @dataclass
@@ -293,8 +294,11 @@ def _host_name(host: str) -> str | None:
     return name
 
 
-def _error_body(code: str, message: str) -> dict:
-    return {"error": {"code": code, "message": message}}
+def _error_body(code: str, message: str, details: dict | None = None) -> dict:
+    error: dict[str, Any] = {"code": code, "message": message}
+    if details:
+        error["details"] = details
+    return {"error": error}
 
 
 class ConsoleHandler(BaseHTTPRequestHandler):
@@ -355,7 +359,7 @@ class ConsoleHandler(BaseHTTPRequestHandler):
             status, code = exc.status, exc.code
             # The body may be unread; never reuse this connection.
             self.close_connection = True
-            self._send(Response(exc.status, _error_body(exc.code, exc.message)), head=method == "HEAD")
+            self._send(Response(exc.status, _error_body(exc.code, exc.message, exc.details)), head=method == "HEAD")
         except (ConnectionError, socket.timeout):
             status, code = 499, "client-gone"
             self.close_connection = True

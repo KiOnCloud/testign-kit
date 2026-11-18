@@ -72,7 +72,7 @@ per-user plugin. Approved mockup: https://claude.ai/artifact/FbwXMaek4XshNT2nPdp
 | Phase | Name | Status |
 |-------|------|--------|
 | 1 | [Console server and lifecycle](./phase-01-console-server-and-lifecycle.md) | Done (macOS spike pending) |
-| 2 | [Read API and template management](./phase-02-read-api-and-template-management.md) | Pending |
+| 2 | [Read API and template management](./phase-02-read-api-and-template-management.md) | Done |
 | 3 | [Console UI shell, i18n and screens](./phase-03-console-ui-shell-i18n-and-screens.md) | Pending |
 | 4 | [Job queue and agent bridge](./phase-04-job-queue-and-agent-bridge.md) | Pending |
 | 5 | [Jobs and Close review screens](./phase-05-jobs-and-close-review-screens.md) | Pending |
