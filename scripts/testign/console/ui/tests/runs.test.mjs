@@ -6,8 +6,9 @@ import { checkRunForm, hostOf, templateChoices } from '../views/run-form.mjs';
 import {
   checkParkAnswer, currentEvidence, fileName, filterCases, parkAnswerBody, progressOf, render as renderRun,
 } from '../views/run.mjs';
-import { activeJob, countGroups, fromChat, reviewJob, sourceLabel } from '../views/runs.mjs';
-import { byData, DICTS, fakeContext, translator } from './web-helpers.mjs';
+import { activeJob, countGroups, countStrip, fromChat, reviewJob, sourceLabel } from '../views/runs.mjs';
+import { installFakeDocument } from './fake-dom.mjs';
+import { byData, DICTS, fakeContext, translator, walk } from './web-helpers.mjs';
 
 const PROJECTS = [{ name: 'demo', hosts: ['dev.example.test'], signin_hosts: [] }];
 const FIGMA = 'https://www.figma.com/design/AbCdEfGhIjKl/Change-table?node-id=12-34';
@@ -48,6 +49,20 @@ test('count groups fold the tester\'s verdicts into Pass and Fail', () => {
     { state: 'self-run', result: null }];
   const groups = Object.fromEntries(countGroups(counts, cases).map((g) => [g.key, g.n]));
   assert.deepEqual(groups, { pass: 3, fail: 2, tester: 1, manual: 2, needs_you: 2, not_run: 2 });
+});
+
+test('the count strip is one line of icon and number per state, with the state name as text', () => {
+  installFakeDocument();
+  const strip = countStrip(translator('en'), { pass: 4, fail: 3, manual: 8, 'not-run': 30 });
+  assert.match(strip.getAttribute('class'), /count-strip/);
+  const items = byData(strip, 'count');
+  assert.deepEqual(items.map((el) => el.dataset.count), ['pass', 'fail', 'manual', 'not_run']);
+  for (const el of items) {
+    assert.equal(walk(el).filter((c) => c.tagName.toLowerCase() === 'svg').length, 1);
+    assert.ok(walk(el).some((c) => /sr-only/.test(c.getAttribute('class') || '')));
+  }
+  assert.equal(items[0].getAttribute('title'), `${DICTS.en.wt_count_pass} 4`);
+  assert.equal(items[3].textContent, `${DICTS.en.wt_count_not_run}30`);
 });
 
 test('job helpers find the open job, the review table and jobs queued from the chat', () => {
@@ -144,4 +159,19 @@ test('web job kinds read as words, not as their ids', async () => {
   assert.equal(kindLabel(t, 'webtest-run'), DICTS.en.job_kind_webtest_run);
   assert.equal(kindLabel(t, 'webtest-plan'), DICTS.en.job_kind_webtest_plan);
   assert.equal(kindLabel(t, 'close'), DICTS.en.job_kind_close);
+});
+
+test('the row panel closes from its close button', async () => {
+  const run = runWith(3);
+  const row = run.cases[0].row;
+  const { ctx, view, ready } = fakeContext({ run: async () => run, runImage: async () => 'data:image/png;base64,' }, { route: { params: { run: run.id }, query: { row } } });
+  renderRun(ctx);
+  await ready;
+  const [close] = byData(view, 'closeRow');
+  assert.ok(close, 'the open row panel has a close button');
+  assert.equal(close.getAttribute('aria-label'), DICTS.en.report_close_detail);
+  close.listeners.click[0]();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(byData(view, 'closeRow'), []);
+  assert.equal(walk(view).filter((el) => el.tagName === 'ASIDE').length, 0);
 });

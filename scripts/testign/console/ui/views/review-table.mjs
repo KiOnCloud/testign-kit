@@ -220,7 +220,7 @@ const drafts = new Map();
 export function render(ctx) {
   const { t, route } = ctx;
   const jobId = route.params.job;
-  const body = h('div.page');
+  const body = h('div.page.page-wide');
   mount(ctx.view, body);
   ctx.topbar(breadcrumb(t, [{ label: t('nav_jobs'), href: href(['jobs']) }, { label: t('job_kind_webtest_plan'), href: href(['jobs', jobId]) },
     { label: t('rt_crumb') }]), spacer(), badge(t('rt_nothing_runs'), 'warning'));
@@ -416,11 +416,11 @@ function drawTable(ctx, body, job, ask, state) {
         h('td', selectEl(`rt-class-${line.row}`, CLASSES.map((c) => [c, t(`wt_class_${c.replace(/-/g, '_')}`)]), f.class, (v) => set('class', v, true), t('rt_col_class'))),
         h('td', selectEl(`rt-runner-${line.row}`, RUNNERS.map((r) => [r, t(`wt_runner_${r}`)]), f.runner, (v) => set('runner', v, true), t('rt_col_runner'))),
         h('td', selectEl(`rt-scenario-${line.row}`, scenarioOptions, f.scenario || '', (v) => set('scenario', v || null, true), t('rt_col_scenario'))),
-        h('td.stack-4', [
+        h('td', h('div.stack-4', [
           selectEl(`rt-viewport-${line.row}`, VIEWPORTS.map((v) => [v, t(`wt_viewport_${v}`)]), f.viewport, (v) => set('viewport', v, true), t('wt_field_viewport')),
           f.mobile_method ? selectEl(`rt-mobile-${line.row}`, MOBILE_METHODS.map((m) => [m, t(`wt_mobile_${m}`)]), f.mobile_method,
             (v) => set('mobile_method', v, true), t('wt_field_mobile_method')) : null,
-        ]),
+        ])),
         h('td.rt-pre', [pre, needsPre ? h('span.k-note.block', t('rt_precond_required')) : null]),
       ]);
     });

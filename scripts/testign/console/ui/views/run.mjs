@@ -9,9 +9,11 @@ import { askBody } from '../markdown.mjs';
 import { href } from '../router.mjs';
 import { askTesterName, jobErrorText, queueJob } from './job-actions.mjs';
 import { signInCard } from './login.mjs';
-import { activeJob, classBadge, countBadges, fromChat, NEEDS_YOU, reviewJob, rowStateBadge } from './runs.mjs';
+import { activeJob, classBadge, countStrip, fromChat, NEEDS_YOU, reviewJob, rowStateBadge } from './runs.mjs';
 import { mobileMethod } from './review-table.mjs';
-import { badge, banner, breadcrumb, emptyState, errorState, loading, openDialog, pageHead, radioGroup, spacer } from './shell.mjs';
+import {
+  badge, banner, breadcrumb, emptyState, errorState, loading, openDialog, pageHead, pushEscape, radioGroup, spacer,
+} from './shell.mjs';
 
 const PARK_ACTIONS = ['delegate', 'self-run', 'skip'];
 const FINAL = new Set(['pass', 'fail', 'manual', 'not-applicable', 'self-run', 'not-run']);
@@ -60,7 +62,7 @@ let filter = 'all';
 export function render(ctx) {
   const { t, route } = ctx;
   const runId = route.params.run;
-  const body = h('div.page');
+  const body = h('div.page.page-wide');
   mount(ctx.view, body);
   const crumbs = (name) => ctx.topbar(breadcrumb(t, [{ label: t('nav_runs'), href: href(['runs']) }, { label: name || runId }]),
     spacer());
@@ -68,6 +70,7 @@ export function render(ctx) {
   mount(body, loading(t, 5));
   let selected = route.query && route.query.row ? route.query.row : null;
   let lastKey = null;
+  let popEscape = null;
 
   const load = async () => {
     let run;
@@ -128,7 +131,7 @@ export function render(ctx) {
       h('div.stack-4.run-progress-box', [
         h('div.row-8', [h('span.k-section-label', t('run_progress')), h('span.k-note.num.push-right', `${done} / ${total}`)]),
         h('progress.run-progress', { value: String(done), max: String(Math.max(total, 1)), 'aria-label': t('run_progress') }),
-        h('div.row-4.wrap', countBadges(t, run.counts, run.cases)),
+        h('div.scroll-x', countStrip(t, run.counts, run.cases)),
       ]),
     ]);
     const notices = [];
@@ -173,13 +176,15 @@ export function render(ctx) {
       }, [
         h('td.k-id', c.row),
         h('td.wrap-cell.run-content', c.content || NONE),
-        h('td.wrap-cell', c.screen && c.screen.url ? h('code.k-mono.break', c.screen.url) : h('span.k-muted', t('run_no_screen'))),
+        h('td.wrap-cell.run-screen', c.screen && c.screen.url ? h('code.k-mono.break', c.screen.url) : h('span.k-muted', t('run_no_screen'))),
         h('td', classBadge(t, c.class)),
         h('td', c.scenario || NONE),
         h('td', [rowStateBadge(t, c.state, c.not_run_reason), c.answer || c.tester_result ? h('span.k-note.block', t('run_answer_pending')) : null]),
       ]))),
     ]))) : emptyState(filter === 'all' ? t('run_no_rows') : t('run_no_rows_filter'));
     const current = (run.cases || []).find((c) => c.row === selected);
+    if (popEscape) { popEscape(); popEscape = null; }
+    if (current) popEscape = pushEscape(() => select(current.row));
     mount(body, head, meta, notices.length ? h('div.stack-8', notices) : null, exportsList,
       h('div.k-split.split-flex', [
         h('div.k-split__main.split-main.stack-8', [h('div.k-toolbar.toolbar-wrap', h('div.k-toolbar__group', tabs)), table]),
@@ -188,7 +193,7 @@ export function render(ctx) {
           lastKey = null;
           ctx.pollNow();
           load();
-        })) : null,
+        }, () => select(current.row))) : null,
       ]));
   }
 
@@ -264,7 +269,7 @@ function textBlock(label, text) {
   return h('div.stack-4', [h('span.k-section-label', label), h('p.pre-wrap.panel-text', text)]);
 }
 
-export function rowPanel(ctx, run, c, onSent) {
+export function rowPanel(ctx, run, c, onSent, onClose) {
   const { t } = ctx;
   const evidence = currentEvidence(c);
   const method = mobileMethod(c.viewport, c.mobile_method);
@@ -303,8 +308,10 @@ export function rowPanel(ctx, run, c, onSent) {
   return [
     h('div.k-split__panel-head.panel-head-wrap', [
       h('span.k-id', c.row),
-      h('span.ellipsis', { id: 'run-row-title', tabindex: '-1' }, c.content || c.row),
-      h('span.push-right', rowStateBadge(t, c.state, c.not_run_reason)),
+      h('span.ellipsis.run-panel-title', { id: 'run-row-title', tabindex: '-1' }, c.content || c.row),
+      h('span.row-4.nowrap.push-right', [rowStateBadge(t, c.state, c.not_run_reason),
+        onClose ? h('button.k-btn.k-btn--icon.k-btn--xs', { type: 'button', 'aria-label': t('report_close_detail'), dataset: { closeRow: c.row },
+          on: { click: onClose } }, icon('close')) : null]),
     ]),
     h('div.panel-body.stack-16', parts),
   ];
