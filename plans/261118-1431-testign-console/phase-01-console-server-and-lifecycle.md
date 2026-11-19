@@ -36,7 +36,7 @@ continue; if neither mode works, stop and replan. <!-- Updated: Validation Sessi
 Windows and macOS machines to the session through Remote Control; Claude runs the spike there
 and writes the report.
 
-**Result so far:** Windows passed in detached mode on 2026-11-18 (`reports/spike-windows-2026-11-18.md`): breakaway allowed, no git window, browser opened. macOS still to run. <!-- Updated: 2026-11-18 - user decision --> The user chose to start implementation now and run the macOS spike on 2026-11-19; until then macOS uses the POSIX path (`start_new_session=True`), and the fallback mode is applied on macOS only if that run fails.
+**Result:** both platforms pass in detached mode. Windows on 2026-11-18 (`reports/spike-windows-2026-11-18.md`): breakaway allowed, no git window, browser opened. macOS on 2026-11-19 (`reports/spike-macos-2026-11-19.md`): the `start_new_session=True` child survived across separate Bash calls (95.8 s, then stopped on purpose), no window from git, and the real `console start` reused its server as designed. The fallback mode is not used on either platform.
 
 **Fallback mode (designed now):** `console serve --foreground` run through the harness's
 background mode. It is still one server per user (same `server.json`, same reuse rule); it
