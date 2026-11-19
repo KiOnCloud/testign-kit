@@ -5,7 +5,7 @@
 import { h, icon, mount } from '../dom.mjs';
 import { NONE, timeOrDay } from '../format.mjs';
 import { href } from '../router.mjs';
-import { jobErrorText } from './job-actions.mjs';
+import { jobErrorText, tooNewNotice } from './job-actions.mjs';
 import { hostOf } from './run-form.mjs';
 import { badge, banner, emptyState, errorState, loading, openDialog, pageHead, spacer, topbarTitle } from './shell.mjs';
 
@@ -50,6 +50,13 @@ export function signInCard(ctx, job) {
   const ask = job.ask;
   const list = ask.checklist || {};
   const prev = ask.previous;
+  if (job.can_answer === false) {
+    return h('section.k-card.signin-card.stack-12', { 'aria-labelledby': `signin-${ask.id}`, dataset: { signInCard: ask.id } }, [
+      h('div.row-8', [icon('key'), h('h2.panel-title.flush', { id: `signin-${ask.id}` },
+        t('login_ask_title', { label: list.label || ask.scenario }))]),
+      tooNewNotice(t),
+    ]);
+  }
   const errorBox = h('div', { role: 'alert' });
   const send = async (choice, button) => {
     button.disabled = true;

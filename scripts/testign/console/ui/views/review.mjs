@@ -6,7 +6,7 @@ import { NONE } from '../format.mjs';
 import { askBody } from '../markdown.mjs';
 import { href } from '../router.mjs';
 import { confirmAnswer, pasteAnswer, reviewAnswer, splitAnchors } from './ask-form.mjs';
-import { jobErrorText, jobTitle, revOf, shortId } from './job-actions.mjs';
+import { jobErrorText, jobTitle, revOf, shortId, tooNewNotice } from './job-actions.mjs';
 import { renderPastePages } from './paste-pages.mjs';
 import { badge, breadcrumb, emptyState, errorState, loading, spacer } from './shell.mjs';
 
@@ -67,6 +67,11 @@ function draw(ctx, body, job, crumbs) {
   if (job.state !== 'needs-input' || !ask || !REVIEW_TYPES.has(ask.type)) {
     mount(body, emptyState(t('review_nothing_title'), t('review_nothing_body'),
       h('a.k-btn.k-btn--secondary', { href: href(['jobs', job.id]) }, t('review_open_job'))));
+    ctx.ready();
+    return;
+  }
+  if (job.can_answer === false) {
+    mount(body, tooNewNotice(t), h('div.row-8', h('a.k-btn.k-btn--secondary', { href: href(['jobs', job.id]) }, t('review_open_job'))));
     ctx.ready();
     return;
   }

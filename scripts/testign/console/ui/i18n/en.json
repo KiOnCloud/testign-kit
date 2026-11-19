@@ -366,6 +366,8 @@
   "job_reason_not_closed_body": "The agent asked for new work while this job was still open.",
   "job_reason_marked": "Failed: marked by the tester",
   "job_reason_marked_body": "The job was marked failed after the agent went silent.",
+  "job_reason_no_older_tab": "Failed: no console tab could answer",
+  "job_reason_no_older_tab_body": "Every open console tab was opened after this job was queued, so none may answer it. The agent queues it again.",
   "job_reason_revision_moved": "Failed: the report changed",
   "job_reason_revision_moved_body": "A newer revision of the report was written after this job was queued, so it was not run on the old one.",
   "job_reason_agent": "Failed: reported by the agent",
@@ -470,6 +472,7 @@
   "tpl_partial_large": "This workbook is too large to read merged cells and dropdown lists here.",
   "err_workbook_unreadable": "This workbook cannot be read. Open it in Excel to check it, or pick another workbook.",
   "job_err_session_too_new": "This tab was opened after the job started. Answer from the console tab that was already open, or queue the job again.",
+  "job_too_new_title": "This tab cannot answer",
   "session_dismiss": "I opened it",
   "session_no_agent": "No agent was attached",
   "nav_runs": "Test runs",
@@ -483,6 +486,8 @@
   "jobs_ask_type_sign_in": "Sign-in",
   "jobs_ask_review_table": "The agent proposed the run plan. Check and confirm it in the review table; no row runs before you confirm.",
   "jobs_from_chat_body": "This job was queued by the agent from the chat.",
+  "jobs_requeued": "Queued again",
+  "jobs_queued_after_no_older_tab": "The agent queued this job again because no open console tab could answer the earlier one.",
   "jobs_open_run": "Open the run",
   "jobs_p_name": "Run name",
   "jobs_p_project": "Project",
@@ -831,5 +836,7 @@
   "login_skip_note": "If you skip, this scenario's rows do not run.",
   "rt_err_mobile_agent": "{row}: a phone-width row on a real device is run by you. Switch its phone check to emulation or its runner to you.",
   "job_err_mobile_agent": "A phone-width row on a real device can only be run by you. Switch its phone check to emulation, or change its runner or viewport.",
+  "job_err_not_web_runner": "A not-web row is run by no one. Leave its runner at none, or change its class first.",
+  "job_err_pc_method": "A pc row has no phone check method. Switch the row to phone width first.",
   "job_err_too_long": "The text is too long. Shorten it and send again."
 }

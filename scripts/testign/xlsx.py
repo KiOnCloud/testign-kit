@@ -143,12 +143,35 @@ def fill_copy(template: Path, layout: dict, cases: list[dict], out_path: Path) -
     return {"path": str(out), "sheet": layout["sheet"], "rows": rows}
 
 
+def fill_placeholders(wb, values: dict[str, str]) -> int:
+    """Replace every cell whose whole value is one of ``values``' keys, on every sheet; returns the count.
+
+    The new value is stored as text (never a formula), and an empty value clears the cell. A cell
+    holding anything else, such as a customer template's own text around a placeholder, is untouched.
+    """
+    count = 0
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for cell in row:
+                if isinstance(cell.value, str) and cell.value.strip() in values:
+                    text = values[cell.value.strip()]
+                    cell.value = text or None
+                    if text:
+                        cell.data_type = "s"
+                    count += 1
+    return count
+
+
 def fill_columns(template: Path, sheet: str, header_row: int, columns: dict[str, str], rows: list[dict[str, Any]],
-                 out_path: Path, new_headers: dict[str, str] | None = None) -> dict[str, Any]:
+                 out_path: Path, new_headers: dict[str, str] | None = None, *,
+                 placeholders: dict[str, str] | None = None, links: list[str | None] | None = None,
+                 link_key: str | None = None) -> dict[str, Any]:
     """Like ``fill_copy`` with the values per column given by the caller.
 
     ``new_headers`` (letter → text) adds header cells to the copy, styled like the last header cell
-    that already holds text. The template file is only read.
+    that already holds text. ``placeholders`` replaces whole-cell placeholders on every sheet
+    (``fill_placeholders``). ``links`` gives, per row, a relative file target set as the hyperlink of
+    that row's ``link_key`` cell, whose value stays as written. The template file is only read.
     """
     template = Path(template)
     with _editable(template) as wb:
@@ -163,7 +186,13 @@ def fill_columns(template: Path, sheet: str, header_row: int, columns: dict[str,
                 cell.value = text
                 if style is not None:
                     cell._style = copy.copy(style)
+        if placeholders:
+            fill_placeholders(wb, placeholders)
         written = _write_rows(ws, header_row, columns, rows, literal=True)
+        if links and link_key in columns:
+            for r, target in zip(written, links):
+                if target:
+                    ws.cell(row=r, column=_col_index(columns[link_key])).hyperlink = target
         out = _unique(Path(out_path).with_suffix(template.suffix.lower()))
         out.parent.mkdir(parents=True, exist_ok=True)
         wb.save(out)

@@ -10,7 +10,8 @@ import { renderQuestions } from './ask-form.mjs';
 import { signInCard } from './login.mjs';
 import { fromChat } from './runs.mjs';
 import {
-  jobErrorText, jobTitle, kindLabel, queueJob, reasonShort, requeueBody, revOf, shortId, stateBadge, stateGlyph, stateLabel,
+  jobErrorText, jobTitle, kindLabel, queueJob, reasonShort, requeueBody, requeuedNote, revOf, shortId, stateBadge, stateGlyph,
+  stateLabel, tooNewNotice,
 } from './job-actions.mjs';
 import { badge, banner, emptyState, errorState, loading, pageHead, spacer, topbarTitle } from './shell.mjs';
 
@@ -82,6 +83,7 @@ export function render(ctx) {
       stateGlyph(j.state),
       h('span.k-issue-row__title', jobTitle(t, j)),
       fromChat(j) ? badge(t('runs_from_chat'), 'info') : null,
+      j.queued_after === 'no-older-tab' ? badge(t('jobs_requeued'), 'info') : null,
       stateBadge(t, { ...j, silent: j.id === silentId }),
       h('span.k-issue-row__date.num', timeOrDay(j.finished_at || j.started_at || j.created_at)),
     ])) : emptyState(tab === 'open' ? t('jobs_empty_open') : t('jobs_empty_history'), tab === 'open' ? t('jobs_empty_open_body') : null));
@@ -101,7 +103,7 @@ export function render(ctx) {
     if (!ctx.alive()) return;
     const st = ctx.store.get();
     const attached = Boolean(st && st.agent && st.agent.attached);
-    const key = JSON.stringify([job.state, job.ask && job.ask.id, (job.progress || []).length, job.silent, job.progress_stale, job.reason, attached, job.opened]);
+    const key = JSON.stringify([job.state, job.ask && job.ask.id, (job.progress || []).length, job.silent, job.progress_stale, job.reason, attached, job.opened, job.can_answer]);
     if (!force && key === detailKey) return;
     detailKey = key;
     mount(detail, jobPanel(ctx, job, attached));
@@ -217,6 +219,7 @@ function jobPanel(ctx, job, attached) {
     parts.push(banner('warning', t('run_stale_title'), t('run_stale_body')));
   }
   if (job.queued_by === 'agent') parts.push(h('p.k-note', [badge(t('runs_from_chat'), 'info'), ' ', t('jobs_from_chat_body')]));
+  parts.push(requeuedNote(t, job));
   if (job.run) {
     parts.push(h('div.row-8', h('a.k-btn.k-btn--secondary.k-btn--sm', { href: href(['runs', job.run]) }, [icon('play'), t('jobs_open_run')])));
   }
@@ -232,7 +235,9 @@ function jobPanel(ctx, job, attached) {
     parts.push(h('div.stack-4', [h('span.k-section-label', t('jobs_agent_summary')), h('p.agent-text', job.summary)]));
   }
   if (job.state === 'needs-input' && job.ask) {
-    if (job.ask.type === 'questions') {
+    if (job.can_answer === false) {
+      parts.push(tooNewNotice(t));
+    } else if (job.ask.type === 'questions') {
       parts.push(renderQuestions({
         t, ask: job.ask, lang: job.ui_lang,
         onSubmit: async (answer) => {

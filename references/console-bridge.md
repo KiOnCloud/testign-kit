@@ -10,7 +10,8 @@ Below, `<run>` means `<python> "${CLAUDE_PLUGIN_ROOT}/scripts/run.py"`.
 1. `<run> console start` → keep the `session` id it prints.
 2. `<run> console wait --session <s>` (a held call, see below) → `{session, job}` or `{session, job: null}`.
 3. `<run> console claim <job> --session <s>` → `{ok: true}`, or `{ok: false, reason: "revision-moved"}`
-   (the job already failed; go back to 2).
+   (the job already failed; go back to 2). Exit 2 with `no-older-tab`: no console tab can answer
+   this job, and the server has failed it (see "Errors"); do no work for it.
 4. Follow the kind's skill; `console progress`, `console ask` as needed.
 5. `<run> console done <job> --session <s> --result done|failed --report <summary file>`.
 6. Back to 2. One job at a time: calling `wait` while a job is still open fails that job (`not-closed`).
@@ -30,6 +31,11 @@ holding it, so never run a held call longer than the command may run:
   `--timeout 100`. Only when you also set the Bash timeout to 600000 ms may you pass `--timeout 540`.
 - `{job: null}` or `{answers: null}` means "nothing yet": call again. A newer held call from the same
   session replaces the older one, so a lost call never blocks anything.
+- A held `console ask` or `webtest-resolve --wait` first checks that some console tab was opened
+  before the job (a web job counts from when it was queued, any other job from its claim; a tab
+  counts from when it was opened, even if it has been closed since). When none was,
+  no one can ever answer it: the server fails the job as `no-older-tab` and the call exits 2 with
+  that code instead of returning "nothing yet".
 
 `console ask` with the same ask `id` returns the answer once the tester gave it, also when the earlier
 call timed out or its answer was lost with a killed command. An answered `id` keeps returning the same
@@ -97,7 +103,11 @@ for those in the file are ignored. It belongs to the `webtest-plan` job whose ru
 Answer: `{columns, verdict_labels, rows: {"<row>": {screen?, class?, runner?, scenario?, preconditions?, viewport?, mobile_method?}}, confirm}`.
 The server enforces the row rules (a `choice` row run by the agent needs `preconditions`, a
 phone-width row run by the agent needs `mobile_method: emulation`, scenarios exist, every screen is
-on a run host). `confirm: false` fails the job as `not-confirmed`. After the
+on a run host). An edit that confirmation would drop is refused: a `runner` other than `none` on a
+row whose final class is `not-web` (`not-web-runner`), a `mobile_method` on a row whose final
+viewport is `pc` (`pc-method`). Values inherited from the agent's line are normalized instead, so
+switching a row to `not-web` or to `pc` always confirms; `webtest-plan` applies the same rules, and
+`webtest-triage` refuses a `runner` on a `not-web` draft. `confirm: false` fails the job as `not-confirmed`. After the
 answer, run `<run> webtest-plan --run <r> --job <j> --session <s>`: it reads the confirmed answer
 from the server (`GET /agent/jobs/:id/review`) and refuses when there is none.
 
@@ -115,7 +125,9 @@ call while this question is open.
 
 - `<run> console queue --file <job.json>` queues a `webtest-plan` or `webtest-run` job from the chat
   with the same checks as the console; the console shows it as "queued from the chat" until the
-  tester opens it. Never mint a browser session for yourself.
+  tester opens it. Never mint a browser session for yourself. A job queued again after
+  `no-older-tab` adds `"queued_after": "no-older-tab"` to the job file; the console shows it on the
+  job card.
 - `webtest-plan` parameters: `name`, `figma_url` (a Figma design URL with `node-id`), `base_url` on
   one of the project's hosts, `project`, optional `template`, `ticket`, `report_lang`. The job's
   `params.hosts` are the project's hosts when it was queued; only the tester edits hosts.
@@ -131,7 +143,8 @@ call while this question is open.
   from its last progress line, and after two minutes the console tells the tester the agent may be
   waiting for a browser permission in the terminal.
 - A tester action on a run is accepted only from a console tab older than the run's queued or open
-  job.
+  job. A newer tab shows a notice instead of the answer controls (the job view's `can_answer`, the
+  run view's `can_act`).
 
 ## Interaction mapping
 
@@ -172,9 +185,11 @@ call while this question is open.
 | `transport` | The call was cut off | Call again once; if it repeats at a fixed interval, lower `--timeout` |
 | `bad-request` | The ask or parameters are not valid | Fix the file (the message says what) and call again |
 | `conflict`, `revision-moved` | The job is no longer open, or the report moved on | Leave the job; go back to `wait` |
+| `no-older-tab` | No console tab was opened before the job, so no one can answer it (a tab opened after the job was queued, or `console start` still opening its tab). The server has failed the job | Queue the same job again once with `"queued_after": "no-older-tab"` (for a plan job, add `--from-run <earlier run>` to `webtest-new` when the failed job already made a run), say so in one line in the chat, and go back to `wait`. When the job you queued again also fails with `no-older-tab`, do not queue it a third time: ask the tester in the chat to open the console themselves, and wait for their go |
+| `no-tab` | `console queue` with `queued_after` while the console has no tab at all (it was restarted, or its tab never opened) | Ask the tester in the chat to open the console themselves; queue again once they say it is open. Never open a console tab of your own |
 | `open-rows` | `done` on a run job with open rows | Wait with `webtest-resolve --wait`, or close the run, then call `done` again |
 | `scenario-not-approved` | The sign-in question names a scenario the tester has not approved | Ask the tester to approve it on the Login screen, or skip its rows |
 | `unknown-project`, `off-host`, `bad-source`, `plan-not-confirmed`, `unknown-run` | A web job's parameters are not valid | Fix the job file (the message says what) and queue again |
-| `preconditions-required`, `unknown-scenario`, `bad-columns`, `mobile-agent`, `too-long` | A tester answer (review table or parked row) broke a rule | Only the console sends answers; the tester sees the message there |
+| `preconditions-required`, `unknown-scenario`, `bad-columns`, `mobile-agent`, `not-web-runner`, `pc-method`, `too-long` | A tester answer (review table or parked row) broke a rule | Only the console sends answers; the tester sees the message there |
 | `bad-request` on a `review-table` ask naming a choice row with `runner: agent`, an agent row with `viewport: mobile`, or a line with `mobile_method: emulation` | Only the tester delegates a choice row or switches a phone-width row to emulation | Offer those rows with `runner: tester` (and `mobile_method: device`) and ask again |
 | `unknown-template` on a `review-table` ask | The ask names another template than the job's, or the template file cannot be read | Use the job's template; the server reads its headers itself |

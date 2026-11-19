@@ -5,7 +5,7 @@
 A Claude Code plugin that helps manual testers working on large legacy codebases. Before writing test cases, the tester gets an agent-generated survey of how the feature behaves today, what the current phase has already changed, and where the ticket's spec disagrees with either.
 
 > [!WARNING]
-> **Status: v0.5.0, not yet validated on real tickets.** The survey, close, testcase, console and webtest commands are implemented and covered by tests on made-up repositories. The replay check on real released tickets, a round of the console with a real Claude Code session and a web test run on a real Figma table in Chrome are still pending, so treat survey results and web test runs as drafts to review.
+> **Status: v0.5.1, not yet validated on real tickets.** The survey, close, testcase, console and webtest commands are implemented and covered by tests on made-up repositories. The replay check on real released tickets, a round of the console with a real Claude Code session and a web test run on a real Figma table in Chrome are still pending, so treat survey results and web test runs as drafts to review.
 
 ## Why
 
@@ -63,6 +63,30 @@ Or in one step on Claude Code 2.1.275 or later:
 ```
 
 The commands are namespaced by the plugin name: `/testign:survey`, `/testign:close`, `/testign:testcase`. See the official docs on [installing plugins](https://code.claude.com/docs/en/discover-plugins) for scopes, updates and removal.
+
+### Update the plugin
+
+This marketplace does not update by itself: Claude Code turns auto-update off for third-party
+marketplaces unless you turn it on (`/plugin` → **Marketplaces** → `testign-kit`). To update by
+hand, without mixing an old console with new commands:
+
+1. Finish or cancel the open console jobs, then stop the console with `console stop` (see
+   [Console](#console); it refuses while a job is open).
+2. Update the marketplace listing and the plugin from your shell:
+
+   ```bash
+   claude plugin marketplace update testign-kit
+   claude plugin update testign@testign-kit
+   ```
+
+   Or in a session: `/plugin` → **Marketplaces** → `testign-kit` → **Update marketplace**, which also
+   updates the installed plugin.
+3. Run `/reload-plugins` in the open session, or start a new session.
+4. Start the console again (`/testign:console`, or `console start`) and check the version with
+   `<python> scripts/run.py --version`.
+
+`claude plugin list` shows the installed version. A console server still running from the old
+version keeps serving the old pages until it is stopped, so always stop it before updating.
 
 ### Backlog MCP server
 
@@ -212,6 +236,24 @@ Claude in Chrome extension and the Figma MCP server (a seat that can read the fi
    rows it should not decide (you delegate them with preconditions, run them yourself, or skip them),
    and rows you run yourself wait for your result and an optional image.
 5. **Export:** the run's workbook (a copy of your template) and a report, written next to the run.
+   The sample template's cover placeholders (`<project>`, `<TICKET-ID>`, `<tester>`,
+   `<YYYY-MM-DD>`) are filled from the run, and each row's `No` cell (its content cell when the
+   column plan has no `No` column) links to its Figma capture.
+   The links point into the run folder, so keep the workbook next to its `source` folder.
+
+Helpers the agent uses so an import is read once:
+
+- `webtest-new --from-run <earlier run>`: a plan job queued again copies the earlier import (rows,
+  captures, page index) and an unconfirmed triage draft instead of reading Figma again. A bad
+  earlier run is refused before any run is created.
+- `webtest-table --urls`, then `--captures <dir>`: the whole change table read with one
+  `get_design_context` call when it fits, with only Figma asset URLs downloaded. A table of another
+  shape is read row by row as before.
+- When every console tab was opened after a job was queued, no one may answer it: the job fails
+  at claim with `no-older-tab` before any work, the agent queues it again once (the job card says
+  "Queued again"), and a newer tab shows a notice instead of answer buttons. If that fails too, or
+  the console has no tab at all, the agent asks you to open the console. A tab that was opened
+  earlier and then closed still counts, so keep the tab you queued from open.
 
 A template's purpose is set when you register it: *test cases* (needs the item and trace columns) or
 *web test* (needs the item column; result columns can be added at the review table).

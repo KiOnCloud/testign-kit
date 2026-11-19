@@ -57,7 +57,7 @@ def test_staged_import_stops_and_resumes(root, server):
         webtest.stage(folder, case)
     # The job dies; the next one finds the partial import and goes on.
     found = webtest.find_source(root, "FILEKEY", "1:1")
-    assert found == [{"run": made["run"], "complete": False, "staged": 3, "confirmed": False}]
+    assert found == [{"run": made["run"], "complete": False, "staged": 3, "captures": 0, "confirmed": False}]
     assert webtest.stage(folder, STAGED[0])["again"] is True
     with pytest.raises(WebtestError, match="other content"):
         webtest.stage(folder, {**STAGED[0], "content": "changed"})
@@ -523,3 +523,164 @@ def test_a_hand_edited_real_device_row_for_the_agent_does_not_load(root, server)
     (folder / "run.json").write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
     with pytest.raises(WebtestError, match="real device go to the tester"):
         webtest.load(folder)
+
+
+# copying an import between runs --------------------------------------------------------------
+def earlier_run(root, server, tmp_path, *, captures=True, complete=True, triage=True):
+    """A run of job j-old with every row staged (with captures unless told otherwise)."""
+    server.add_job("j-old", "webtest-plan", **plan_params())
+    folder = folder_of(root, webtest.new_run(root, server, "j-old", S, None, when=datetime(2026, 11, 19, 9, 0))["run"])
+    cap = tmp_path / "cap.png"
+    cap.write_bytes(PNG)
+    for case in STAGED:
+        webtest.stage(folder, case, cap if captures else None)
+    (folder / "source" / "page-index.json").write_text('{"I10": {"page": "Top"}}', encoding="utf-8")
+    if complete:
+        webtest.import_staged(folder)
+        if triage:
+            webtest.triage(folder, TRIAGE)
+    server.end_job("j-old")
+    return folder
+
+
+def test_from_run_copies_a_complete_import_and_its_draft(root, server, tmp_path):
+    old = earlier_run(root, server, tmp_path)
+    server.add_job("j-plan", "webtest-plan", **plan_params())
+    made = webtest.new_run_from(root, server, "j-plan", S, None, old.name, when=datetime(2026, 11, 19, 10, 0))
+    assert made["staged"] == made["captures"] == len(STAGED)
+    assert made["missing_captures"] == [] and made["page_index"] is True and made["triaged"] is True
+    folder = folder_of(root, made["run"])
+    new, before = webtest.load(folder), webtest.load(old)
+    keys = webtest.TRIAGE_KEYS | {"content", "capture", "row"}
+    assert [{k: c.get(k) for k in keys} for c in new["cases"]] == [{k: c.get(k) for k in keys} for c in before["cases"]]
+    assert (folder / "source" / "page-index.json").read_text(encoding="utf-8") == '{"I10": {"page": "Top"}}'
+    assert server.jobs["j-plan"]["run"] == made["run"]
+    # A repeat (the first call stopped half way) copies into the same run without errors.
+    again = webtest.new_run_from(root, server, "j-plan", S, None, old.name)
+    assert again["run"] == made["run"] and again["staged"] == len(STAGED)
+
+
+def test_from_run_resumes_a_partial_import(root, server, tmp_path):
+    old = earlier_run(root, server, tmp_path, complete=False)
+    server.add_job("j-plan", "webtest-plan", **plan_params())
+    made = webtest.new_run_from(root, server, "j-plan", S, None, old.name)
+    assert made["triaged"] is False and made["staged"] == len(STAGED)
+    folder = folder_of(root, made["run"])
+    assert webtest.load(folder)["import"]["complete"] is False
+    assert webtest.import_staged(folder)["cases"] == len(STAGED)
+
+
+def test_from_run_reports_rows_without_a_capture(root, server, tmp_path):
+    old = earlier_run(root, server, tmp_path, captures=False)
+    assert webtest.find_source(root, "FILEKEY", "1:1")[0]["captures"] == 0
+    server.add_job("j-plan", "webtest-plan", **plan_params())
+    made = webtest.new_run_from(root, server, "j-plan", S, None, old.name)
+    assert made["captures"] == 0 and made["missing_captures"] == [c["row"] for c in STAGED]
+
+
+def test_from_run_skips_a_draft_off_the_job_hosts(root, server, tmp_path):
+    old = earlier_run(root, server, tmp_path)
+    webtest.triage(old, {"r01": {"screen": {"url": "https://dev.example.test/x", "name": "X"}}})
+    server.add_job("j-plan", "webtest-plan", **{**plan_params(), "hosts": ["other.example.test"]})
+    made = webtest.new_run_from(root, server, "j-plan", S, None, old.name)
+    assert made["triaged"] is False and made["staged"] == len(STAGED)
+
+
+def _break_wrong_source(old, server):
+    server.jobs["j-plan"]["params"]["source"] = {**plan_params()["source"], "node": "9:9"}
+
+
+def _break_row_name(old, server):
+    (old / "source" / "r02.json").write_text(json.dumps(STAGED[0]), encoding="utf-8")
+
+
+def _break_capture(old, server):
+    (old / "source" / "r03.png").write_bytes(b"not an image")
+
+
+def _break_bad_json(old, server):
+    (old / "source" / "r04.json").write_text("{", encoding="utf-8")
+
+
+@pytest.mark.parametrize("breaker, message", [
+    (_break_wrong_source, "another source"), (_break_row_name, "names another row"),
+    (_break_capture, "capture of r03"), (_break_bad_json, "cannot be read"),
+])
+def test_from_run_refuses_before_a_run_exists(root, server, tmp_path, breaker, message):
+    old = earlier_run(root, server, tmp_path)
+    server.add_job("j-plan", "webtest-plan", **plan_params())
+    breaker(old, server)
+    with pytest.raises(WebtestError, match=message):
+        webtest.new_run_from(root, server, "j-plan", S, None, old.name)
+    assert server.jobs["j-plan"]["run"] is None and len(webtest.list_runs(root)) == 1
+    with pytest.raises(WebtestError, match="no such run"):
+        webtest.new_run_from(root, server, "j-plan", S, None, "W20261119-0000-missing")
+    server.jobs["j-plan"]["params"]["source"] = plan_params()["source"]
+    assert webtest.new_run(root, server, "j-plan", S, None)["run"]
+
+
+def test_from_run_refuses_a_linked_folder(root, server, tmp_path):
+    old = earlier_run(root, server, tmp_path)
+    link = root / "W20261119-0930-linked"
+    try:
+        link.symlink_to(old, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        try:  # Windows without the symlink privilege: a junction is the same risk
+            import _winapi
+            _winapi.CreateJunction(str(old), str(link))
+        except (ImportError, OSError):
+            pytest.skip("this system cannot create a directory link")
+    server.add_job("j-plan", "webtest-plan", **plan_params())
+    with pytest.raises(WebtestError, match="linked folder"):
+        webtest.new_run_from(root, server, "j-plan", S, None, link.name)
+    assert server.jobs["j-plan"]["run"] is None
+
+
+def test_find_source_reports_captures_and_skips_a_broken_run(root, server, tmp_path):
+    old = earlier_run(root, server, tmp_path)
+    broken = root / "W20261119-0800-broken"
+    broken.mkdir()
+    (broken / "run.json").write_text("{", encoding="utf-8")
+    assert webtest.find_source(root, "FILEKEY", "1:1") == [
+        {"run": old.name, "complete": True, "staged": len(STAGED), "captures": len(STAGED), "confirmed": False}]
+
+
+def test_a_complete_unconfirmed_import_still_takes_a_missing_capture(root, server, tmp_path):
+    old = earlier_run(root, server, tmp_path, captures=False)
+    server.add_job("j-plan", "webtest-plan", **plan_params())
+    folder = folder_of(root, webtest.new_run_from(root, server, "j-plan", S, None, old.name)["run"])
+    cap = tmp_path / "late.png"
+    cap.write_bytes(PNG)
+    assert webtest.stage(folder, STAGED[1], cap)["capture_added"] is True
+    assert state(root, folder.name, "r02")["capture"] == "source/r02.png"
+    assert state(root, folder.name, "r02")["kind"] == TRIAGE["r02"]["kind"]
+    with pytest.raises(WebtestError, match="complete"):
+        webtest.stage(folder, STAGED[1], cap)  # the capture is there now
+    with pytest.raises(WebtestError, match="complete"):
+        webtest.stage(folder, {**STAGED[0], "row": "r99"}, cap)  # no new rows after the import
+
+
+# review rules that never drop an answer silently ---------------------------------------------------------
+def test_sure_to_not_web_and_mobile_to_pc_confirm(root, server):
+    run_id = build(root, server, rows_answer={"r01": {"class": "not-web"}, "r08": {"viewport": "pc"}})
+    r01, r08 = state(root, run_id, "r01"), state(root, run_id, "r08")
+    assert (r01["class"], r01["runner"], r01["state"]) == ("not-web", "none", "manual")
+    assert r08["viewport"] == "pc" and r08["mobile_method"] is None
+
+
+@pytest.mark.parametrize("rows, message", [
+    ({"r06": {"runner": "agent"}}, "not-web row"),
+    ({"r01": {"class": "not-web", "runner": "tester"}}, "not-web row"),
+    ({"r01": {"mobile_method": "emulation"}}, "pc row"),
+])
+def test_apply_plan_refuses_a_hand_built_answer_it_would_drop(root, server, rows, message):
+    with pytest.raises(WebtestError, match=message):
+        build(root, server, rows_answer=rows)
+
+
+def test_triage_keeps_not_web_rows_without_a_runner(root, server):
+    folder = folder_of(root, build(root, server, confirm=False))
+    with pytest.raises(WebtestError, match="not-web row"):
+        webtest.triage(folder, {"r06": {"runner": "agent"}})
+    webtest.triage(folder, {"r01": {"class": "not-web"}})  # its earlier runner agent is dropped
+    assert state(root, folder.name, "r01")["runner"] == "none"

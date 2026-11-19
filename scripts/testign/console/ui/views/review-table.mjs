@@ -6,7 +6,7 @@
 import { h, icon, mount } from '../dom.mjs';
 import { NONE } from '../format.mjs';
 import { href } from '../router.mjs';
-import { jobErrorText } from './job-actions.mjs';
+import { jobErrorText, tooNewNotice } from './job-actions.mjs';
 import { hostOf } from './run-form.mjs';
 import { badge, banner, breadcrumb, emptyState, errorState, loading, openDialog, pageHead, spacer } from './shell.mjs';
 
@@ -124,9 +124,10 @@ export function setEdit(draft, line, key, value) {
   return { ...draft, rows };
 }
 
+/** The line as confirmation stores it: a not-web row is run by no one, a pc row has no phone check. */
 export function finalLine(draft, line) {
   const f = { ...line, ...(draft.rows[line.row] || {}) };
-  return { ...f, mobile_method: mobileMethod(f.viewport, f.mobile_method) };
+  return { ...f, runner: f.class === 'not-web' ? 'none' : f.runner, mobile_method: mobileMethod(f.viewport, f.mobile_method) };
 }
 
 /**
@@ -192,6 +193,9 @@ export function reviewTableAnswer(ask, draft) {
       if (!(k in edit)) continue;
       clean[k] = k === 'scenario' ? (edit[k] || null) : k === 'preconditions' ? String(edit[k] || '') : edit[k];
     }
+    // Send what confirmation keeps, so the server never refuses a value the tester cannot see or clear.
+    if (final.class === 'not-web' && ('runner' in clean || 'class' in clean)) clean.runner = 'none';
+    if (final.viewport !== 'mobile') delete clean.mobile_method;
     if (Object.keys(clean).length) rows[line.row] = clean;
   }
   const columns = draft.columns.map((c) => {
@@ -247,6 +251,12 @@ export function render(ctx) {
       ctx.ready();
       return;
     }
+    if (job.can_answer === false) {
+      mount(body, pageHead(t('rt_title_plain'), null), tooNewNotice(t),
+        h('div.row-8', h('a.k-btn.k-btn--secondary', { href: href(['jobs', jobId]) }, t('rt_back_to_job'))));
+      ctx.ready();
+      return;
+    }
     if (!drafts.has(ask.id)) drafts.set(ask.id, { draft: initialDraft(ask), selected: new Set() });
     drawTable(ctx, body, job, ask, drafts.get(ask.id));
     ctx.ready();
@@ -262,8 +272,9 @@ function fieldLabel(t, field) {
   return t(`wt_field_${field}`);
 }
 
-function selectEl(id, options, value, onChange, label) {
-  const el = h('select.k-select.select-sm', { id, 'aria-label': label, on: { change: (e) => onChange(e.target.value) } },
+function selectEl(id, options, value, onChange, label, disabled = false) {
+  const el = h('select.k-select.select-sm', { id, 'aria-label': label, disabled: disabled ? 'disabled' : undefined,
+    on: { change: (e) => onChange(e.target.value) } },
     options.map(([v, text]) => h('option', { value: v, selected: v === (value ?? '') }, text)));
   return h('span.k-select-wrap', [el, icon('chevron', 'k-icon--sm chevron-down')]);
 }
@@ -414,7 +425,8 @@ function drawTable(ctx, body, job, ask, state) {
         h('td.rt-screen', [screen, line.screen_name ? h('span.k-note.block', { lang }, line.screen_name) : null,
           line.confidence ? h('span.k-note.block', t(`rt_conf_${line.confidence}`)) : null]),
         h('td', selectEl(`rt-class-${line.row}`, CLASSES.map((c) => [c, t(`wt_class_${c.replace(/-/g, '_')}`)]), f.class, (v) => set('class', v, true), t('rt_col_class'))),
-        h('td', selectEl(`rt-runner-${line.row}`, RUNNERS.map((r) => [r, t(`wt_runner_${r}`)]), f.runner, (v) => set('runner', v, true), t('rt_col_runner'))),
+        h('td', selectEl(`rt-runner-${line.row}`, RUNNERS.map((r) => [r, t(`wt_runner_${r}`)]), f.runner, (v) => set('runner', v, true), t('rt_col_runner'),
+          f.class === 'not-web')),
         h('td', selectEl(`rt-scenario-${line.row}`, scenarioOptions, f.scenario || '', (v) => set('scenario', v || null, true), t('rt_col_scenario'))),
         h('td', h('div.stack-4', [
           selectEl(`rt-viewport-${line.row}`, VIEWPORTS.map((v) => [v, t(`wt_viewport_${v}`)]), f.viewport, (v) => set('viewport', v, true), t('wt_field_viewport')),
