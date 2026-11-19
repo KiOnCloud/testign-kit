@@ -1,7 +1,7 @@
 ---
 title: "Mobile rows: real device or agent emulation"
 description: "Phone-width rows of a web test run get a check method, real device (default, run by the tester) or browser emulation (run by the agent), chosen per row in the review table."
-status: in-review
+status: done
 priority: P1
 effort: 5d
 branch: claude/check-nearest-plan-47bc71
