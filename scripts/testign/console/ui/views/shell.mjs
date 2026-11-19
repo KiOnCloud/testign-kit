@@ -76,12 +76,14 @@ export function renderShell({ t, lang, section, counts, onLang, onPalette }) {
       h('span.k-kbd-group', [h('kbd.k-kbd', mod), h('kbd.k-kbd', 'K')])]),
     h('div.k-sidebar__section', t('nav_work')),
     nav('tickets', href(['tickets']), 'file', t('nav_tickets')),
+    nav('runs', href(['runs']), 'play', t('nav_runs')),
     h('a.k-nav-item', {
       href: href(['jobs']), class: section === 'jobs' ? 'is-active' : '', 'aria-current': section === 'jobs' ? 'page' : undefined,
       dataset: { nav: 'jobs' },
     }, [icon('refresh'), h('span.nav-label', t('nav_jobs')), h('span.nav-jobs', { id: 'nav-jobs-badge' })]),
     h('div.k-sidebar__section', t('nav_setup')),
     nav('templates', href(['templates']), 'layers', t('nav_templates')),
+    nav('login', href(['login']), 'key', t('nav_login')),
     nav('cache', href(['cache']), 'folder', t('nav_cache')),
     nav('settings', href(['settings']), 'settings', t('nav_settings')),
     h('div.side-foot', [

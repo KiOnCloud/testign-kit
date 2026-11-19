@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Run jobs and parked row questions"
-status: pending
+status: completed
 priority: P1
 effort: "3.5d"
 dependencies: [2]
@@ -144,15 +144,15 @@ separator or a Windows reserved name (`console/templates_api.py:31`) are not fou
 
 ## Todo
 
-- [ ] Two kinds, agent queue route, `queued_by`
-- [ ] Session-age rule against job creation for web kinds
-- [ ] `review-table` ask and review reader
-- [ ] Run-scoped answers, results, images, finish
-- [ ] `done` guard, silence clock, `needs_input`
-- [ ] Read routes and name checks
-- [ ] Phase 2 commands wired to the server
-- [ ] Bridge reference
-- [ ] Tests
+- [x] Two kinds, agent queue route, `queued_by`
+- [x] Session-age rule against job creation for web kinds
+- [x] `review-table` ask and review reader
+- [x] Run-scoped answers, results, images, finish
+- [x] `done` guard, silence clock, `needs_input`
+- [x] Read routes and name checks
+- [x] Phase 2 commands wired to the server
+- [x] Bridge reference
+- [x] Tests
 
 ## Verification
 

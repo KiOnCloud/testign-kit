@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Webtest skill, orchestrator and worker"
-status: pending
+status: in-progress
 priority: P1
 effort: "3d"
 dependencies: [1, 2, 3, 4, 5]
@@ -130,14 +130,16 @@ On the fallback route the orchestrator follows the same brief itself, one row at
 
 ## Todo
 
-- [ ] Command file
-- [ ] Skill: checks before a job
-- [ ] Skill: plan job with staged import
-- [ ] Triage rules file
-- [ ] Skill: run job with recovery, heartbeat and finish
-- [ ] Worker brief and worker definition
-- [ ] Console skill routing and bridge mapping
-- [ ] Plugin validation
+- [x] Command file
+- [x] Skill: checks before a job
+- [x] Skill: plan job with staged import
+- [x] Triage rules file
+- [x] Skill: run job with recovery, heartbeat and finish
+- [x] Worker brief and worker definition
+- [x] Console skill routing and bridge mapping
+- [x] Plugin validation
+
+Open before this phase closes: the dry run below needs a live Claude in Chrome session and was not run; the Windows half of the spike (phase 1) must pass first; a plugin agent definition calling the Chrome tools is untested.
 
 ## Verification
 

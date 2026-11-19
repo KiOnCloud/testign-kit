@@ -1,10 +1,10 @@
 {
   "name": "testign",
   "version": "0.3.0",
-  "description": "Survey a Backlog ticket against a legacy repo (master at merge-base and git diff master...develop), route QA questions, keep a shared decisions log and fill the customer's Excel test case template.",
+  "description": "Survey a Backlog ticket against a legacy repo (master at merge-base and git diff master...develop), route QA questions, keep a shared decisions log, fill the customer's Excel test case template, and run web UI tests from a Figma change table in the tester's own Chrome.",
   "author": { "name": "KiOnCloud" },
   "homepage": "https://github.com/KiOnCloud/testign-kit",
   "repository": "https://github.com/KiOnCloud/testign-kit",
   "license": "MIT",
-  "keywords": ["qa", "testing", "manual-testing", "legacy", "backlog", "survey", "test-cases"]
+  "keywords": ["qa", "testing", "manual-testing", "legacy", "backlog", "survey", "test-cases", "web-testing", "figma", "chrome"]
 }

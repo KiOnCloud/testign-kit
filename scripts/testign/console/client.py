@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from . import lifecycle
 
@@ -82,6 +83,52 @@ def done(job: str, session: str, result: str, report: str | None = None, home: P
 
 def approval(job: str, session: str, home: Path | None = None) -> dict:
     return call("GET", f"/agent/jobs/{job}/approval?session={session}", home=home)
+
+
+def queue(job: dict, home: Path | None = None) -> dict:
+    """Queue a web test job from the chat; the console marks it ``queued_by: agent``."""
+    return call("POST", "/agent/jobs", job, home=home)
+
+
+def _q(value: str) -> str:
+    return quote(str(value), safe="")
+
+
+class Reader:
+    """What the web test commands read from the console: job, review, sign-in and run answers."""
+
+    def __init__(self, home: Path | None = None) -> None:
+        self.home = home
+
+    def job(self, job: str, session: str) -> dict:
+        return call("GET", f"/agent/jobs/{_q(job)}/info?session={_q(session)}", home=self.home)
+
+    def attach_run(self, job: str, session: str, run: str) -> dict:
+        return call("POST", f"/agent/jobs/{_q(job)}/run", {"session": session, "run": run}, home=self.home)
+
+    def review(self, job: str, session: str) -> dict | None:
+        return call("GET", f"/agent/jobs/{_q(job)}/review?session={_q(session)}", home=self.home).get("review")
+
+    def job_open(self, job: str) -> bool:
+        try:
+            return bool(call("GET", f"/agent/jobs/{_q(job)}/open", home=self.home).get("open"))
+        except ClientError as exc:
+            if exc.code == "no-server":
+                return False  # no console, no open job
+            raise
+
+    def signed_in(self, job: str, session: str) -> dict | None:
+        return call("GET", f"/agent/jobs/{_q(job)}/signed-in?session={_q(session)}",
+                    home=self.home).get("signed_in")
+
+    def pending(self, run: str, job: str, session: str, wait: float | None) -> dict:
+        return call("POST", f"/agent/webtest/runs/{_q(run)}/pending",
+                    {"session": session, "job": job, "wait": wait},
+                    timeout=_held_timeout(wait) if wait else 10.0, home=self.home)
+
+    def applied(self, run: str, job: str, session: str, ids: list[str]) -> dict:
+        return call("POST", f"/agent/webtest/runs/{_q(run)}/applied", {"session": session, "job": job, "ids": ids},
+                    home=self.home)
 
 
 def read_json(path: str) -> Any:

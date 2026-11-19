@@ -1,6 +1,6 @@
 ---
 name: console
-description: Start the local testign console (a browser page on 127.0.0.1), then take the survey, close and testcase jobs the tester queues there one at a time, follow the matching skill, ask the tester through the console instead of the chat, and close each job with a result. Used by /testign:console.
+description: Start the local testign console (a browser page on 127.0.0.1), then take the survey, close, testcase and web test jobs the tester queues there (or /testign:webtest queues from the chat) one at a time, follow the matching skill, ask the tester through the console instead of the chat, and close each job with a result. Used by /testign:console.
 ---
 
 # console
@@ -71,6 +71,8 @@ own kind's route only:
 | `survey` | `spec-qa` | `params.repo`, `master_ref`, `develop_ref`, `fetch`, `feature`; report language `report_lang` |
 | `close` | `qa-close` | report `base_revision`; `params.tester` is `approved_by` and the `cache-review --by` name |
 | `testcase` | `testcase` | report `base_revision`; `params.mode` (`write` or `trace`), `template`, `workbook`, `focus` |
+| `webtest-plan` | `webtest` | `params.name`, `source` (`file`, `node`, `url`), `base_url`, `project`, `hosts`, `template`, `ticket`; report language `report_lang` |
+| `webtest-run` | `webtest` | `params.run`, `tester`, `mode` (`run` or `export`) |
 
 While the job is open:
 

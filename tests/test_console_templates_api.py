@@ -281,3 +281,14 @@ def test_registration_from_the_console_reads_only_the_first_rows(console, monkey
                                                        "header_row": 4})
     assert status == 200, data
     assert data["template"]["columns"]["trace"] == "H"
+
+
+def test_register_takes_a_purpose(console):
+    up = upload(console, SHIPPED_SAMPLE.read_bytes())[2]
+    status, _, data = post(console, "/api/templates", {"upload": up["upload"], "name": "web", "purpose": "webtest"})
+    assert status == 200, data
+    assert data["template"]["purpose"] == "webtest"
+    assert {t["name"]: t["purpose"] for t in data["templates"]} == {"web": "webtest"}
+    up = upload(console, SHIPPED_SAMPLE.read_bytes())[2]
+    status, _, data = post(console, "/api/templates", {"upload": up["upload"], "name": "x", "purpose": "shell"})
+    assert status == 400

@@ -38,3 +38,11 @@ def atomic_write_bytes(path: Path, data: bytes, mode: int = 0o644) -> None:
         except OSError:
             pass
         raise
+
+
+def owner_only_dirs(*paths: Path) -> None:
+    """Create folders readable by their owner only (mode bits do nothing on Windows; the profile's ACL applies)."""
+    for path in paths:
+        path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if os.name == "posix":
+            os.chmod(path, 0o700)

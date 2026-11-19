@@ -115,6 +115,11 @@ const ICONS = {
   branch: [['circle', { cx: 4.5, cy: 3.5, r: 1.5 }], ['circle', { cx: 4.5, cy: 12.5, r: 1.5 }], ['circle', { cx: 11.5, cy: 5.5, r: 1.5 }], ['path', { d: 'M4.5 5v6M11.5 7a4 4 0 0 1-4 4H6' }]],
   dash: [['path', { d: 'M4 8h8' }]],
   refresh: [['path', { d: 'M13 8A5 5 0 0 1 4.3 11.3M3 8a5 5 0 0 1 8.7-3.3' }], ['path', { d: 'M11.7 2.5v2.2h-2.2M4.3 13.5v-2.2h2.2' }]],
+  play: [['path', { d: 'M5 3.5v9l7-4.5-7-4.5Z' }]],
+  key: [['circle', { cx: 5.5, cy: 10.5, r: 2.5 }], ['path', { d: 'm7.3 8.7 5.2-5.2M10.5 5.5l1.5 1.5M11.8 4.2l1.2 1.2' }]],
+  up: [['path', { d: 'm4 10 4-4 4 4' }]],
+  down: [['path', { d: 'm4 6 4 4 4-4' }]],
+  external: [['path', { d: 'M9 3h4v4M13 3 7.5 8.5' }], ['path', { d: 'M11 9.5V13H3V5h3.5' }]],
 };
 
 /** An inline SVG icon built with createElementNS; `extra` adds classes such as 'k-icon--sm'. */

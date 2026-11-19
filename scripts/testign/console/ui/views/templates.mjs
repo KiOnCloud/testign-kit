@@ -9,7 +9,11 @@ import {
 } from './shell.mjs';
 
 export const ROLES = ['no', 'item', 'steps', 'expected', 'evidence', 'trace'];
-const REQUIRED = new Set(['item', 'trace']);
+export const PURPOSES = ['testcase', 'webtest'];
+/** Roles a purpose needs: a test case template needs the trace column, a web test one only the item. */
+export function requiredRoles(purpose) {
+  return purpose === 'webtest' ? new Set(['item']) : new Set(['item', 'trace']);
+}
 const EXTENSIONS = ['.xlsx', '.xlsm'];
 
 let selectedName = null;
@@ -42,7 +46,8 @@ function roleLabel(t, role) {
 }
 
 /** The sheet grid: column letters, rows from the header row, the role row under the header. */
-export function grid(t, preview, roles, { upload = false } = {}) {
+export function grid(t, preview, roles, { upload = false, purpose = 'testcase' } = {}) {
+  const required = requiredRoles(purpose);
   const letters = preview.letters || [];
   const byLetter = {};
   for (const [role, letter] of Object.entries(roles || {})) if (letter) byLetter[letter] = role;
@@ -57,7 +62,7 @@ export function grid(t, preview, roles, { upload = false } = {}) {
         h('th.grid-rownum', { scope: 'row' }, h('span.sr-only', t('tpl_roles'))),
         ...letters.map((letter) => {
           const role = byLetter[letter];
-          return h('td', role ? [badge(role, 'outline'), REQUIRED.has(role) ? h('span.req-mark', { 'aria-label': t('tpl_required') }, '*') : null] : null);
+          return h('td', role ? [badge(role, 'outline'), required.has(role) ? h('span.req-mark', { 'aria-label': t('tpl_required') }, '*') : null] : null);
         }),
       ]));
     }
@@ -132,6 +137,7 @@ function draw(ctx, body, head, data) {
         h('div.row-8', [
           h('span.tpl-name', x.name),
           x.default ? badge(t('templates_default'), 'accent') : null,
+          badge(t(`tpl_purpose_${x.purpose || 'testcase'}`), x.purpose === 'webtest' ? 'info' : 'outline'),
           h('span.k-note.push-right.num', isoDate(x.registered_at)),
         ]),
         h('span.k-note', [x.source_name || x.file || '', ' · ', x.sheet || NONE, ' · ',
@@ -159,6 +165,7 @@ function draw(ctx, body, head, data) {
         ]),
       ]),
       h('dl.k-props', [
+        h('dt', t('tpl_purpose')), h('dd', h('span.k-chip', t(`tpl_purpose_${x.purpose || 'testcase'}`))),
         h('dt', t('tpl_source')), h('dd', h('span.k-chip.chip-wrap', x.source_name || NONE)),
         h('dt', t('tpl_stored')), h('dd', h('span.k-chip.chip-wrap', h('code.k-mono', x.file || NONE))),
         h('dt', t('tpl_sheet')), h('dd', h('span.k-chip.chip-wrap', x.sheet || NONE)),
@@ -170,7 +177,7 @@ function draw(ctx, body, head, data) {
       h('div.panel-body', [h('span.k-section-label', t('tpl_layout')), previewBox, h('p.k-note', t('tpl_legend'))]),
     ]));
     ctx.memo(`preview:${x.name}`, () => ctx.api.templatePreview(x.name)).then((p) => {
-      if (ctx.alive() && selectedName === x.name) mount(previewBox, grid(t, p, x.columns));
+      if (ctx.alive() && selectedName === x.name) mount(previewBox, grid(t, p, x.columns, { purpose: x.purpose }));
     }, (err) => {
       if (ctx.alive() && selectedName === x.name) mount(previewBox, errorState(t, err));
     });
@@ -241,7 +248,7 @@ function stem(name) {
 
 function openRegister(ctx) {
   const { t } = ctx;
-  const s = { upload: null, map: {}, sheet: null, headerRow: null, busy: false, error: null };
+  const s = { upload: null, map: {}, sheet: null, headerRow: null, busy: false, error: null, purpose: 'testcase' };
   const errorBox = h('div', { role: 'alert' });
   const fileInput = h('input.k-input.file-input', { type: 'file', accept: EXTENSIONS.join(','), id: 'tpl-file' });
   const nameInput = h('input.k-input', { type: 'text', id: 'tpl-name', maxlength: '100', autocomplete: 'off' });
@@ -310,14 +317,22 @@ function openRegister(ctx) {
         value: l, selected: s.map[role] === l,
       }, headers[l] ? `${l} · ${headers[l]}` : l))]);
       return h('label.k-field.role-field', [
-        h('span.k-field__label', [roleLabel(t, role), REQUIRED.has(role) ? h('span.k-req', { 'aria-label': t('tpl_required') }, '*') : null]),
+        h('span.k-field__label', [roleLabel(t, role), requiredRoles(s.purpose).has(role) ? h('span.k-req', { 'aria-label': t('tpl_required') }, '*') : null]),
         h('span.k-select-wrap', [select, icon('chevron', 'k-icon--sm chevron-down')]),
       ]);
     });
     const gridBox = h('div');
-    function drawGrid() { mount(gridBox, grid(t, preview, s.map, { upload: true })); }
+    function drawGrid() { mount(gridBox, grid(t, preview, s.map, { upload: true, purpose: s.purpose })); }
+    const purposeBox = h('fieldset.stack-4.plain-fieldset', [h('legend.k-field__label', t('tpl_purpose')),
+      h('div.row-16', PURPOSES.map((p) => {
+        const input = h('input', { type: 'radio', name: 'tpl-purpose', id: `tpl-purpose-${p}`, value: p, checked: s.purpose === p,
+          on: { change: () => { s.purpose = p; drawLayout(); } } });
+        return h('label.k-radio', { for: input.id }, [input, h('span.k-radio__dot'), h('span', t(`tpl_purpose_${p}`))]);
+      })),
+      h('span.k-field__help', t(`tpl_purpose_${s.purpose}_help`))]);
     mount(layoutBox,
       h('p.k-note', [t('tpl_uploaded'), ' ', h('code.k-mono', resp.name)]),
+      purposeBox,
       h('div.form-row', [
         h('label.k-field', [h('span.k-field__label', t('tpl_sheet')), h('span.k-select-wrap', [sheetSelect, icon('chevron', 'k-icon--sm chevron-down')])]),
         h('div.k-field', [h('label.k-field__label', { for: 'tpl-row' }, t('tpl_header')), h('div.row-8.nowrap', [rowInput, applyBtn])]),
@@ -352,14 +367,14 @@ function openRegister(ctx) {
     if (!s.upload || s.busy) return;
     const name = nameInput.value.trim();
     if (!name) { showError(t('tpl_err_name')); nameInput.focus(); return; }
-    const missing = [...REQUIRED].filter((r) => !s.map[r]);
+    const missing = [...requiredRoles(s.purpose)].filter((r) => !s.map[r]);
     if (missing.length) { showError(t('tpl_err_mapping', { roles: missing.join(', ') })); return; }
     setBusy(true);
     showError(null);
     try {
       const data = await ctx.api.register({
         upload: s.upload.upload, name, sheet: s.sheet || undefined, header_row: s.headerRow || undefined,
-        map: s.map, make_default: makeDefault.checked, replace: replace.checked,
+        map: s.map, make_default: makeDefault.checked, replace: replace.checked, purpose: s.purpose,
       });
       selectedName = data.template && data.template.name ? data.template.name : name;
       dlg.close();

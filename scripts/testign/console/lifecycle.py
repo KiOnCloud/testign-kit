@@ -372,11 +372,21 @@ def stop(home: Path | None = None, *, force: bool = False) -> dict:
 # the server process ---------------------------------------------------------------------------
 def install_routes(state: srv.ConsoleState) -> None:
     """Every route group beyond the base routes: read API, template management and the job bridge."""
-    from . import jobs, readapi, templates_api  # noqa: PLC0415 - they import this module
+    from . import jobs, login_api, readapi, templates_api, webtest_api  # noqa: PLC0415 - they import this module
 
     readapi.install(state)
     templates_api.install(state)
     jobs.install(state)
+    ensure_webtest_dirs(state.home)
+    webtest_api.install(state)
+    login_api.install(state)
+
+
+def ensure_webtest_dirs(home: Path | None = None) -> Path:
+    """``~/.testign-kit/webtest/`` with ``login/`` and ``runs/``, owner-only."""
+    from .. import login_scenarios  # noqa: PLC0415
+
+    return login_scenarios.ensure_store(home)
 
 
 def serve(home: Path | None = None, *, port: int | None = None, instance: str | None = None,

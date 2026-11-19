@@ -398,8 +398,10 @@ def trace_view(cfg: dict, ticket: str, workbook: str | None, template_name: str 
     listing = templates.list_templates(home)
     if not listing["templates"]:
         return {"state": "no-template"}
-    names = {t["name"] for t in listing["templates"]}
-    name = template_name or listing["default"]
+    names = {t["name"] for t in listing["templates"] if t.get("purpose", "testcase") == "testcase"}
+    if not names:
+        return {"state": "no-template"}
+    name = template_name or (listing["default"] if listing["default"] in names else sorted(names)[0])
     if name not in names:
         raise ApiError(404, "not-found", "no such template")
     entry = templates.resolve(name, home)

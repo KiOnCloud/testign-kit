@@ -22,7 +22,8 @@ Arguments: `$ARGUMENTS`
 
 ## Step 1 — pick the template
 
-Run `<run> template-list`.
+Run `<run> template-list`. Each template has a purpose: this skill uses only `testcase` templates
+(the default of `template-register`); `webtest` templates are for `/testign:webtest` exports.
 
 - **No template registered (first run):** ask the tester for the path of their test case template
   (`.xlsx`/`.xlsm`) and a short name for it (for example the customer or project name). If they do not

@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Test runs and login screens"
-status: pending
+status: in-progress
 priority: P1
 effort: "4d"
 dependencies: [4, 5]
@@ -23,6 +23,7 @@ run themselves and signs in, in vi, en and ja.
 - The Templates screen holds the registry's roles in `ui/views/templates.mjs:11-12`, `305-355`.
 - CSP: no inline `style`, no inline script, no `innerHTML` with data (console plan, constraints).
 - The console plan's mockup was approved before its UI phase. The same gate applies here.
+- Mockup: four artboards added to the console canvas on 2026-11-19 (https://claude.ai/artifact/FbwXMaek4XshNT2nPdpkTB, row "Web test runs"): Test runs, Run, Review table, Login scenarios. Copies are in `mockup/`. Approved by the user on 2026-11-19. The sign-in and sign-out addresses shown in the Login artboard are placeholders.
 
 <!-- Updated: Red Team Session 1 - render path for the review table; requeue and reason labels; purpose on the Templates screen; approval instead of a step editor; run-scoped answers; test Chrome and runner controls -->
 
@@ -60,7 +61,7 @@ run themselves and signs in, in vi, en and ja.
 
 ## Tasks & Steps
 
-1. Draw the four screens as artboards in the console's design file and get them approved before any view code.
+1. Build the views from the approved artboards in `mockup/` (done: drawn and approved on 2026-11-19).
 2. Add routes, the view map, nav items and API calls; write the Test runs list and the new-run form.
 3. Write the review table: column plan grid with add, remove, reorder; verdict labels; case lines with single and bulk edit; the answer object of phase 4.
 4. Write the Run screen: row list, row detail, parked answers, tester results with image upload, finish, export.
@@ -71,15 +72,16 @@ run themselves and signs in, in vi, en and ja.
 
 ## Todo
 
-- [ ] Mockup approved
-- [ ] Routes, view map, nav, API calls
-- [ ] Test runs list and new-run form
-- [ ] Review table with its own route and the Jobs screen button
-- [ ] Run screen with parked answers, tester results and export
-- [ ] Login screen: hosts, approval, sign-in checklist
-- [ ] Jobs screen, "Queue again", Templates purpose
-- [ ] i18n in three languages
-- [ ] Unit tests and e2e smoke
+- [x] Mockup approved
+- [x] Routes, view map, nav, API calls
+- [x] Test runs list and new-run form
+- [x] Review table with its own route and the Jobs screen button
+- [x] Run screen with parked answers, tester results and export
+- [x] Login screen: hosts, approval, sign-in checklist
+- [x] Jobs screen, "Queue again", Templates purpose
+- [x] i18n in three languages
+- [x] Unit tests (`scripts/testign/console/ui/tests/`)
+- [ ] e2e smoke run (`tests/e2e/test_console_webtest_smoke.py` is written; Playwright is not installed in the implementing environment, so it has not run)
 
 ## Verification
 

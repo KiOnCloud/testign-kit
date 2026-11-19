@@ -183,12 +183,15 @@ def register(home: Path | None, body: dict) -> dict:
         raise ApiError(400, "bad-request", "header_row must be a positive number")
     if not isinstance(mapping, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in mapping.items()):
         raise ApiError(400, "bad-request", "map must be an object of role to column letter")
+    purpose = body.get("purpose") or "testcase"
+    if purpose not in templates.PURPOSES:
+        raise ApiError(400, "bad-request", "purpose must be testcase or webtest")
     with LOCK:
         try:
             entry = templates.register(
                 path, name.strip(), sheet=sheet, header_row=header_row, overrides=mapping,
                 make_default=bool(body.get("make_default")), replace=bool(body.get("replace")),
-                home=home, source_name=path.name, bounded=True,
+                home=home, source_name=path.name, bounded=True, purpose=purpose,
             )
         except templates.TemplateNameTaken:
             raise ApiError(409, "name-taken", "a template with this name is already registered") from None

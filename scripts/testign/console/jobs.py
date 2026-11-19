@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from .. import decisions
+from .. import decisions, webtest
 from .server import ApiError
 
 LANGS = ("vi", "en", "ja")
@@ -41,7 +41,9 @@ TRANSITIONS = {
     ("running", "needs-input"), ("running", "done"), ("running", "failed"),
     ("needs-input", "running"), ("needs-input", "failed"),
 }
-FAIL_REASONS = ("server-stopped", "session-lost", "not-closed", "marked", "revision-moved", "agent")
+FAIL_REASONS = ("server-stopped", "session-lost", "not-closed", "marked", "revision-moved", "agent", "not-confirmed")
+WEB_KINDS = ("webtest-plan", "webtest-run")
+STALE_PROGRESS = 120.0
 
 OFFER_TIMEOUT = 60.0
 SILENT_NO_JOB = 60.0
@@ -215,7 +217,133 @@ def validate_ask(ask: Any) -> dict:
                                 "new_content": data_text(p.get("new_content"), "new_content")})
         return {"type": kind, "id": ask_id, "body": agent_text(ask.get("body"), "body", required=False),
                 "pages": clean_pages}
-    raise bad("ask type must be questions, review-rows, confirm-diff or paste-pages")
+    if kind == "review-table":
+        return _review_table_ask(ask, ask_id)
+    if kind == "sign-in":
+        scenario = ask.get("scenario")
+        if not isinstance(scenario, str) or not webtest.NAME_RE.match(scenario) or scenario == webtest.NO_SCENARIO:
+            raise bad("sign-in needs the scenario's name")
+        switching = ask.get("switching_from")
+        if switching is not None and (not isinstance(switching, str) or not webtest.NAME_RE.match(switching)):
+            raise bad("switching_from must be a scenario name")
+        return {"type": kind, "id": ask_id, "body": agent_text(ask.get("body"), "body", required=False),
+                "scenario": scenario, "switching_from": switching}
+    raise bad("ask type must be questions, review-rows, confirm-diff, paste-pages, review-table or sign-in")
+
+
+REVIEW_LINE_KEYS = ("row", "no", "content", "screen", "screen_name", "confidence", "class", "kind", "reason",
+                    "runner", "scenario", "viewport", "preconditions", "steps", "expected", "capture")
+REVIEW_EDIT_KEYS = ("screen", "class", "runner", "scenario", "preconditions", "viewport")
+
+
+def _review_table_ask(ask: dict, ask_id: str) -> dict:
+    """The one confirmation of a web test plan: column plan, samples and one line per case (all data)."""
+    lines = ask.get("lines")
+    if not isinstance(lines, list) or not 1 <= len(lines) <= 500:
+        raise bad("lines must hold 1 to 500 cases")
+    clean_lines, seen = [], set()
+    for line in lines:
+        if not isinstance(line, dict) or not isinstance(line.get("row"), str) or not webtest.ROW_RE.match(line["row"]):
+            raise bad("every line needs a row id like r02")
+        if line["row"] in seen:
+            raise bad("row ids must be unique")
+        seen.add(line["row"])
+        item = {}
+        for key in REVIEW_LINE_KEYS:
+            value = line.get(key)
+            item[key] = data_text(value, key, cap=4000) if isinstance(value, str) else None
+        for key, allowed in (("class", webtest.CLASSES), ("runner", webtest.RUNNERS),
+                             ("viewport", webtest.VIEWPORTS), ("confidence", webtest.CONFIDENCE)):
+            if item[key] not in allowed:
+                raise bad(f"{line['row']}: {key} must be one of {', '.join(allowed)}")
+        if item["class"] == "choice" and item["runner"] == "agent":
+            raise bad(f"{line['row']}: only the tester delegates a choice row; offer it with runner tester")
+        if item["runner"] == "agent" and item["viewport"] == "mobile":
+            raise bad(f"{line['row']}: phone-width rows go to the tester")
+        item["scenario"] = item["scenario"] or None
+        clean_lines.append(item)
+    headers = ask.get("headers")
+    if not isinstance(headers, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in headers.items()):
+        raise bad("headers must map column letters to header text")
+    last = ask.get("last_column")
+    if not isinstance(last, str) or not re.fullmatch(r"[A-Z]{1,3}", last):
+        raise bad("last_column must be a column letter")
+    samples = ask.get("samples") if isinstance(ask.get("samples"), list) else []
+    clean_samples = []
+    for sample in samples[:3]:
+        if isinstance(sample, dict) and isinstance(sample.get("cells"), dict):
+            clean_samples.append({"row": data_text(sample.get("row"), "row", cap=10),
+                                  "class": data_text(sample.get("class"), "class", cap=20),
+                                  "cells": {str(k)[:3]: data_text(v, "cell", cap=4000)
+                                            for k, v in sample["cells"].items() if isinstance(v, str)}})
+    options = ask.get("verdict_options") if isinstance(ask.get("verdict_options"), list) else []
+    return {
+        "type": "review-table", "id": ask_id, "body": agent_text(ask.get("body"), "body", required=False),
+        "run": data_text(ask.get("run"), "run", cap=80), "template": data_text(ask.get("template"), "template", cap=100),
+        "headers": {k[:3]: data_text(v, "header", cap=200) for k, v in headers.items()}, "last_column": last,
+        "columns": ask.get("columns") if isinstance(ask.get("columns"), list) else [],
+        "verdict_labels": ask.get("verdict_labels") if isinstance(ask.get("verdict_labels"), dict) else {},
+        "verdict_options": [data_text(o, "option", cap=50) for o in options if isinstance(o, str)][:20],
+        "samples": clean_samples, "lines": clean_lines, "digest": data_text(ask.get("digest"), "digest", cap=100),
+    }
+
+
+def _review_answer(ask: dict, answer: Any) -> dict:
+    """The one place the review-table rules are enforced; the UI mirrors them and the CLI stores the result."""
+    from .. import webtest_export  # noqa: PLC0415
+
+    if not isinstance(answer, dict) or not isinstance(answer.get("confirm"), bool):
+        raise bad("answer confirm with true or false")
+    if not answer["confirm"]:
+        return {"confirm": False}
+    facts = {"headers": ask["headers"], "last": webtest_export._index(ask["last_column"]),
+             "merged": [tuple(m) for m in ask.get("merged") or []]}
+    try:
+        columns = webtest_export.check_columns(answer.get("columns"), facts)
+        labels = webtest_export.check_labels(answer.get("verdict_labels"))
+    except webtest.WebtestError as exc:
+        raise bad(str(exc), "bad-columns") from None
+    rows = answer.get("rows") or {}
+    lines = {line["row"]: line for line in ask["lines"]}
+    if not isinstance(rows, dict) or any(r not in lines for r in rows):
+        raise bad("rows names a row that is not in the table", "unknown-row")
+    scenarios = {s["name"] for s in ask.get("scenarios") or []} | {webtest.NO_SCENARIO}
+    hosts = ask.get("hosts") or []
+    out_rows = {}
+    for row, line in lines.items():
+        edit = rows.get(row) or {}
+        if not isinstance(edit, dict) or set(edit) - set(REVIEW_EDIT_KEYS):
+            raise bad(f"{row}: only {', '.join(REVIEW_EDIT_KEYS)} can be edited")
+        clean: dict[str, Any] = {}
+        for key, allowed in (("class", webtest.CLASSES), ("runner", webtest.RUNNERS), ("viewport", webtest.VIEWPORTS)):
+            if key in edit:
+                if edit[key] not in allowed:
+                    raise bad(f"{row}: {key} must be one of {', '.join(allowed)}")
+                clean[key] = edit[key]
+        if "scenario" in edit:
+            if edit["scenario"] is not None and not isinstance(edit["scenario"], str):
+                raise bad(f"{row}: scenario must be a scenario name")
+            if edit["scenario"] not in (None, "") and edit["scenario"] not in scenarios:
+                raise bad(f"{row}: no such login scenario", "unknown-scenario")
+            clean["scenario"] = edit["scenario"] or None
+        if "screen" in edit:
+            if not isinstance(edit["screen"], str) or not webtest.screen_url_ok(edit["screen"], hosts):
+                raise bad(f"{row}: the screen is not on the run's hosts", "off-host")
+            clean["screen"] = edit["screen"]
+        if "preconditions" in edit:
+            clean["preconditions"] = data_text(edit["preconditions"], "preconditions", cap=2000)
+        final = {**line, **clean}
+        if final.get("class") == "choice" and final.get("runner") == "agent" and not (final.get("preconditions") or "").strip():
+            raise bad(f"{row}: a delegated choice row needs preconditions", "preconditions-required")
+        if final.get("runner") == "agent" and final.get("viewport") == "mobile":
+            raise bad(f"{row}: phone-width rows go to the tester", "mobile-agent")
+        if final.get("runner") == "agent" and final.get("scenario") and final["scenario"] not in scenarios:
+            raise bad(f"{row}: no such login scenario", "unknown-scenario")
+        if not webtest.screen_url_ok(final.get("screen") or "", hosts):
+            raise bad(f"{row}: the screen is not on the run's hosts", "off-host")
+        if clean:
+            out_rows[row] = clean
+    return {"columns": columns, "verdict_labels": labels, "rows": out_rows, "confirm": True}
 
 
 def validate_answer(ask: dict, answer: Any) -> Any:
@@ -277,6 +405,12 @@ def validate_answer(ask: dict, answer: Any) -> Any:
         if not isinstance(answer, dict) or answer.get("done") is not True:
             raise bad("answer done: true after pasting the pages")
         return {"done": True}
+    if kind == "review-table":
+        return _review_answer(ask, answer)
+    if kind == "sign-in":
+        if not isinstance(answer, dict) or answer.get("choice") not in ("signed-in", "skip"):
+            raise bad("answer signed-in or skip")
+        return {"choice": answer["choice"]}
     raise bad("unknown ask type")
 
 
@@ -287,7 +421,14 @@ class Context:
     def __init__(self, *, cfg: Callable[[], dict], ticket_rx: Callable[[dict], re.Pattern],
                  latest: Callable[[str], dict | None], templates: Callable[[], dict],
                  workbooks: Callable[[str], list[str]], row_ids: Callable[[str], set[str]],
-                 usable_repo: Callable[[Any], Path | None]) -> None:
+                 usable_repo: Callable[[Any], Path | None],
+                 projects: Callable[[], dict] = dict,
+                 run_info: Callable[[str], dict | None] = lambda run: None,
+                 scenario: Callable[[str, str], dict | None] = lambda project, name: None,
+                 scenarios: Callable[[str], list[dict]] = lambda project: [],
+                 run_needs_input: Callable[[], int] = lambda: 0,
+                 run_finish: Callable[[str], bool] = lambda run: False,
+                 template_facts: Callable[[str], dict | None] = lambda name: None) -> None:
         self.cfg = cfg
         self.ticket_rx = ticket_rx
         self.latest = latest
@@ -295,6 +436,14 @@ class Context:
         self.workbooks = workbooks
         self.row_ids = row_ids
         self.usable_repo = usable_repo
+        # Web test runs: the tester's projects, a run's summary, login scenarios, run-scoped answers.
+        self.projects = projects
+        self.run_info = run_info
+        self.scenario = scenario
+        self.scenarios = scenarios
+        self.run_needs_input = run_needs_input
+        self.run_finish = run_finish
+        self.template_facts = template_facts
 
 
 def _latest_name(ctx: Context, ticket: Any) -> str:
@@ -350,7 +499,8 @@ def _check_testcase(ctx: Context, body: dict) -> dict:
     if mode not in ("write", "trace"):
         raise bad("mode must be write or trace")
     listing = ctx.templates()
-    names = [t["name"] for t in listing.get("templates", [])]
+    # Only test case templates: a web test template may have no trace column.
+    names = [t["name"] for t in listing.get("templates", []) if (t.get("purpose") or "testcase") == "testcase"]
     template = body.get("template")
     if template is not None and template not in names:
         raise bad("template is not registered", "unknown-template")
@@ -358,7 +508,8 @@ def _check_testcase(ctx: Context, body: dict) -> dict:
         raise bad("choose a template", "template-required")
     if not names:
         raise bad("register a template first", "template-required")
-    params: dict[str, Any] = {"mode": mode, "template": template or listing.get("default")}
+    default = listing.get("default") if listing.get("default") in names else names[0]
+    params: dict[str, Any] = {"mode": mode, "template": template or default}
     workbook = body.get("workbook")
     if workbook is not None:
         if workbook not in ctx.workbooks(ticket):
@@ -377,11 +528,90 @@ def _check_testcase(ctx: Context, body: dict) -> dict:
     return {"ticket": ticket, "base_revision": base, "params": params}
 
 
+_FIGMA = re.compile(r"^https://(?:www\.)?figma\.com/(?:design|file|proto)/([A-Za-z0-9]{10,64})(?:/[^?#]*)?\?([^#]*)")
+
+
+def figma_source(url: Any) -> dict:
+    """A Figma design URL with a node id → {kind, url, file, node}."""
+    if not isinstance(url, str) or len(url) > 2000:
+        raise bad("source must be a Figma design URL", "bad-source")
+    m = _FIGMA.match(url.strip())
+    node = None
+    if m:
+        for pair in m.group(2).split("&"):
+            key, _, value = pair.partition("=")
+            if key == "node-id" and re.fullmatch(r"\d+[-:]\d+", value):
+                node = value.replace("-", ":")
+    if not m or node is None:
+        raise bad("source must be a Figma design URL with a node-id", "bad-source")
+    return {"kind": "figma", "url": url.strip(), "file": m.group(1), "node": node}
+
+
+def _report_lang(ctx: Context, body: dict) -> str:
+    report_lang = body.get("report_lang") or ctx.cfg().get("lang") or "vi"
+    if report_lang not in LANGS:
+        raise bad("report_lang must be vi, ja or en")
+    return report_lang
+
+
+def _check_webtest_plan(ctx: Context, body: dict) -> dict:
+    name = body.get("name")
+    if not isinstance(name, str) or not name.strip() or len(name) > 80 or _CONTROL.search(name) or _BIDI.search(name):
+        raise bad("name must be 1 to 80 characters")
+    source = figma_source(body.get("figma_url"))
+    base_url = body.get("base_url")
+    if not isinstance(base_url, str) or len(base_url) > 2000 or not re.match(r"^https?://[^/\s]+", base_url):
+        raise bad("base_url must be an absolute http or https URL", "bad-base-url")
+    projects = ctx.projects()
+    project = body.get("project")
+    if not isinstance(project, str) or project not in projects:
+        raise bad("choose a project from the Login screen", "unknown-project")
+    # The run's hosts are the project's hosts now; only the tester edits them, in the console.
+    hosts = list(projects[project].get("hosts") or [])
+    if not webtest.url_on_hosts(base_url, hosts):
+        raise bad("the base URL's host is not one of the project's hosts", "off-host")
+    listing = ctx.templates()
+    names = [t["name"] for t in listing.get("templates", [])]
+    if not names:
+        raise bad("register a template first", "template-required")
+    template = body.get("template") or listing.get("default")
+    if template not in names:
+        raise bad("template is not registered", "unknown-template")
+    ticket = body.get("ticket") or None
+    if ticket is not None and (not isinstance(ticket, str) or not ctx.ticket_rx(ctx.cfg()).fullmatch(ticket)):
+        raise bad("ticket does not match ticket_id_regex")
+    params: dict[str, Any] = {"name": name.strip(), "source": source, "base_url": base_url, "project": project,
+                              "hosts": hosts, "template": template}
+    if ticket:
+        params["ticket"] = ticket
+    return {"ticket": ticket, "base_revision": None, "params": params, "report_lang": _report_lang(ctx, body)}
+
+
+def _check_webtest_run(ctx: Context, body: dict) -> dict:
+    run = body.get("run")
+    info = ctx.run_info(run) if isinstance(run, str) and webtest.RUN_ID_RE.match(run) else None
+    if info is None:
+        raise bad("no such run", "unknown-run")
+    if not info.get("confirmed"):
+        raise bad("the run's plan is not confirmed yet", "plan-not-confirmed")
+    tester = body.get("tester")
+    if not isinstance(tester, str) or not tester.strip() or len(tester) > 100 or _CONTROL.search(tester):
+        raise bad("tester must be a name of 1 to 100 characters (set it in Settings)", "tester-required")
+    mode = body.get("mode") or "run"
+    if mode not in ("run", "export"):
+        raise bad("mode must be run or export")
+    return {"ticket": info.get("ticket"), "base_revision": None,
+            "params": {"run": run, "tester": tester.strip(), "mode": mode},
+            "report_lang": info.get("report_lang") or _report_lang(ctx, body)}
+
+
 # One entry per job kind: the parameter check. Adding a kind adds one entry here.
 KINDS: dict[str, Callable[[Context, dict], dict]] = {
     "survey": _check_survey,
     "close": _check_close,
     "testcase": _check_testcase,
+    "webtest-plan": _check_webtest_plan,
+    "webtest-run": _check_webtest_run,
 }
 
 
@@ -453,6 +683,7 @@ class Bridge:
         self._token = 0
         self._seq = 0
         self.released: set[str] = set()  # sessions the tester released or another session took over
+        self.progress_at: dict[str, float] = {}  # web job id → clock of its claim or last progress line
         self.closed = False
         self.on_change = on_change
 
@@ -498,6 +729,7 @@ class Bridge:
         job.update(fields)
         if to in FINISHED:
             job["finished_at"] = now_iso()
+            self.progress_at.pop(job["id"], None)
         if to != "offered":
             self.offered_to.pop(job["id"], None)
             self.offered_at.pop(job["id"], None)
@@ -527,13 +759,36 @@ class Bridge:
             return 0.0
         return self.clock() - (self.last_contact or self.clock())
 
+    def _job_silence(self, job: dict) -> float | None:
+        """Seconds a running job has been quiet. A web job counts from its last progress line, so a
+        long held call (a sign-in question, a wait for answers) does not hide a stalled run."""
+        if job["kind"] in WEB_KINDS:
+            at = self.progress_at.get(job["id"])
+            return None if at is None else self.clock() - at
+        return self._silence()
+
+    def _silent(self, job: dict | None) -> bool:
+        if job is None or job["state"] == "offered":
+            return False
+        silence = self._job_silence(job)
+        return silence is not None and silence >= SILENT_WITH_JOB
+
+    def _stale(self, job: dict | None) -> bool:
+        if job is None or job["kind"] not in WEB_KINDS or job["state"] == "offered":
+            return False
+        silence = self._job_silence(job)
+        return silence is not None and silence >= STALE_PROGRESS
+
     def state_view(self, sessions: list[float] | None = None) -> dict:
         with self.cond:
             self._tick()
             open_job = self.open_job()
             silence = self._silence()
-            silent = bool(open_job and open_job["state"] != "offered" and silence is not None
-                          and silence >= SILENT_WITH_JOB)
+            silent = self._silent(open_job)
+            try:
+                run_input = int(self.ctx.run_needs_input())
+            except Exception:  # noqa: BLE001 - an unreadable run never breaks the state poll
+                run_input = 0
             return {
                 "agent": {
                     "attached": self.attached is not None,
@@ -542,8 +797,9 @@ class Bridge:
                     "silent_seconds": int(silence) if silence is not None else None,
                 },
                 "queue": [self.summary(j) for j in self._queued()],
-                "open": {**self.summary(open_job), "silent": silent} if open_job else None,
-                "needs_input": sum(1 for j in self.jobs.values() if j["state"] == "needs-input"),
+                "open": {**self.summary(open_job), "silent": silent,
+                         "progress_stale": self._stale(open_job)} if open_job else None,
+                "needs_input": sum(1 for j in self.jobs.values() if j["state"] == "needs-input") + run_input,
                 "browser_sessions": [datetime.fromtimestamp(t, timezone.utc).astimezone().isoformat(timespec="seconds")
                                      for t in (sessions or [])],
                 "change": self.change,
@@ -552,7 +808,7 @@ class Bridge:
     @staticmethod
     def summary(job: dict) -> dict:
         keys = ("id", "kind", "ticket", "base_revision", "ui_lang", "state", "created_at", "started_at",
-                "finished_at", "reason", "result")
+                "finished_at", "reason", "result", "run", "queued_by", "opened")
         out = {k: job.get(k) for k in keys}
         out["ask"] = {"id": job["ask"]["id"], "type": job["ask"]["type"]} if job.get("ask") else None
         return out
@@ -562,27 +818,34 @@ class Bridge:
             jobs = sorted(self.jobs.values(), key=lambda j: j["created_at"], reverse=True)
             return [self.summary(j) for j in jobs[:100]]
 
-    def get(self, job_id: str) -> dict:
+    def get(self, job_id: str, *, opened: bool = False) -> dict:
         with self.cond:
             job = self.jobs.get(job_id)
             if job is None:
                 raise ApiError(404, "not-found", "no such job")
+            if opened and job.get("queued_by") == "agent" and not job.get("opened"):
+                job["opened"] = True  # "queued from the chat" until the tester has looked at it
+                self._save(job)
             out = json.loads(json.dumps(job))
             if out.get("ask"):
                 out["ask"].pop("answer", None)
-            open_job = self.open_job()
-            silence = self._silence()
-            out["silent"] = bool(open_job is job and job["state"] != "offered" and silence is not None
-                                 and silence >= SILENT_WITH_JOB)
+            out["silent"] = self.open_job() is job and self._silent(job)
+            out["progress_stale"] = self.open_job() is job and self._stale(job)
             return out
 
     # tester actions ---------------------------------------------------------------------------
-    def create(self, body: Any) -> dict:
+    def agent_create(self, body: Any) -> dict:
+        """Queue from the chat (``console queue``): web test kinds only, marked ``queued_by: agent``."""
+        if not isinstance(body, dict) or body.get("kind") not in WEB_KINDS:
+            raise bad("the agent can queue webtest-plan and webtest-run jobs only")
+        return self.create(body, queued_by="agent")
+
+    def create(self, body: Any, queued_by: str = "tester") -> dict:
         if not isinstance(body, dict):
             raise bad("job must be an object")
         kind = body.get("kind")
         if kind not in KINDS:
-            raise bad("kind must be survey, close or testcase")
+            raise bad("kind must be survey, close, testcase, webtest-plan or webtest-run")
         ui_lang = body.get("ui_lang")
         if ui_lang not in LANGS:
             raise bad("ui_lang must be vi, en or ja")
@@ -607,6 +870,9 @@ class Bridge:
             "summary": None,
             "reason": None,
         }
+        if kind in WEB_KINDS:
+            job.update(run=checked["params"].get("run"), queued_by=queued_by, opened=queued_by == "tester",
+                       created_ts=time.time(), confirmed_review=None, signed_in=None)
         with self.cond:
             while job["id"] in self.jobs:
                 job["id"] = new_job_id()
@@ -628,8 +894,7 @@ class Bridge:
     def mark_failed(self, job_id: str) -> dict:
         with self.cond:
             job = self._job(job_id)
-            silence = self._silence()
-            if job["state"] not in ("running", "needs-input") or silence is None or silence < SILENT_WITH_JOB:
+            if job["state"] not in ("running", "needs-input") or not self._silent(job):
                 raise ApiError(409, "conflict", "only a silent running job can be marked failed")
             self._fail(job, "marked")
             return self.summary(job)
@@ -659,10 +924,11 @@ class Bridge:
             raise bad("answer must be an object")
         with self.cond:
             job = self._job(job_id)
-            claimed = job.get("started_ts")
-            if session_created is not None and claimed is not None and session_created >= claimed:
-                # A tab opened after the job started cannot answer it, so a session minted
-                # by the agent during the job cannot approve its own questions.
+            # A tab opened after the job started cannot answer it, so a session minted by the agent
+            # during the job cannot approve its own questions. A web job counts from its creation,
+            # since the agent can queue those itself.
+            since = job.get("created_ts") if job["kind"] in WEB_KINDS else job.get("started_ts")
+            if session_created is not None and since is not None and session_created >= since:
                 raise ApiError(403, "session-too-new",
                                "this console tab was opened after the job started; answer from an older tab "
                                "or queue the job again")
@@ -677,8 +943,63 @@ class Bridge:
             ask["answered_by"] = fingerprint(browser_session)
             if ask["type"] == "confirm-diff" and answer["confirm"]:
                 job["confirmed_approval"] = ask["preview"]["approval"]
+            if ask["type"] == "review-table":
+                if not answer["confirm"]:
+                    job["asked"].append({**self._ask_summary(ask), "outcome": "answered",
+                                         "answered_at": ask["answered_at"], "answered_by": ask["answered_by"],
+                                         "answer": answer})
+                    job["ask"] = None
+                    self._move(job, "failed", reason="not-confirmed", result="failed")
+                    return self.summary(job)
+                # Only what the plan applies, plus a digest of the text the tester was shown: the job
+                # record keeps no case text.
+                job["confirmed_review"] = {
+                    "lines": [{k: line.get(k) for k in webtest.PLAN_LINE_KEYS} for line in ask["lines"]],
+                    "digest": webtest.cases_digest({"cases": ask["lines"]}), "template": ask["template"],
+                    "answer": answer, "answered_by": ask["answered_by"], "answered_at": ask["answered_at"]}
+            if ask["type"] == "sign-in":
+                job["signed_in"] = {"scenario": ask["scenario"], "choice": answer["choice"],
+                                    "at": ask["answered_at"], "by": ask["answered_by"]}
             self._move(job, "running")
             return self.summary(job)
+
+    def finish_sign_in(self, run_id: str, browser_session: str | None) -> bool:
+        """The tester ended the run: an open sign-in question of its job is answered "finish"."""
+        with self.cond:
+            job = self.open_job()
+            ask = job.get("ask") if job else None
+            if job is None or job.get("run") != run_id or job["state"] != "needs-input" or not ask \
+                    or ask["type"] != "sign-in" or "answer" in ask:
+                return False
+            ask.update(answer={"choice": "finish"}, answered_at=now_iso(), answered_by=fingerprint(browser_session))
+            job["signed_in"] = {"scenario": ask["scenario"], "choice": "finish", "at": ask["answered_at"],
+                                "by": ask["answered_by"]}
+            self._move(job, "running")
+            return True
+
+    def check_run_session(self, run_id: str, session_created: float | None) -> None:
+        """A tester action on a run needs a tab older than the run's queued or open job, if it has one.
+
+        Called with ``cond`` held. With no job queued or open, the agent is not working on the run.
+        """
+        times = [j["created_ts"] for j in self.jobs.values()
+                 if j.get("run") == run_id and j["state"] in ACTIVE and isinstance(j.get("created_ts"), (int, float))]
+        if times and (session_created is None or session_created >= max(times)):
+            raise ApiError(403, "session-too-new",
+                           "this console tab was opened after the run's job was queued; answer from an older tab")
+
+    def run_changed(self) -> None:
+        """A tester action on a run: wake held calls and let open tabs refresh. Called with ``cond`` held."""
+        self.change += 1
+        self.cond.notify_all()
+        if self.on_change:
+            self.on_change()
+
+    def run_created_ts(self, run_id: str) -> float | None:
+        """Creation time of the newest web job of a run: run actions need a browser tab older than it."""
+        times = [j["created_ts"] for j in self.jobs.values()
+                 if j.get("run") == run_id and isinstance(j.get("created_ts"), (int, float))]
+        return max(times) if times else None
 
     # agent actions ----------------------------------------------------------------------------
     def _job(self, job_id: str) -> dict:
@@ -763,6 +1084,8 @@ class Bridge:
                 self._fail(job, "revision-moved")
                 return {"ok": False, "reason": "revision-moved"}
         self._move(job, "running", started_at=now_iso(), started_ts=time.time())
+        if job["kind"] in WEB_KINDS:
+            self.progress_at[job["id"]] = self.clock()
         return None
 
     def wait(self, session: Any, timeout: Any) -> dict:
@@ -826,14 +1149,53 @@ class Bridge:
             _, job = self._running(job_id, session)
             job["progress"].append({"at": now_iso(), "message": text})
             job["progress"] = job["progress"][-200:]
+            if job["kind"] in WEB_KINDS:
+                self.progress_at[job["id"]] = self.clock()
             self._save(job)
             return {"ok": True}
+
+    def _web_ask(self, job: dict, clean: dict) -> dict:
+        """Server facts for the web asks: the run's hosts and the scenarios come from the server, not the agent."""
+        params = job.get("params") or {}
+        if clean["type"] == "review-table":
+            if job["kind"] != "webtest-plan" or not job.get("run") or clean["run"] != job["run"]:
+                raise bad("a review table belongs to the webtest-plan job of its run")
+            if clean["template"] != params.get("template"):
+                raise bad("the review table must use the run's template", "unknown-template")
+            facts = self.ctx.template_facts(params.get("template"))
+            if not facts or not facts.get("headers"):
+                raise bad("the run's template cannot be read; register it again", "unknown-template")
+            # The column checks run against the template itself, never against headers the agent sent.
+            from .. import webtest_export  # noqa: PLC0415
+
+            clean["headers"] = dict(facts["headers"])
+            clean["last_column"] = webtest_export._letter(max(int(facts["last"]), 1))
+            clean["merged"] = [[str(n), int(lo), int(hi)] for n, lo, hi in facts.get("merged") or []]
+            project = params.get("project")
+            clean["hosts"] = list(params.get("hosts") or [])
+            clean["scenarios"] = [{"name": s["name"], "label": s.get("label") or s["name"],
+                                   "approved": bool(s.get("approved"))} for s in self.ctx.scenarios(project)]
+        elif clean["type"] == "sign-in":
+            if job["kind"] != "webtest-run":
+                raise bad("a sign-in question belongs to a webtest-run job")
+            info = self.ctx.run_info(job.get("run")) or {}
+            project = info.get("project")
+            scenario = self.ctx.scenario(project, clean["scenario"]) if project else None
+            if not scenario or not scenario.get("approved"):
+                raise bad("the scenario is missing or not approved by the tester", "scenario-not-approved")
+            previous = self.ctx.scenario(project, clean["switching_from"]) if clean.get("switching_from") else None
+            keep = ("name", "label", "login_url", "signout_url", "steps", "account_hint", "signed_in_check", "hash")
+            clean["checklist"] = {k: scenario.get(k) for k in keep}
+            clean["previous"] = {k: previous.get(k) for k in ("name", "label", "signout_url")} if previous else None
+        return clean
 
     def ask(self, job_id: str, session: Any, ask: Any, timeout: Any) -> dict:
         seconds = self._timeout(timeout)
         clean = validate_ask(ask)
         with self.cond:
             session, job = self._running(job_id, session)
+            if clean["type"] in ("review-table", "sign-in"):
+                clean = self._web_ask(job, clean)
             current = job.get("ask")
             earlier = next((a for a in job["asked"] if a["id"] == clean["id"]), None)
             if earlier is not None:
@@ -888,6 +1250,11 @@ class Bridge:
                 job["summary"] = text
                 self._save(job)
                 return {"ok": True}
+            if result == "done" and job["kind"] == "webtest-run":
+                info = self.ctx.run_info(job.get("run")) or {}
+                if info.get("open") and not self.ctx.run_finish(job.get("run")):
+                    raise ApiError(409, "open-rows", "the run still has open rows; wait for the tester or "
+                                                     "close the run first")
             if result == "done":
                 self._move(job, "done", result="done", summary=text)
             else:
@@ -904,7 +1271,56 @@ class Bridge:
 
     def _agent_view(self, job: dict) -> dict:
         keys = ("id", "kind", "ticket", "base_revision", "params", "ui_lang", "report_lang", "state")
-        return {k: job.get(k) for k in keys}
+        out = {k: job.get(k) for k in keys}
+        if job["kind"] in WEB_KINDS:
+            out["run"] = job.get("run")
+        return out
+
+    # web test reads (agent side) ----------------------------------------------------------------
+    def _open_web(self, job_id: str, session: Any) -> dict:
+        session = self._agent(session)
+        job = self._owned(job_id, session)
+        if job["kind"] not in WEB_KINDS or job["state"] not in ("running", "needs-input"):
+            raise ApiError(409, "conflict", "not an open web test job of this session")
+        return job
+
+    def info(self, job_id: str, session: Any) -> dict:
+        with self.cond:
+            return self._agent_view(self._open_web(job_id, session))
+
+    def attach_run(self, job_id: str, session: Any, run_id: Any) -> dict:
+        with self.cond:
+            job = self._open_web(job_id, session)
+            if job["kind"] != "webtest-plan" or job.get("run"):
+                raise ApiError(409, "conflict", "this job has a run already")
+            if not isinstance(run_id, str) or not webtest.RUN_ID_RE.match(run_id):
+                raise bad("run id is malformed")
+            job["run"] = run_id
+            self._save(job)
+            return {"ok": True}
+
+    def review(self, job_id: str, session: Any) -> dict:
+        with self.cond:
+            job = self._open_web(job_id, session)
+            return {"review": job.get("confirmed_review") if job["kind"] == "webtest-plan" else None}
+
+    def signed_in_view(self, job_id: str, session: Any) -> dict:
+        with self.cond:
+            return {"signed_in": self._open_web(job_id, session).get("signed_in")}
+
+    def is_open(self, job_id: str) -> dict:
+        with self.cond:
+            job = self.jobs.get(job_id)
+            return {"open": bool(job and job["state"] in OPEN)}
+
+    def run_job(self, job_id: Any, session: Any, run_id: str) -> dict:
+        """The open web job of this session that works on ``run_id`` (for pending and applied)."""
+        if not isinstance(job_id, str):
+            raise bad("job id required")
+        job = self._open_web(job_id, session)
+        if job.get("run") != run_id:
+            raise ApiError(409, "conflict", "this job works on another run")
+        return job
 
     @staticmethod
     def _timeout(value: Any) -> float:
@@ -973,9 +1389,46 @@ def make_context(state) -> Context:
         _, body = report.load(found["path"])
         return {r["id"] for r in report.behavior_rows(body) + report.regression_rows(body)}
 
+    from .. import login_scenarios  # noqa: PLC0415
+    from . import webtest_api  # noqa: PLC0415
+
+    def run_info(run: str) -> dict | None:
+        try:
+            folder = webtest.find_run(webtest.runs_root(cfg()), run)
+            data = webtest.load(folder)
+        except (webtest.WebtestError, ApiError):
+            return None
+        return {"id": data["id"], "project": data.get("project"), "hosts": data.get("hosts"),
+                "confirmed": bool(data.get("confirmed")), "ticket": data.get("ticket"),
+                "report_lang": data.get("report_lang"), "open": webtest.open_rows(data)}
+
+    def scenario(project: str, name: str) -> dict | None:
+        try:
+            return login_scenarios.get_scenario(state.home, project, name)
+        except webtest.WebtestError:
+            return None
+
+    def scenarios(project: str) -> list[dict]:
+        try:
+            return login_scenarios.list_scenarios(state.home, project)
+        except webtest.WebtestError:
+            return []
+
+    def template_facts(name: str) -> dict | None:
+        from .. import webtest_export  # noqa: PLC0415
+
+        try:
+            return webtest_export.sheet_facts(templates.resolve(name, state.home))
+        except (templates.TemplateError, webtest.WebtestError, OSError, ValueError, KeyError):
+            return None
+
     return Context(cfg=cfg, ticket_rx=readapi.ticket_rx, latest=latest,
                    templates=lambda: templates.list_templates(state.home), workbooks=workbooks,
-                   row_ids=row_ids, usable_repo=readapi.usable_repo)
+                   row_ids=row_ids, usable_repo=readapi.usable_repo,
+                   projects=lambda: login_scenarios.load_projects(state.home), run_info=run_info,
+                   scenario=scenario, scenarios=scenarios,
+                   run_needs_input=lambda: webtest_api.needs_input(state),
+                   run_finish=lambda run: webtest_api.finished(state, run), template_facts=template_facts)
 
 
 def install(state, store=None) -> Bridge:
@@ -1022,11 +1475,20 @@ def install(state, store=None) -> Bridge:
     r.add("POST", "/agent/jobs/:id/done", "agent",
           lambda q: bridge.done(q.params["id"], body(q).get("session"), body(q).get("result"), body(q).get("report")))
     r.add("GET", "/agent/jobs/:id/approval", "agent", lambda q: bridge.approval(q.params["id"], q.arg("session")))
+    # Web test runs: queue from the chat, and what the run commands read back from the server.
+    r.add("POST", "/agent/jobs", "agent", lambda q: bridge.agent_create(q.body))
+    r.add("GET", "/agent/jobs/:id/info", "agent", lambda q: bridge.info(q.params["id"], q.arg("session")))
+    r.add("POST", "/agent/jobs/:id/run", "agent",
+          lambda q: bridge.attach_run(q.params["id"], body(q).get("session"), body(q).get("run")))
+    r.add("GET", "/agent/jobs/:id/review", "agent", lambda q: bridge.review(q.params["id"], q.arg("session")))
+    r.add("GET", "/agent/jobs/:id/open", "agent", lambda q: bridge.is_open(q.params["id"]))
+    r.add("GET", "/agent/jobs/:id/signed-in", "agent",
+          lambda q: bridge.signed_in_view(q.params["id"], q.arg("session")))
 
     r.add("GET", "/api/state", "browser", lambda q: bridge.state_view(state.session_times()))
     r.add("GET", "/api/jobs", "browser", lambda q: {"jobs": bridge.list_jobs()})
     r.add("POST", "/api/jobs", "browser", lambda q: bridge.create(q.body))
-    r.add("GET", "/api/jobs/:id", "browser", lambda q: bridge.get(q.params["id"]))
+    r.add("GET", "/api/jobs/:id", "browser", lambda q: bridge.get(q.params["id"], opened=True))
     r.add("POST", "/api/jobs/:id/answer", "browser",
           lambda q: bridge.answer(q.params["id"], q.body, q.session, state.session_created(q.session)))
     r.add("POST", "/api/jobs/:id/cancel", "browser", lambda q: bridge.cancel(q.params["id"]))

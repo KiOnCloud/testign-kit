@@ -1,7 +1,7 @@
 ---
 title: "Web UI test runs from a Figma change table, driven through Claude in Chrome"
 description: "A /testign:webtest command and two console screens that import a Figma change table into a case list, let the tester confirm one review table, run the rows from a queue in Chrome and export an Excel workbook plus a Markdown report."
-status: pending
+status: in-progress
 priority: P1
 effort: 22.5d
 branch: claude/check-nearest-plan-47bc71
@@ -90,13 +90,13 @@ preconditions, so the agent derives them and the tester confirms.
 | Phase | Name | Status |
 |-------|------|--------|
 | 1 | [Spike: Chrome worker, Figma screens and login route](./phase-01-spike-chrome-worker-figma-screens-and-login-route.md) | In progress: macOS items A, B, C, F, G recorded; Windows and the fifteen-row measurement open |
-| 2 | [Run store and normalised case list](./phase-02-run-store-and-normalised-case-list.md) | Pending |
-| 3 | [Result columns and run export](./phase-03-result-columns-and-run-export.md) | Pending |
-| 4 | [Run jobs and parked row questions](./phase-04-run-jobs-and-parked-row-questions.md) | Pending |
-| 5 | [Login scenarios and manual sign-in](./phase-05-login-scenarios-and-manual-sign-in.md) | Pending |
-| 6 | [Webtest skill, orchestrator and worker](./phase-06-webtest-skill-orchestrator-and-worker.md) | Pending |
-| 7 | [Test runs and login screens](./phase-07-test-runs-and-login-screens.md) | Pending |
-| 8 | [Docs, real table round and release](./phase-08-docs-real-table-round-and-release.md) | Pending |
+| 2 | [Run store and normalised case list](./phase-02-run-store-and-normalised-case-list.md) | Completed |
+| 3 | [Result columns and run export](./phase-03-result-columns-and-run-export.md) | Completed |
+| 4 | [Run jobs and parked row questions](./phase-04-run-jobs-and-parked-row-questions.md) | Completed |
+| 5 | [Login scenarios and manual sign-in](./phase-05-login-scenarios-and-manual-sign-in.md) | Completed |
+| 6 | [Webtest skill, orchestrator and worker](./phase-06-webtest-skill-orchestrator-and-worker.md) | In progress: command, skill, triage rules, worker brief and agent written; the dry run in Chrome and the Windows spike open |
+| 7 | [Test runs and login screens](./phase-07-test-runs-and-login-screens.md) | In progress: screens, i18n and unit tests done; the e2e smoke is written but not run |
+| 8 | [Docs, real table round and release](./phase-08-docs-real-table-round-and-release.md) | In progress: README done; the rounds on macOS and Windows, the injection check, the version bump and the journal open |
 
 The spike has set the routes for phase 6; what is left of phase 1 (Windows, the fifteen-row
 measurement) does not block phases 2 to 5. Windows is supported in the first release, so the

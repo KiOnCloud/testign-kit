@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Run store and normalised case list"
-status: pending
+status: completed
 priority: P1
 effort: "3d"
 dependencies: []
@@ -144,13 +144,13 @@ and tested with a fake.
 
 ## Todo
 
-- [ ] Schema checks and state table
-- [ ] Queue order and scenario grouping
-- [ ] Host check and run id resolution by listing
-- [ ] Staged import and resume
-- [ ] Recovery, attempts, question ids
-- [ ] CLI subcommands
-- [ ] Tests
+- [x] Schema checks and state table
+- [x] Queue order and scenario grouping
+- [x] Host check and run id resolution by listing
+- [x] Staged import and resume
+- [x] Recovery, attempts, question ids
+- [x] CLI subcommands
+- [x] Tests
 
 ## Verification
 

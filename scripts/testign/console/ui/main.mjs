@@ -18,8 +18,12 @@ import * as cache from './views/cache.mjs';
 import * as settings from './views/settings.mjs';
 import * as jobs from './views/jobs.mjs';
 import * as review from './views/review.mjs';
+import * as runs from './views/runs.mjs';
+import * as run from './views/run.mjs';
+import * as reviewTable from './views/review-table.mjs';
+import * as login from './views/login.mjs';
 
-const VIEWS = { tickets, report, trace, templates, cache, settings, jobs, review };
+const VIEWS = { tickets, report, trace, templates, cache, settings, jobs, review, runs, run, reviewTable, login };
 const SESSIONS_KEY = 'testign.knownSessions';
 const store = createStore({
   fetchState: () => api.state(),
@@ -97,14 +101,17 @@ function loadCounts() {
   }, () => {});
   memo('count:templates', () => api.templates()).then((d) => setCount('templates', d.templates.length), () => {});
   memo('count:cache', () => api.cache()).then((d) => setCount('cache', d.entries.length), () => {});
+  memo('count:runs', () => api.runs()).then((d) => setCount('runs', d.runs.length), () => {});
+  memo('count:login', () => api.projects()).then((d) => setCount('login', d.projects.length), () => {});
 }
 
 function paletteItems() {
   const t = app.t;
   const go = (hash) => () => { location.hash = hash; };
   const screens = [
-    ['tickets', 'file', 'nav_tickets'], ['jobs', 'refresh', 'nav_jobs'], ['templates', 'layers', 'nav_templates'],
-    ['cache', 'folder', 'nav_cache'], ['settings', 'settings', 'nav_settings'],
+    ['tickets', 'file', 'nav_tickets'], ['runs', 'play', 'nav_runs'], ['jobs', 'refresh', 'nav_jobs'],
+    ['templates', 'layers', 'nav_templates'], ['login', 'key', 'nav_login'], ['cache', 'folder', 'nav_cache'],
+    ['settings', 'settings', 'nav_settings'],
   ].map(([name, ic, key]) => ({ group: t('palette_screens'), label: t(key), icon: ic, run: go(href([name])) }));
   const ticketItems = (list) => list.flatMap((tk) => [
     { group: t('palette_tickets'), label: tk.id, hint: tk.title || '', icon: 'file', run: go(href(['tickets', tk.id])) },

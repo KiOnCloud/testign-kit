@@ -7,10 +7,12 @@ import { dateTime, NONE, timeOrDay } from '../format.mjs';
 import { askBody } from '../markdown.mjs';
 import { href } from '../router.mjs';
 import { renderQuestions } from './ask-form.mjs';
+import { signInCard } from './login.mjs';
+import { fromChat } from './runs.mjs';
 import {
   jobErrorText, jobTitle, kindLabel, queueJob, reasonShort, requeueBody, revOf, shortId, stateBadge, stateGlyph, stateLabel,
 } from './job-actions.mjs';
-import { banner, emptyState, errorState, loading, pageHead, spacer, topbarTitle } from './shell.mjs';
+import { badge, banner, emptyState, errorState, loading, pageHead, spacer, topbarTitle } from './shell.mjs';
 
 const ACTIVE = new Set(['queued', 'offered', 'running', 'needs-input']);
 const REVIEW_TYPES = new Set(['review-rows', 'confirm-diff', 'paste-pages']);
@@ -79,6 +81,7 @@ export function render(ctx) {
     }, [
       stateGlyph(j.state),
       h('span.k-issue-row__title', jobTitle(t, j)),
+      fromChat(j) ? badge(t('runs_from_chat'), 'info') : null,
       stateBadge(t, { ...j, silent: j.id === silentId }),
       h('span.k-issue-row__date.num', timeOrDay(j.finished_at || j.started_at || j.created_at)),
     ])) : emptyState(tab === 'open' ? t('jobs_empty_open') : t('jobs_empty_history'), tab === 'open' ? t('jobs_empty_open_body') : null));
@@ -98,7 +101,7 @@ export function render(ctx) {
     if (!ctx.alive()) return;
     const st = ctx.store.get();
     const attached = Boolean(st && st.agent && st.agent.attached);
-    const key = JSON.stringify([job.state, job.ask && job.ask.id, (job.progress || []).length, job.silent, job.reason, attached]);
+    const key = JSON.stringify([job.state, job.ask && job.ask.id, (job.progress || []).length, job.silent, job.progress_stale, job.reason, attached, job.opened]);
     if (!force && key === detailKey) return;
     detailKey = key;
     mount(detail, jobPanel(ctx, job, attached));
@@ -165,6 +168,12 @@ function paramList(t, job) {
     ['jobs_p_refs', p.master_ref || p.develop_ref ? `${p.master_ref || NONE} · ${p.develop_ref || NONE}` : null],
     ['jobs_p_feature', p.feature],
     ['jobs_p_fetch', job.kind === 'survey' ? (p.fetch ? t('jobs_yes') : t('jobs_no')) : null],
+    ['jobs_p_name', p.name],
+    ['jobs_p_project', p.project],
+    ['jobs_p_base_url', p.base_url],
+    ['jobs_p_source', p.source && p.source.kind === 'figma' ? `Figma · ${p.source.node}` : null],
+    ['jobs_p_run', job.run || p.run],
+    ['jobs_p_signed_in', job.signed_in && job.signed_in.scenario ? `${job.signed_in.scenario} · ${t(`jobs_signed_${String(job.signed_in.choice).replace(/-/g, '_')}`)}` : null],
   ].filter(([, v]) => v !== null && v !== undefined && v !== '');
   return h('dl.k-props', rows.flatMap(([k, v]) => [h('dt', t(k)), h('dd', h('span.k-chip.chip-wrap', String(v)))]));
 }
@@ -204,6 +213,12 @@ function jobPanel(ctx, job, attached) {
   if (job.silent) {
     parts.push(h('div.k-banner.k-banner--warning', { role: 'status' }, [icon('warning', 'icon-warn'),
       h('div.k-banner__text', [h('strong', t('jobs_silent_title')), h('span', t('jobs_silent_body'))])]));
+  } else if (job.progress_stale) {
+    parts.push(banner('warning', t('run_stale_title'), t('run_stale_body')));
+  }
+  if (job.queued_by === 'agent') parts.push(h('p.k-note', [badge(t('runs_from_chat'), 'info'), ' ', t('jobs_from_chat_body')]));
+  if (job.run) {
+    parts.push(h('div.row-8', h('a.k-btn.k-btn--secondary.k-btn--sm', { href: href(['runs', job.run]) }, [icon('play'), t('jobs_open_run')])));
   }
   if (job.state === 'failed') {
     const moved = job.reason === 'revision-moved';
@@ -233,6 +248,15 @@ function jobPanel(ctx, job, attached) {
           ctx.pollNow();
         },
       }));
+    } else if (job.ask.type === 'review-table') {
+      parts.push(h('div.ask-form', [
+        h('span.k-section-label', t('ask_title')),
+        h('p.panel-text', t('jobs_ask_review_table')),
+        h('div.row-8', h('a.k-btn.k-btn--primary', { href: href(['jobs', job.id, 'review-table']), dataset: { openReviewTable: job.id } },
+          t('runs_open_review'))),
+      ]));
+    } else if (job.ask.type === 'sign-in') {
+      parts.push(signInCard(ctx, job));
     } else if (REVIEW_TYPES.has(job.ask.type)) {
       parts.push(h('div.ask-form', [
         h('span.k-section-label', t('ask_title')),

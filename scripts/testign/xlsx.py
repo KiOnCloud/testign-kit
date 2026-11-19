@@ -6,8 +6,10 @@ an already filled workbook, the new cases go into a new sheet ``TC-<stamp>`` of 
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import re
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -17,6 +19,22 @@ from .templates import TemplateError, _col_index, _openpyxl
 TRACE_ID_RE = re.compile(r"\b([BR]\d+)\b")
 QUESTION_ID_RE = re.compile(r"\b(Q\d+)\b")
 SAMPLE_SHEET = "テストケース"
+
+
+@contextlib.contextmanager
+def _editable(path: Path) -> Iterator[Any]:
+    """Load ``path`` for writing a copy, keeping the macros of an .xlsm.
+
+    openpyxl keeps an .xlsm's macro parts in an in-memory zip it never closes; closing it here keeps
+    it from failing later when the garbage collector frees its buffer first.
+    """
+    wb = _openpyxl().load_workbook(path, keep_vba=path.suffix.lower() == ".xlsm")
+    try:
+        yield wb
+    finally:
+        archive = getattr(wb, "vba_archive", None)
+        if archive is not None:
+            archive.close()
 
 
 def stamp(now: datetime | None = None) -> str:
@@ -69,48 +87,87 @@ def _has_content(value: Any) -> bool:
     return not (isinstance(value, str) and value.startswith("="))
 
 
-def _write_rows(ws, layout: dict, cases: list[dict]) -> list[int]:
-    header_row, columns = layout["header_row"], layout["columns"]
+def _write_rows(ws, header_row: int, columns: dict[str, str], rows: list[dict[str, Any]],
+                literal: bool = False) -> list[int]:
+    """Write one sheet row per ``rows`` item: ``columns`` maps a key to a letter, each item a key to a value.
+
+    The style of the first data row is copied to every written row. The ``no`` key keeps a numbering
+    formula already in the template, and counts from 1 below the header when an item has no ``no``.
+    With ``literal``, text starting with ``=`` is stored as text, never as a formula: it comes from
+    outside (a design table, a web page) and Excel would run it on open.
+    """
     style_row = header_row + 1
     start = _first_free_row(ws, header_row, columns)
     written = []
-    for offset, case in enumerate(cases):
+    for offset, values in enumerate(rows):
         r = start + offset
         for c in range(1, ws.max_column + 1):
             src, dst = ws.cell(row=style_row, column=c), ws.cell(row=r, column=c)
             if r != style_row and src.has_style:
                 dst._style = copy.copy(src._style)
-        values = {
-            "no": case.get("no", start - header_row + offset),
-            "item": case.get("item"),
-            "steps": case.get("steps"),
-            "expected": case.get("expected"),
-            "evidence": case.get("evidence"),
-            "trace": trace_text(case),
-        }
-        for role, letter in columns.items():
+        for key, letter in columns.items():
             cell = ws.cell(row=r, column=_col_index(letter))
-            if role == "no" and isinstance(cell.value, str) and cell.value.startswith("="):
+            if key == "no" and isinstance(cell.value, str) and cell.value.startswith("="):
                 continue  # keep the template's numbering formula
-            if values.get(role) not in (None, ""):
-                cell.value = values[role]
+            value = values.get(key) if key != "no" or "no" in values else start - header_row + offset
+            if value not in (None, ""):
+                cell.value = value
+                if literal and isinstance(value, str) and value.startswith("="):
+                    cell.data_type = "s"
         written.append(r)
     return written
+
+
+def _role_values(cases: list[dict]) -> list[dict[str, Any]]:
+    out = []
+    for case in cases:
+        values = {"item": case.get("item"), "steps": case.get("steps"), "expected": case.get("expected"),
+                  "evidence": case.get("evidence"), "trace": trace_text(case)}
+        if "no" in case:
+            values["no"] = case["no"]
+        out.append(values)
+    return out
 
 
 def fill_copy(template: Path, layout: dict, cases: list[dict], out_path: Path) -> dict[str, Any]:
     """Load ``template`` (never saved), write ``cases`` into its mapped sheet and save to a new file."""
     validate_cases(cases)
     template = Path(template)
-    keep_vba = template.suffix.lower() == ".xlsm"
-    wb = _openpyxl().load_workbook(template, keep_vba=keep_vba)
-    if layout["sheet"] not in wb.sheetnames:
-        raise TemplateError(f"sheet '{layout['sheet']}' not found in {template.name}")
-    rows = _write_rows(wb[layout["sheet"]], layout, cases)
-    out = _unique(Path(out_path).with_suffix(template.suffix.lower()))
-    out.parent.mkdir(parents=True, exist_ok=True)
-    wb.save(out)
+    with _editable(template) as wb:
+        if layout["sheet"] not in wb.sheetnames:
+            raise TemplateError(f"sheet '{layout['sheet']}' not found in {template.name}")
+        rows = _write_rows(wb[layout["sheet"]], layout["header_row"], layout["columns"], _role_values(cases))
+        out = _unique(Path(out_path).with_suffix(template.suffix.lower()))
+        out.parent.mkdir(parents=True, exist_ok=True)
+        wb.save(out)
     return {"path": str(out), "sheet": layout["sheet"], "rows": rows}
+
+
+def fill_columns(template: Path, sheet: str, header_row: int, columns: dict[str, str], rows: list[dict[str, Any]],
+                 out_path: Path, new_headers: dict[str, str] | None = None) -> dict[str, Any]:
+    """Like ``fill_copy`` with the values per column given by the caller.
+
+    ``new_headers`` (letter → text) adds header cells to the copy, styled like the last header cell
+    that already holds text. The template file is only read.
+    """
+    template = Path(template)
+    with _editable(template) as wb:
+        if sheet not in wb.sheetnames:
+            raise TemplateError(f"sheet '{sheet}' not found in {template.name}")
+        ws = wb[sheet]
+        if new_headers:
+            filled = [c for c in ws[header_row] if c.value not in (None, "")]
+            style = filled[-1]._style if filled else None
+            for letter, text in new_headers.items():
+                cell = ws.cell(row=header_row, column=_col_index(letter))
+                cell.value = text
+                if style is not None:
+                    cell._style = copy.copy(style)
+        written = _write_rows(ws, header_row, columns, rows, literal=True)
+        out = _unique(Path(out_path).with_suffix(template.suffix.lower()))
+        out.parent.mkdir(parents=True, exist_ok=True)
+        wb.save(out)
+    return {"path": str(out), "sheet": sheet, "rows": written}
 
 
 def add_sheet(workbook: Path, layout: dict, cases: list[dict], sheet_name: str) -> dict[str, Any]:
@@ -121,21 +178,21 @@ def add_sheet(workbook: Path, layout: dict, cases: list[dict], sheet_name: str) 
     """
     validate_cases(cases)
     workbook = Path(workbook)
-    wb = _openpyxl().load_workbook(workbook, keep_vba=workbook.suffix.lower() == ".xlsm")
-    if layout["sheet"] not in wb.sheetnames:
-        raise TemplateError(f"sheet '{layout['sheet']}' not found in {workbook.name}")
-    name, n = sheet_name, 2
-    while name in wb.sheetnames:
-        name, n = f"{sheet_name}-{n}", n + 1
-    ws = wb.copy_worksheet(wb[layout["sheet"]])
-    ws.title = name
-    idx = [_col_index(c) for c in layout["columns"].values()]
-    for r in range(layout["header_row"] + 1, ws.max_row + 1):
-        for c in idx:
-            ws.cell(row=r, column=c).value = None
-    rows = _write_rows(ws, {**layout, "sheet": name}, cases)
-    out = _unique(workbook.with_name(f"{workbook.stem}-{name}{workbook.suffix}"))
-    wb.save(out)
+    with _editable(workbook) as wb:
+        if layout["sheet"] not in wb.sheetnames:
+            raise TemplateError(f"sheet '{layout['sheet']}' not found in {workbook.name}")
+        name, n = sheet_name, 2
+        while name in wb.sheetnames:
+            name, n = f"{sheet_name}-{n}", n + 1
+        ws = wb.copy_worksheet(wb[layout["sheet"]])
+        ws.title = name
+        idx = [_col_index(c) for c in layout["columns"].values()]
+        for r in range(layout["header_row"] + 1, ws.max_row + 1):
+            for c in idx:
+                ws.cell(row=r, column=c).value = None
+        rows = _write_rows(ws, layout["header_row"], layout["columns"], _role_values(cases))
+        out = _unique(workbook.with_name(f"{workbook.stem}-{name}{workbook.suffix}"))
+        wb.save(out)
     return {"path": str(out), "sheet": name, "rows": rows}
 
 

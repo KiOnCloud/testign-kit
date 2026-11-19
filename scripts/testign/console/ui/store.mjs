@@ -4,12 +4,12 @@
 
 export const POLL_MS = 1500;
 
-/** What a view needs to redraw for: job records, the open job's silence, the agent being there. */
+/** What a view needs to redraw for: job records, the open job's silence or stale progress, the agent being there. */
 export function viewKey(state) {
   if (!state) return null;
   const open = state.open;
   const attached = Boolean(state.agent && state.agent.attached);
-  return `${state.change}|${open ? `${open.id}:${open.silent ? 1 : 0}` : '-'}|${attached ? 1 : 0}`;
+  return `${state.change}|${open ? `${open.id}:${open.silent ? 1 : 0}:${open.progress_stale ? 1 : 0}` : '-'}|${attached ? 1 : 0}`;
 }
 
 /** What the sidebar shows: agent line, needs-input count and the browser sessions. */

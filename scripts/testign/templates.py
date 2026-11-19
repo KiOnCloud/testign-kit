@@ -19,6 +19,10 @@ from . import config, fsutil
 
 ROLES = ["no", "item", "steps", "expected", "evidence", "trace"]
 REQUIRED_ROLES = ["item", "trace"]
+# What a template is for. ``testcase`` (the default, also for entries written before purposes
+# existed) feeds /testign:testcase and needs the trace column; ``webtest`` feeds web test runs.
+PURPOSES = ("testcase", "webtest")
+REQUIRED_BY_PURPOSE = {"testcase": REQUIRED_ROLES, "webtest": ["item"]}
 
 HEADER_SYNONYMS: dict[str, list[str]] = {
     "no": ["no", "no.", "#", "番号", "項番", "stt", "tcid", "tc-id", "testcaseid", "id"],
@@ -119,10 +123,21 @@ def _col_index(letter: str) -> int:
         raise TemplateError(f"'{letter}' is not a column letter") from exc
 
 
-def _scan_layout(sheets: list[tuple[str, list[tuple]]]) -> dict[str, Any]:
+def check_purpose(purpose: Any) -> str:
+    if purpose not in PURPOSES:
+        raise TemplateError(f"purpose must be one of {', '.join(PURPOSES)}")
+    return purpose
+
+
+def purpose_of(entry: dict) -> str:
+    return entry.get("purpose") or "testcase"
+
+
+def _scan_layout(sheets: list[tuple[str, list[tuple]]], purpose: str = "testcase") -> dict[str, Any]:
     """Pick sheet, header row and role mapping from the first rows (values only) of each sheet.
 
-    The header row is the first row that has a 備考/Remarks-like header. When no sheet has one, the
+    The header row is the first row that has a 備考/Remarks-like header; a ``webtest`` template also
+    accepts a row with the item column and any second mapped column. When no sheet has one, the
     first sheet's row with the most text cells is guessed so the tester can map it.
     """
     for name, rows in sheets:
@@ -137,7 +152,7 @@ def _scan_layout(sheets: list[tuple[str, list[tuple]]]) -> dict[str, Any]:
                 role = _role_for(value)
                 if role and role not in roles:
                     roles[role] = letter
-            if "trace" in roles:
+            if "trace" in roles or (purpose == "webtest" and "item" in roles and len(roles) >= 2):
                 return {"sheet": name, "header_row": number, "columns": roles, "headers": headers}
     first_name, first_rows = sheets[0]
     best, best_number, best_count = None, None, 1
@@ -160,7 +175,7 @@ def _sheet_rows(ws, max_rows: int) -> list[tuple]:
     return [tuple(row) for row in ws.iter_rows(min_row=1, max_row=max_rows, values_only=True)]
 
 
-def detect_layout(path: Path, sheet: str | None = None) -> dict[str, Any]:
+def detect_layout(path: Path, sheet: str | None = None, purpose: str = "testcase") -> dict[str, Any]:
     """Find the sheet, header row and role → column letter mapping by header names.
 
     The header row is the first row (within the first 30) that has a 備考/Remarks-like header. When no
@@ -171,10 +186,11 @@ def detect_layout(path: Path, sheet: str | None = None) -> dict[str, Any]:
     for name in names:
         if name not in wb.sheetnames:
             raise TemplateError(f"sheet '{name}' not found; sheets: {', '.join(wb.sheetnames)}")
-    return _scan_layout([(n, _sheet_rows(wb[n], min(wb[n].max_row, HEADER_SCAN_ROWS))) for n in names])
+    return _scan_layout([(n, _sheet_rows(wb[n], min(wb[n].max_row, HEADER_SCAN_ROWS))) for n in names], purpose)
 
 
-def detect_layout_bounded(path: Path, sheet: str | None = None, max_rows: int = 50) -> dict[str, Any]:
+def detect_layout_bounded(path: Path, sheet: str | None = None, max_rows: int = 50,
+                          purpose: str = "testcase") -> dict[str, Any]:
     """Like ``detect_layout`` for an untrusted upload: read-only, at most ``max_rows`` rows per sheet."""
     wb = _openpyxl().load_workbook(path, read_only=True)
     try:
@@ -183,7 +199,7 @@ def detect_layout_bounded(path: Path, sheet: str | None = None, max_rows: int = 
             if name not in wb.sheetnames:
                 raise TemplateError(f"sheet '{name}' not found; sheets: {', '.join(wb.sheetnames)}")
         scan = min(max_rows, HEADER_SCAN_ROWS)
-        layout = _scan_layout([(n, _sheet_rows(wb[n], scan)) for n in names])
+        layout = _scan_layout([(n, _sheet_rows(wb[n], scan)) for n in names], purpose)
         layout["sheets"] = list(wb.sheetnames)
         return layout
     finally:
@@ -222,13 +238,16 @@ def register(
     *,
     source_name: str | None = None,
     bounded: bool = False,
+    purpose: str = "testcase",
 ) -> dict[str, Any]:
     """Copy ``file`` into the registry under ``name`` with its column mapping.
 
     ``source_name`` is the file name recorded for the template (default: ``file``'s own name); the
     console passes the name the tester uploaded. ``bounded`` reads only the first rows read-only, for
-    untrusted uploads.
+    untrusted uploads. ``purpose`` is ``testcase`` (needs the trace column) or ``webtest`` (needs the
+    item column only).
     """
+    purpose = check_purpose(purpose)
     file = Path(file).expanduser()
     if not file.exists():
         raise TemplateError(f"template file not found: {file}")
@@ -238,7 +257,8 @@ def register(
     if name in data["templates"] and not replace:
         raise TemplateNameTaken(f"a template named '{name}' is already registered; pass --replace to update it")
 
-    layout = detect_layout_bounded(file, sheet) if bounded else detect_layout(file, sheet)
+    layout = (detect_layout_bounded(file, sheet, purpose=purpose) if bounded
+              else detect_layout(file, sheet, purpose=purpose))
     if header_row:
         if not layout["sheet"]:
             raise TemplateError("pass --sheet together with --header-row when headers cannot be detected")
@@ -250,7 +270,7 @@ def register(
         if role not in ROLES:
             raise TemplateError(f"unknown role '{role}'; roles: {', '.join(ROLES)}")
         columns[role] = _col_letter(_col_index(letter))
-    missing = [r for r in REQUIRED_ROLES if r not in columns]
+    missing = [r for r in REQUIRED_BY_PURPOSE[purpose] if r not in columns]
     if not layout["sheet"] or not layout["header_row"] or missing:
         raise TemplateMappingFailed(
             "could not map the template columns automatically"
@@ -282,6 +302,7 @@ def register(
         "sheet": layout["sheet"],
         "header_row": layout["header_row"],
         "columns": {r: columns[r] for r in ROLES if r in columns},
+        "purpose": purpose,
         "registered_at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
     }
     data["templates"][name] = entry
@@ -303,7 +324,7 @@ def resolve(name: str | None = None, home: Path | None = None) -> dict[str, Any]
     path = templates_dir(home) / entry["file"]
     if not path.exists():
         raise TemplateError(f"registered file for '{key}' is missing: {path}")
-    return {"name": key, **entry, "path": str(path)}
+    return {"name": key, **entry, "purpose": purpose_of(entry), "path": str(path)}
 
 
 def list_templates(home: Path | None = None) -> dict[str, Any]:
@@ -311,7 +332,8 @@ def list_templates(home: Path | None = None) -> dict[str, Any]:
     return {
         "default": data["default"],
         "templates": [
-            {"name": n, "default": n == data["default"], **e} for n, e in data["templates"].items()
+            {"name": n, "default": n == data["default"], **e, "purpose": purpose_of(e)}
+            for n, e in data["templates"].items()
         ],
     }
 

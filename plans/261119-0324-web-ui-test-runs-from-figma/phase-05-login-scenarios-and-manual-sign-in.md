@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Login scenarios and manual sign-in"
-status: pending
+status: completed
 priority: P1
 effort: "1.5d"
 dependencies: [4]
@@ -119,11 +119,11 @@ what could be read and the tester's rejection note fills the gap. The draft wait
 
 ## Todo
 
-- [ ] Store, name checks, validators
-- [ ] Approval by hash
-- [ ] Project and scenario routes
-- [ ] Scenario commands
-- [ ] Tests
+- [x] Store, name checks, validators
+- [x] Approval by hash
+- [x] Project and scenario routes
+- [x] Scenario commands
+- [x] Tests
 
 ## Verification
 

@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Login scenarios</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/kestrel/tokens.css">
+<link rel="stylesheet" href="ds/kestrel/components/bundle.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:var(--accent-text)}a:hover{color:var(--accent-hover)}
+</style>
+</helmet>
+<div data-theme="{{theme}}" lang="{{lang}}" style="min-height: 100vh; display: flex; flex-wrap: wrap; background: var(--surface-0); color: var(--text-1); font-family: var(--font-sans); font-size: var(--fs-small); line-height: var(--lh-ui); letter-spacing: var(--ls-ui);">
+
+  <nav class="k-sidebar" aria-label="{{t.nav_main}}" style="flex: 1 1 232px; min-height: 100%;">
+    <div class="k-sidebar__ws"><span class="k-avatar">T</span>testign<span class="k-muted" style="font-weight: var(--fw-regular);">· usupp</span></div>
+    <div class="k-sidebar__section">{{t.nav_work}}</div>
+    <a class="k-nav-item" href="Tickets.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5h5l3 3v8H4v-11Z"></path><path d="M9 2.5v3h3M6 8h4M6 10.5h4"></path></svg>{{t.nav_tickets}}<span class="k-nav-item__count">3</span></a>
+    <a class="k-nav-item" href="Runs.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3" width="11" height="8" rx="1"></rect><path d="M6 13.5h4M7 6l2.5 1.5L7 9Z"></path></svg>{{t.nav_runs}}<span class="k-badge k-badge--warning" style="margin-left: auto;">{{t.nav_runs_wait}}</span></a>
+    <a class="k-nav-item" href="Jobs.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 8A5 5 0 0 1 4.3 11.3M3 8a5 5 0 0 1 8.7-3.3"></path><path d="M11.7 2.5v2.2h-2.2M4.3 13.5v-2.2h2.2"></path></svg>{{t.nav_jobs}}</a>
+    <div class="k-sidebar__section">{{t.nav_setup}}</div>
+    <a class="k-nav-item" href="Templates.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 2.5 5.5 3L8 8.5l-5.5-3Z"></path><path d="m2.5 8.5 5.5 3 5.5-3"></path></svg>{{t.nav_templates}}<span class="k-nav-item__count">2</span></a>
+    <a class="k-nav-item is-active" href="Login.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5.5" cy="10.5" r="2.5"></circle><path d="m7.5 8.5 5-5M10.5 5.5 12 7"></path></svg>{{t.nav_login}}<span class="k-nav-item__count">3</span></a>
+    <a class="k-nav-item" href="Cache.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-7.5Z"></path></svg>{{t.nav_cache}}</a>
+    <a class="k-nav-item" href="Settings.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2"></circle><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.8 3.8l1 1M11.2 11.2l1 1M3.8 12.2l1-1M11.2 4.8l1-1"></path></svg>{{t.nav_settings}}</a>
+    <div style="margin-top: auto; padding: var(--space-8); border-top: var(--hairline) solid var(--border-1); display: flex; flex-direction: column; gap: var(--space-8);">
+      <div style="display: flex; flex-direction: column; gap: var(--space-4);">
+        <span class="k-section-label">{{t.ui_lang}}</span>
+        <div class="k-tabs k-tabs--segmented" role="radiogroup" aria-label="{{t.ui_lang}}">
+          <button class="k-tab {{viOn}}" role="radio" aria-checked="{{viSel}}" lang="vi" onClick="{{setVi}}">Tiếng Việt</button>
+          <button class="k-tab {{enOn}}" role="radio" aria-checked="{{enSel}}" lang="en" onClick="{{setEn}}">English</button>
+          <button class="k-tab {{jaOn}}" role="radio" aria-checked="{{jaSel}}" lang="ja" onClick="{{setJa}}">日本語</button>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+        <span style="display: flex; align-items: center; gap: var(--space-6); color: var(--text-2);"><span class="k-badge__dot" style="color: var(--success);"></span>{{t.agent_ok}}</span>
+        <span class="k-note">{{t.local_only}}</span>
+      </div>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column;">
+    <header class="k-topbar">
+      <span class="k-topbar__title">{{t.nav_login}}</span>
+      <div class="k-topbar__spacer"></div>
+      <span class="k-note">{{t.no_values}}</span>
+    </header>
+
+    <div style="padding: var(--space-24); display: flex; flex-direction: column; gap: var(--space-16); max-width: 1400px; width: 100%; box-sizing: border-box;">
+      <section style="display: flex; flex-direction: column; gap: var(--space-4);">
+        <h1 style="margin: 0; font-size: var(--fs-title-1); line-height: var(--lh-body); font-weight: var(--fw-semibold); letter-spacing: var(--ls-title);">{{t.title}}</h1>
+        <p class="k-note">{{t.subtitle}}</p>
+      </section>
+
+      <section class="k-banner k-banner--warning" role="status" aria-labelledby="ask-h" style="align-items: flex-start;">
+        <div class="k-banner__text" style="display: flex; flex-direction: column; gap: var(--space-8); width: 100%;">
+          <strong id="ask-h">{{t.ask_title}}</strong>
+          <span>{{t.ask_body}}</span>
+          <ol style="margin: 0; padding-left: var(--space-20, 20px); display: flex; flex-direction: column; gap: var(--space-2);">
+            <li>{{t.ask_s0}} <a href="#" class="k-mono">/logout</a></li>
+            <li>{{t.st1}}</li>
+            <li>{{t.st2}}</li>
+            <li>{{t.ask_check}}</li>
+          </ol>
+          <div style="display: flex; flex-wrap: wrap; gap: var(--space-8); align-items: center;">
+            <button class="k-btn k-btn--primary" type="button">{{t.signed_in}}</button>
+            <button class="k-btn k-btn--ghost" type="button">{{t.skip}}</button>
+            <span class="k-note">{{t.ask_note}}</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="k-split" style="display: flex; flex-wrap: wrap;">
+        <div class="k-split__main" style="flex: 999 1 480px; min-width: 0; display: flex; flex-direction: column; gap: var(--space-16);">
+          <section class="k-card" aria-labelledby="proj-h">
+            <div class="k-card__body" style="display: flex; flex-direction: column; gap: var(--space-12);">
+              <div style="display: flex; flex-wrap: wrap; gap: var(--space-8); align-items: center;">
+                <h2 id="proj-h" class="k-card__title" style="margin: 0;">{{t.project}} · usupp</h2>
+                <div style="flex: 1;"></div>
+                <button class="k-btn k-btn--ghost k-btn--sm" type="button">{{t.new_project}}</button>
+              </div>
+              <label class="k-field"><span class="k-field__label">{{t.hosts}}</span><input class="k-input" type="text" value="dev.u-supp-u.devkarte.jp"><span class="k-field__help">{{t.hosts_help}}</span></label>
+              <label class="k-field"><span class="k-field__label">{{t.signin_hosts}} <span class="k-muted" style="font-weight: var(--fw-regular);">{{t.optional}}</span></span><input class="k-input" type="text" placeholder="sso.example.jp"><span class="k-field__help">{{t.signin_help}}</span></label>
+              <div style="display: flex; justify-content: flex-end;"><button class="k-btn k-btn--secondary k-btn--sm" type="button">{{t.save_hosts}}</button></div>
+            </div>
+          </section>
+
+          <section aria-labelledby="sc-h" style="display: flex; flex-direction: column; gap: var(--space-8);">
+            <h2 id="sc-h" class="k-section-label" style="margin: 0;">{{t.scenarios}}</h2>
+            <div class="k-list">
+              <div class="k-issue-row" style="gap: var(--space-12);">
+                <svg class="k-status k-status--done" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6.25" fill="currentColor"></circle><path class="k-status__check" d="m4.4 7.3 1.8 1.8 3.6-3.9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                <span class="k-issue-row__title">client · {{t.l_client}}</span>
+                <span class="k-badge k-badge--success">{{t.approved}}</span>
+                <span class="k-issue-row__date">11/19</span>
+              </div>
+              <div class="k-issue-row is-selected" style="gap: var(--space-12);">
+                <svg class="k-status k-status--progress" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M7 7 L7 3.8 A3.2 3.2 0 0 1 7 10.2 Z" fill="currentColor"></path></svg>
+                <span class="k-issue-row__title">staff · {{t.l_staff}}</span>
+                <span class="k-badge k-badge--warning">{{t.draft}}</span>
+                <span class="k-issue-row__date">14:02</span>
+              </div>
+              <div class="k-issue-row" style="gap: var(--space-12);">
+                <svg class="k-status k-status--done" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6.25" fill="currentColor"></circle><path class="k-status__check" d="m4.4 7.3 1.8 1.8 3.6-3.9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                <span class="k-issue-row__title">admin · {{t.l_admin}}</span>
+                <span class="k-badge k-badge--success">{{t.approved}}</span>
+                <span class="k-issue-row__date">11/19</span>
+              </div>
+              <div class="k-issue-row" style="gap: var(--space-12);">
+                <svg class="k-status k-status--todo" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle></svg>
+                <span class="k-issue-row__title">none · {{t.l_none}}</span>
+                <span class="k-note">{{t.builtin}}</span>
+              </div>
+            </div>
+            <span class="k-note">{{t.how_created}}</span>
+          </section>
+        </div>
+
+        <aside class="k-split__panel" aria-label="staff" style="flex: 1 1 420px; min-width: 0;">
+          <div class="k-split__panel-head">staff · {{t.l_staff}} <span class="k-badge k-badge--warning" style="margin-left: auto;">{{t.draft}}</span></div>
+          <div style="padding: var(--space-12); display: flex; flex-direction: column; gap: var(--space-16);">
+            <p class="k-note" style="margin: 0;">{{t.draft_note}}</p>
+            <dl class="k-props" style="margin: 0;">
+              <dt class="k-muted">{{t.login_url}}</dt><dd class="k-val k-mono" style="margin: 0;">https://dev.u-supp-u.devkarte.jp/admin/login</dd>
+              <dt class="k-muted">{{t.signout_url}}</dt><dd class="k-val k-mono" style="margin: 0;">https://dev.u-supp-u.devkarte.jp/admin/logout</dd>
+              <dt class="k-muted">{{t.check}}</dt><dd class="k-val" style="margin: 0;"><span class="k-mono">/admin</span> · {{t.check_text}} “予約管理”</dd>
+              <dt class="k-muted">{{t.hint}}</dt><dd class="k-val" style="margin: 0;">{{t.hint_staff}}</dd>
+            </dl>
+            <div style="display: flex; flex-direction: column; gap: var(--space-4);">
+              <span class="k-section-label">{{t.steps}}</span>
+              <ol style="margin: 0; padding-left: var(--space-20, 20px); display: flex; flex-direction: column; gap: var(--space-4); color: var(--text-1);">
+                <li>{{t.st1_staff}}</li>
+                <li>{{t.st2_staff}}</li>
+                <li>{{t.st3_staff}}</li>
+              </ol>
+              <span class="k-note">{{t.steps_readonly}}</span>
+            </div>
+            <form style="display: flex; flex-direction: column; gap: var(--space-8); padding: var(--space-12); border: var(--hairline) solid var(--border-2); border-radius: var(--radius-8); background: var(--surface-raised);">
+              <label class="k-field"><span class="k-field__label">{{t.note}} <span class="k-muted" style="font-weight: var(--fw-regular);">{{t.note_when}}</span></span><textarea class="k-textarea" rows="2" placeholder="{{t.note_ph}}"></textarea></label>
+              <div style="display: flex; gap: var(--space-8); justify-content: flex-end; flex-wrap: wrap;">
+                <button class="k-btn k-btn--danger k-btn--sm" type="button" style="margin-right: auto;">{{t.remove}}</button>
+                <button class="k-btn k-btn--ghost" type="button">{{t.reject}}</button>
+                <button class="k-btn k-btn--primary" type="submit">{{t.approve}}</button>
+              </div>
+            </form>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"lang":{"editor":"enum","options":["vi","en","ja"],"default":"vi"},"$preview":{"width":1440,"height":1120}}'>
+const NAV = {
+  vi: { nav_main: "Điều hướng chính", nav_work: "Làm việc", nav_tickets: "Tickets", nav_runs: "Test runs", nav_runs_wait: "5 chờ bạn", nav_jobs: "Jobs", nav_setup: "Thiết lập", nav_templates: "Templates", nav_login: "Kịch bản login", nav_cache: "Scout cache", nav_settings: "Cấu hình", ui_lang: "Ngôn ngữ giao diện", agent_ok: "Agent đã kết nối", local_only: "127.0.0.1 · chỉ máy này truy cập" },
+  en: { nav_main: "Main navigation", nav_work: "Work", nav_tickets: "Tickets", nav_runs: "Test runs", nav_runs_wait: "5 need you", nav_jobs: "Jobs", nav_setup: "Setup", nav_templates: "Templates", nav_login: "Login scenarios", nav_cache: "Scout cache", nav_settings: "Settings", ui_lang: "Interface language", agent_ok: "Agent connected", local_only: "127.0.0.1 · this machine only" },
+  ja: { nav_main: "メインナビゲーション", nav_work: "作業", nav_tickets: "チケット", nav_runs: "テスト実行", nav_runs_wait: "5件 回答待ち", nav_jobs: "ジョブ", nav_setup: "設定", nav_templates: "テンプレート", nav_login: "ログインシナリオ", nav_cache: "スカウトキャッシュ", nav_settings: "環境設定", ui_lang: "表示言語", agent_ok: "エージェント接続中", local_only: "127.0.0.1 · このPCのみ" }
+};
+const PAGE = {
+  vi: { no_values: "Không màn hình nào nhận hay lưu tài khoản", title: "Kịch bản login theo dự án", subtitle: "Mỗi kịch bản là một checklist để bạn tự đăng nhập trong Chrome của mình. Agent soạn nháp, bạn duyệt. Agent không gõ vào form đăng nhập.", ask_title: "Lần chạy “USUPP update 11月” cần kịch bản client", ask_body: "Hàng đợi đang đổi từ staff sang client. Agent không thao tác trình duyệt trong lúc chờ bạn.", ask_s0: "Đăng xuất tài khoản hiện tại:", st1: "Mở trang đăng nhập của site test", st2: "Đăng nhập bằng tài khoản test vai trò client", ask_check: "Kiểm tra: menu người dùng hiện tên của tài khoản client", signed_in: "Đã đăng nhập", skip: "Bỏ qua kịch bản này", ask_note: "Bỏ qua thì 12 row của kịch bản client không chạy.", project: "Dự án", new_project: "Dự án mới", hosts: "Host được phép", hosts_help: "Agent chỉ chạy row trên các host này. Chỉ bạn sửa được, ở đây.", signin_hosts: "Host đăng nhập riêng", optional: "(không bắt buộc)", signin_help: "Dùng khi site chuyển sang trang SSO ở host khác.", save_hosts: "Lưu host", scenarios: "Kịch bản", l_client: "Tài khoản khách đặt lịch", l_staff: "Nhân viên cơ sở", l_admin: "Quản trị", l_none: "Trang công khai, không cần đăng nhập", approved: "Đã duyệt", draft: "Nháp, chờ duyệt", builtin: "có sẵn", how_created: "Kịch bản mới do agent soạn khi một row cần đến; nó hỏi bạn trước khi soạn.", draft_note: "Agent soạn bản này từ menu của site lúc 14:02. Nó không mở được trang đăng nhập vì Chrome đang đăng nhập sẵn.", login_url: "Trang đăng nhập", signout_url: "Trang đăng xuất", check: "Kiểm tra sau đăng nhập", check_text: "trang có chữ", hint: "Nhận biết tài khoản", hint_staff: "Góc phải header hiện tên cơ sở của nhân viên", steps: "Checklist", st1_staff: "Mở trang đăng nhập phía quản trị", st2_staff: "Đăng nhập bằng tài khoản test vai trò staff", st3_staff: "Nhập mã một lần nếu được hỏi", steps_readonly: "Bạn không sửa trực tiếp các bước. Nếu sai, từ chối kèm ghi chú để agent soạn lại.", note: "Ghi chú cho agent", note_when: "(khi từ chối)", note_ph: "Ví dụ: trang đăng nhập staff là /staff/login", remove: "Xoá kịch bản", reject: "Từ chối", approve: "Duyệt kịch bản" },
+  en: { no_values: "No screen takes or stores an account value", title: "Login scenarios per project", subtitle: "A scenario is a checklist for signing in by hand in your own Chrome. The agent drafts it, you approve it. The agent types nothing into a sign-in form.", ask_title: "The run “USUPP update 11月” needs the client scenario", ask_body: "The queue is switching from staff to client. The agent does not touch the browser while it waits for you.", ask_s0: "Sign out of the current account:", st1: "Open the test site's sign-in page", st2: "Sign in with the client test account", ask_check: "Check: the user menu shows the client account's name", signed_in: "Signed in", skip: "Skip this scenario", ask_note: "If you skip, the 12 rows of the client scenario do not run.", project: "Project", new_project: "New project", hosts: "Allowed hosts", hosts_help: "The agent runs rows on these hosts only. Only you can edit them, here.", signin_hosts: "Separate sign-in hosts", optional: "(optional)", signin_help: "For sites that go to an SSO page on another host.", save_hosts: "Save hosts", scenarios: "Scenarios", l_client: "Booking customer account", l_staff: "Facility staff", l_admin: "Administrator", l_none: "Public pages, no sign-in", approved: "Approved", draft: "Draft, needs approval", builtin: "built in", how_created: "The agent drafts a new scenario when a row needs one; it asks you first.", draft_note: "The agent drafted this from the site's navigation at 14:02. It could not open the sign-in page because Chrome is already signed in.", login_url: "Sign-in page", signout_url: "Sign-out page", check: "Check after sign-in", check_text: "the page shows", hint: "How to tell the account", hint_staff: "The top right of the header shows the staff member's facility", steps: "Checklist", st1_staff: "Open the admin sign-in page", st2_staff: "Sign in with the staff test account", st3_staff: "Enter the one-time code if asked", steps_readonly: "You do not edit the steps here. If one is wrong, reject with a note and the agent redrafts.", note: "Note for the agent", note_when: "(when rejecting)", note_ph: "For example: the staff sign-in page is /staff/login", remove: "Remove scenario", reject: "Reject", approve: "Approve scenario" },
+  ja: { no_values: "どの画面もアカウント情報を受け取らず、保存しません", title: "プロジェクト別ログインシナリオ", subtitle: "シナリオは、ご自身の Chrome で手動ログインするためのチェックリストです。エージェントが下書きし、あなたが承認します。エージェントはログインフォームに入力しません。", ask_title: "実行「USUPP update 11月」は client シナリオが必要です", ask_body: "キューが staff から client に切り替わります。回答を待つ間、エージェントはブラウザを操作しません。", ask_s0: "現在のアカウントからログアウト:", st1: "テストサイトのログイン画面を開く", st2: "client のテストアカウントでログイン", ask_check: "確認: ユーザーメニューに client アカウントの名前が表示される", signed_in: "ログインしました", skip: "このシナリオをスキップ", ask_note: "スキップすると client シナリオの 12行は実行されません。", project: "プロジェクト", new_project: "新規プロジェクト", hosts: "許可ホスト", hosts_help: "エージェントはこのホスト上の行だけを実行します。編集できるのはここだけです。", signin_hosts: "別のログインホスト", optional: "（任意）", signin_help: "別ホストの SSO 画面に遷移するサイト向け。", save_hosts: "ホストを保存", scenarios: "シナリオ", l_client: "予約ユーザー", l_staff: "施設スタッフ", l_admin: "管理者", l_none: "公開ページ（ログイン不要）", approved: "承認済み", draft: "下書き・承認待ち", builtin: "標準", how_created: "行が必要とするとき、エージェントが確認のうえ新しいシナリオを下書きします。", draft_note: "14:02 にサイトのナビゲーションから下書きしました。Chrome がログイン済みのため、ログイン画面は開けませんでした。", login_url: "ログイン画面", signout_url: "ログアウト", check: "ログイン後の確認", check_text: "画面に表示される文言", hint: "アカウントの見分け方", hint_staff: "ヘッダー右上にスタッフの施設名が表示される", steps: "チェックリスト", st1_staff: "管理側のログイン画面を開く", st2_staff: "staff のテストアカウントでログイン", st3_staff: "求められたらワンタイムコードを入力", steps_readonly: "手順はここでは編集できません。誤りがあればメモを付けて却下すると、エージェントが作り直します。", note: "エージェントへのメモ", note_when: "（却下時）", note_ph: "例: staff のログイン画面は /staff/login", remove: "シナリオを削除", reject: "却下", approve: "シナリオを承認" }
+};
+class Component extends DCLogic {
+  renderVals() {
+    const lang = (this.state && this.state.lang) || this.props.lang || 'vi';
+    const pick = (l) => () => this.setState({ lang: l });
+    return {
+      theme: this.props.theme ?? 'light',
+      lang: lang,
+      t: Object.assign({}, NAV[lang] || NAV.vi, PAGE[lang] || PAGE.vi),
+      viOn: lang === 'vi' ? 'is-active' : '', enOn: lang === 'en' ? 'is-active' : '', jaOn: lang === 'ja' ? 'is-active' : '',
+      viSel: lang === 'vi', enSel: lang === 'en', jaSel: lang === 'ja',
+      setVi: pick('vi'), setEn: pick('en'), setJa: pick('ja')
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Docs, real table round and release"
-status: pending
+status: in-progress
 priority: P1
 effort: "2.5d"
 dependencies: [6, 7]
@@ -85,7 +85,7 @@ When `visual` verdicts are unreliable, `visual` becomes `choice` by default, dec
 - [ ] Round on macOS
 - [ ] Round on Windows
 - [ ] Injection check on both platforms
-- [ ] README
+- [x] README
 - [ ] Version bump and full test run
 - [ ] Journal entry
 

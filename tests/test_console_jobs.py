@@ -120,7 +120,7 @@ def test_job_record_shape_and_kind_table(bridge):
     assert re.fullmatch(r"j\d{8}-\d{6}-[0-9a-f]{4}", record["id"])
     assert record["state"] == "queued" and record["base_revision"] == "DEMO-1-survey-r2.md"
     assert record["params"] == {"tester": "Asher"} and record["ui_lang"] == "ja" and record["report_lang"] is None
-    assert set(jobs.KINDS) == {"survey", "close", "testcase"}
+    assert set(jobs.KINDS) == {"survey", "close", "testcase", "webtest-plan", "webtest-run"}
 
 
 @pytest.mark.parametrize("body,code", [
@@ -497,3 +497,12 @@ def test_a_tab_opened_after_the_claim_cannot_answer(bridge):
     assert err.value.code == "session-too-new" and err.value.status == 403
     bridge.answer(job_id, answer, "old-tab", session_created=claimed - 1)
     assert bridge.jobs[job_id]["state"] == "running"
+
+
+def test_testcase_jobs_only_see_testcase_templates(bridge, world):
+    world.templates = {"default": "web", "templates": [{"name": "web", "purpose": "webtest"}, {"name": "a"}]}
+    tc = bridge.create({"kind": "testcase", "ticket": "DEMO-1", "mode": "write", "ui_lang": "vi"})
+    assert bridge.jobs[tc["id"]]["params"]["template"] == "a"
+    with pytest.raises(ApiError) as err:
+        bridge.create({"kind": "testcase", "ticket": "DEMO-1", "mode": "write", "template": "web", "ui_lang": "vi"})
+    assert err.value.code == "unknown-template"

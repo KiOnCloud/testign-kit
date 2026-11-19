@@ -6,10 +6,14 @@ import argparse
 import json
 import re
 import sys
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import __version__, backlog_wiki, cache, config, decisions, gitscope, hashcheck, report, templates, trace, xlsx
+from . import (
+    __version__, backlog_wiki, cache, config, decisions, gitscope, hashcheck, login_scenarios, report, templates, trace,
+    webtest, webtest_export, xlsx,
+)
 from .console import client as console_client
 from .console import lifecycle
 
@@ -136,6 +140,7 @@ def _cmd_template_register(args: argparse.Namespace) -> int:
             overrides=_parse_map(args.map),
             make_default=args.default,
             replace=args.replace,
+            purpose=args.purpose,
         )
     )
 
@@ -536,10 +541,262 @@ def _cmd_console_approval(args: argparse.Namespace) -> dict:
     return console_client.approval(args.job, args.session)
 
 
+@_agent_command
+def _cmd_console_queue(args: argparse.Namespace) -> dict:
+    body = console_client.read_json(args.file)
+    if not isinstance(body, dict):
+        raise console_client.ClientError("bad-request", "the job file must hold a JSON object")
+    return console_client.queue(body)
+
+
+# web test runs --------------------------------------------------------------------------------
+def _webtest_command(fn):
+    """Web test commands print JSON; a console error becomes the one-line exit-2 message.
+
+    A file that cannot be read (a capture, a staged case, a template workbook) is reported by its
+    error type only, so stderr carries no path or traceback.
+    """
+    def run(args: argparse.Namespace) -> int:
+        try:
+            return _emit(fn(args))
+        except console_client.ClientError as exc:
+            raise webtest.WebtestError(f"console: {exc.code}: {exc.message}") from None
+        except (OSError, zipfile.BadZipFile) as exc:
+            raise webtest.WebtestError(f"a file of this run or its template cannot be read: "
+                                       f"{type(exc).__name__}") from None
+    return run
+
+
+def _run_folder(args: argparse.Namespace) -> Path:
+    return webtest.find_run(webtest.runs_root(), args.run)
+
+
+def _read_json_file(path: str, what: str):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise webtest.WebtestError(f"cannot read the {what} file: {type(exc).__name__}") from None
+
+
+def _job_args(args: argparse.Namespace) -> tuple[str, str]:
+    if not args.job or not args.session:
+        raise webtest.WebtestError("--job and --session are required")
+    return args.job, args.session
+
+
+@_webtest_command
+def _cmd_webtest_new(args: argparse.Namespace) -> dict:
+    job, session = _job_args(args)
+    return webtest.new_run(webtest.runs_root(), console_client.Reader(), job, session, args.name)
+
+
+@_webtest_command
+def _cmd_webtest_find(args: argparse.Namespace) -> dict:
+    file_key, sep, node = args.source_ref.partition(":")
+    if not sep or not file_key or not node:
+        raise webtest.WebtestError("--source-ref must be <file key>:<node id>")
+    return {"runs": webtest.find_source(webtest.runs_root(), file_key, node)}
+
+
+@_webtest_command
+def _cmd_webtest_stage(args: argparse.Namespace) -> dict:
+    case = _read_json_file(args.case, "case")
+    if not isinstance(case, dict) or case.get("row") != args.row:
+        raise webtest.WebtestError("the case file names another row than --row")
+    return webtest.stage(_run_folder(args), case,
+                         Path(args.capture) if args.capture else None)
+
+
+@_webtest_command
+def _cmd_webtest_import(args: argparse.Namespace) -> dict:
+    return webtest.import_staged(_run_folder(args))
+
+
+@_webtest_command
+def _cmd_webtest_triage(args: argparse.Namespace) -> dict:
+    return webtest.triage(_run_folder(args), _read_json_file(args.file, "triage"))
+
+
+@_webtest_command
+def _cmd_webtest_plan(args: argparse.Namespace) -> dict:
+    job, session = _job_args(args)
+    return webtest.apply_plan(_run_folder(args), console_client.Reader(), job, session,
+                              check_columns=webtest_export.confirmed_plan)
+
+
+@_webtest_command
+def _cmd_webtest_recover(args: argparse.Namespace) -> dict:
+    job, session = _job_args(args)
+    return webtest.recover(_run_folder(args), console_client.Reader(), job, session)
+
+
+@_webtest_command
+def _cmd_webtest_next(args: argparse.Namespace) -> dict:
+    job, session = _job_args(args)
+    return webtest.next_row(_run_folder(args), console_client.Reader(), job, session)
+
+
+@_webtest_command
+def _cmd_webtest_row(args: argparse.Namespace) -> dict:
+    return webtest.record_row(_run_folder(args), args.row, _read_json_file(args.result, "result"))
+
+
+@_webtest_command
+def _cmd_webtest_evidence(args: argparse.Namespace) -> dict:
+    folder = _run_folder(args)
+    if args.file:
+        return webtest.copy_file_evidence(folder, args.row, Path(args.file))
+    images = webtest.server_images_dir(None, folder.name)
+    try:
+        found = [p for p in images.iterdir() if p.is_file() and p.stem == args.from_image]
+    except OSError:
+        found = []
+    if not webtest.IMAGE_ID_RE.match(args.from_image or "") or len(found) != 1:
+        raise webtest.WebtestError("no uploaded image with that id for this run")
+    return webtest.add_evidence(folder, args.row, found[0].read_bytes(), "tester")
+
+
+@_webtest_command
+def _cmd_webtest_requeue(args: argparse.Namespace) -> dict:
+    return webtest.requeue(_run_folder(args), args.row, args.reason, signed_out=args.signed_out)
+
+
+@_webtest_command
+def _cmd_webtest_park(args: argparse.Namespace) -> dict:
+    return webtest.park(_run_folder(args), args.row, _read_json_file(args.question, "question"))
+
+
+@_webtest_command
+def _cmd_webtest_resolve(args: argparse.Namespace) -> dict:
+    job, session = _job_args(args)
+    folder = _run_folder(args)
+    wait = (args.timeout if args.timeout is not None else 100.0) if args.wait else None
+    return webtest.resolve(folder, console_client.Reader(), job, session,
+                           webtest.server_images_dir(None, folder.name), wait=wait)
+
+
+@_webtest_command
+def _cmd_webtest_signed_in(args: argparse.Namespace) -> dict:
+    job, session = _job_args(args)
+    return webtest.signed_in(_run_folder(args), console_client.Reader(), job, session, args.scenario)
+
+
+@_webtest_command
+def _cmd_webtest_close(args: argparse.Namespace) -> dict:
+    return webtest.close(_run_folder(args), console_client.Reader().job_open, stopped=args.stopped)
+
+
+@_webtest_command
+def _cmd_webtest_status(args: argparse.Namespace) -> dict:
+    return webtest.status(_run_folder(args))
+
+
+@_webtest_command
+def _cmd_webtest_columns(args: argparse.Namespace) -> dict:
+    folder = _run_folder(args)
+    return webtest_export.columns_view(folder, webtest.load(folder), args.template, ask=args.ask)
+
+
+@_webtest_command
+def _cmd_webtest_export(args: argparse.Namespace) -> dict:
+    folder = _run_folder(args)
+    if args.apply_pending:
+        job, session = _job_args(args)
+        webtest.resolve(folder, console_client.Reader(), job, session, webtest.server_images_dir(None, folder.name))
+    return webtest_export.export(folder, webtest.load(folder))
+
+
+@_webtest_command
+def _cmd_login_scenario_list(args: argparse.Namespace) -> dict:
+    return {"project": args.project, "scenarios": login_scenarios.list_scenarios(None, args.project)}
+
+
+@_webtest_command
+def _cmd_login_scenario_save(args: argparse.Namespace) -> dict:
+    return login_scenarios.save_draft(None, args.project, _read_json_file(args.file, "scenario"))
+
+
+@_webtest_command
+def _cmd_login_scenario_remove(args: argparse.Namespace) -> dict:
+    return login_scenarios.remove(None, login_scenarios.check_name(args.project, "project"),
+                                  login_scenarios.check_name(args.name, "scenario name"))
+
+
+def _add_webtest_parser(sub) -> None:
+    def cmd(name: str, fn, help_text: str, *, run: bool = True, job: bool = False):
+        p = sub.add_parser(name, help=help_text)
+        if run:
+            p.add_argument("--run", required=True, help="run id (W<yyyymmdd>-<hhmm>-<slug>)")
+        if job:
+            p.add_argument("--job", required=True, help="console job id")
+            p.add_argument("--session", required=True, help="agent session id")
+        p.set_defaults(func=fn)
+        return p
+
+    p = cmd("webtest-new", _cmd_webtest_new, "create a web test run from an open webtest-plan job", run=False, job=True)
+    p.add_argument("--name", help="run name (default: the name in the job)")
+    p = cmd("webtest-find", _cmd_webtest_find, "runs that hold an import of a source", run=False)
+    p.add_argument("--source-ref", required=True, help="<figma file key>:<node id>")
+    p = cmd("webtest-stage", _cmd_webtest_stage, "save one imported row, so an import can stop and resume")
+    p.add_argument("--row", required=True)
+    p.add_argument("--case", required=True, help='JSON file: {"row", "source": {"kind", ...}, "content", ...}')
+    p.add_argument("--capture", help="PNG or JPEG capture of the row")
+    cmd("webtest-import", _cmd_webtest_import, "turn the staged rows into the case list")
+    p = cmd("webtest-triage", _cmd_webtest_triage, "store the draft kind, class, screen and steps per case")
+    p.add_argument("--file", required=True, help='JSON file: {"<row>": {kind, class, reason, screen, ...}}')
+    cmd("webtest-plan", _cmd_webtest_plan, "store the review table the tester confirmed in the console", job=True)
+    cmd("webtest-recover", _cmd_webtest_recover, "requeue rows of finished jobs at the start of a run job", job=True)
+    cmd("webtest-next", _cmd_webtest_next, "take the next queued row for the worker", job=True)
+    p = cmd("webtest-row", _cmd_webtest_row, "record pass or fail for the running row")
+    p.add_argument("--row", required=True)
+    p.add_argument("--result", required=True, help='JSON file: {"verdict": "pass"|"fail", "actual", "url"}')
+    p = cmd("webtest-evidence", _cmd_webtest_evidence, "copy an evidence image to the row's current attempt")
+    p.add_argument("--row", required=True)
+    src = p.add_mutually_exclusive_group(required=True)
+    src.add_argument("--file", help="the path the Chrome tool reported for a saved screenshot")
+    src.add_argument("--from-image", help="id of an image the tester uploaded in the console")
+    p = cmd("webtest-requeue", _cmd_webtest_requeue, "blocked by the environment: back to the queue")
+    p.add_argument("--row", required=True)
+    p.add_argument("--reason", required=True)
+    p.add_argument("--signed-out", action="store_true", help="the page asked to sign in: clear the signed-in scenario")
+    p = cmd("webtest-park", _cmd_webtest_park, "park the running row with a question for the tester")
+    p.add_argument("--row", required=True)
+    p.add_argument("--question", required=True, help='JSON file: {"body": "..."}')
+    p = cmd("webtest-resolve", _cmd_webtest_resolve, "apply the tester's answers and results from the console",
+            job=True)
+    p.add_argument("--wait", action="store_true", help="hold until something new arrives")
+    p.add_argument("--timeout", type=float, help="seconds to hold with --wait (default 100)")
+    p = cmd("webtest-signed-in", _cmd_webtest_signed_in, "store the tester's sign-in answer for a scenario", job=True)
+    p.add_argument("--scenario", required=True)
+    p = cmd("webtest-close", _cmd_webtest_close, "turn every open row into not-run with its reason")
+    p.add_argument("--stopped", action="store_true", help="the tester ended the run")
+    cmd("webtest-status", _cmd_webtest_status, "counts by state and the rows")
+    p = cmd("webtest-columns", _cmd_webtest_columns, "first-guess column plan with three sample rows")
+    p.add_argument("--template", help="registered template (default: the run's)")
+    p.add_argument("--ask", action="store_true", help="print the review-table ask for `console ask --question`")
+    p = cmd("webtest-export", _cmd_webtest_export, "write a new workbook and a Markdown report")
+    p.add_argument("--apply-pending", action="store_true", help="apply the tester's pending results first")
+    p.add_argument("--job")
+    p.add_argument("--session")
+
+    p = cmd("login-scenario-list", _cmd_login_scenario_list, "a project's login scenarios and their approval",
+            run=False)
+    p.add_argument("--project", required=True)
+    p = cmd("login-scenario-save", _cmd_login_scenario_save,
+            "save a login checklist draft; the tester approves it in the console", run=False)
+    p.add_argument("--project", required=True)
+    p.add_argument("--file", required=True,
+                   help='JSON file: {"name", "label", "login_url", "signout_url", "steps", "signed_in_check", '
+                        '"account_hint"}')
+    p = cmd("login-scenario-remove", _cmd_login_scenario_remove, "remove a login scenario", run=False)
+    p.add_argument("--project", required=True)
+    p.add_argument("--name", required=True)
+
+
 def _add_console_parser(sub) -> None:
     cp = sub.add_parser("console", help="local console in the browser (start, open, status, stop)")
     csub = cp.add_subparsers(dest="console_command", required=True,
-                             metavar="{start,open,status,stop,wait,claim,progress,ask,done,approval}")
+                             metavar="{start,open,status,stop,wait,claim,progress,ask,done,approval,queue}")
 
     st = csub.add_parser("start", help="start the console server, or reuse the running one, and open the browser")
     st.add_argument("--no-browser", action="store_true", help="do not open a browser (use `console open` later)")
@@ -595,6 +852,11 @@ def _add_console_parser(sub) -> None:
     ap.add_argument("--session", required=True)
     ap.set_defaults(func=_cmd_console_approval)
 
+    qu = csub.add_parser("queue", help="queue a webtest-plan or webtest-run job from the chat (agent side)")
+    qu.add_argument("--file", required=True,
+                    help='JSON file: {"kind": "webtest-plan"|"webtest-run", "ui_lang", ...the kind\'s fields}')
+    qu.set_defaults(func=_cmd_console_queue)
+
     sv = csub.add_parser("serve")
     sv.add_argument("--port", type=int)
     sv.add_argument("--instance")
@@ -635,9 +897,11 @@ def build_parser() -> argparse.ArgumentParser:
                     help="override a column, roles: no, item, steps, expected, evidence, trace")
     tr.add_argument("--default", action="store_true", help="make this the default template")
     tr.add_argument("--replace", action="store_true", help="replace a template already registered under this name")
+    tr.add_argument("--purpose", choices=list(templates.PURPOSES), default="testcase",
+                    help="testcase (needs the 備考/trace column) or webtest (web test run export)")
     tr.set_defaults(func=_cmd_template_register)
 
-    tl = sub.add_parser("template-list", help="list registered templates")
+    tl = sub.add_parser("template-list", help="list registered templates with their purpose")
     tl.set_defaults(func=_cmd_template_list)
 
     td = sub.add_parser("template-default", help="set the default template")
@@ -739,6 +1003,7 @@ def build_parser() -> argparse.ArgumentParser:
     cr.add_argument("--by", required=True, help="tester name")
     cr.set_defaults(func=_cmd_cache_review)
 
+    _add_webtest_parser(sub)
     _add_console_parser(sub)
     return parser
 

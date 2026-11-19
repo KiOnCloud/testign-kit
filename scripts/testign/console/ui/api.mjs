@@ -5,6 +5,7 @@ const TOKEN_KEY = 'testign.session';
 const VERSION_KEY = 'testign.version';
 const SESSION_HEADER = 'X-Testign-Session';
 export const UPLOAD_CAP = 10 * 1024 * 1024;
+export const IMAGE_CAP = 20 * 1024 * 1024;
 
 export class ApiError extends Error {
   constructor(status, code, message, details) {
@@ -144,6 +145,33 @@ export async function request(method, path, { json, binary, headers, signal } = 
   }
 }
 
+/**
+ * GET an image that needs the session header and return it as a data: URL (the page's CSP allows
+ * data: images, not blob: ones). Only PNG and JPEG answers are accepted.
+ */
+export async function requestImage(path) {
+  if (!token) {
+    onForbidden();
+    throw new ApiError(403, 'forbidden', 'no session');
+  }
+  let res;
+  try {
+    res = await fetch(path, { headers: { [SESSION_HEADER]: token }, cache: 'no-store', credentials: 'same-origin' });
+  } catch {
+    throw new ApiError(0, 'network', 'the console server did not answer');
+  }
+  if (!res.ok) throw await parseError(res);
+  const type = (res.headers.get('Content-Type') || '').split(';')[0].trim();
+  if (type !== 'image/png' && type !== 'image/jpeg') throw new ApiError(res.status, 'bad-response', 'not an image');
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new ApiError(0, 'bad-response', 'the image could not be read'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 const seg = (s) => encodeURIComponent(String(s));
 
 export const api = {
@@ -180,4 +208,20 @@ export const api = {
   cancelJob: (id) => request('POST', `/api/jobs/${seg(id)}/cancel`, { json: {} }),
   failJob: (id) => request('POST', `/api/jobs/${seg(id)}/fail`, { json: {} }),
   releaseAgent: () => request('POST', '/api/agent/release', { json: {} }),
+  runs: () => request('GET', '/api/webtest/runs'),
+  run: (run) => request('GET', `/api/webtest/runs/${seg(run)}`),
+  runImage: (run, kind, name) => requestImage(`/api/webtest/runs/${seg(run)}/${kind === 'capture' ? 'captures' : 'evidence'}/${seg(name)}`),
+  answerRow: (run, question, body) => request('POST', `/api/webtest/runs/${seg(run)}/answers/${seg(question)}`, { json: body }),
+  rowResult: (run, row, body) => request('POST', `/api/webtest/runs/${seg(run)}/rows/${seg(row)}/result`, { json: body }),
+  uploadImage: async (run, file) => {
+    if (file.size > IMAGE_CAP) throw new ApiError(413, 'too-large', 'image larger than 20 MB');
+    return request('PUT', `/api/webtest/runs/${seg(run)}/images`, { binary: await file.arrayBuffer() });
+  },
+  finishRun: (run) => request('POST', `/api/webtest/runs/${seg(run)}/finish`, { json: {} }),
+  projects: () => request('GET', '/api/webtest/projects'),
+  saveProject: (name, body) => request('PUT', `/api/webtest/projects/${seg(name)}`, { json: body }),
+  scenarios: (project) => request('GET', `/api/webtest/login/${seg(project)}`),
+  approveScenario: (project, name, hash) => request('POST', `/api/webtest/login/${seg(project)}/${seg(name)}/approve`, { json: { hash } }),
+  rejectScenario: (project, name, note) => request('POST', `/api/webtest/login/${seg(project)}/${seg(name)}/reject`, { json: { note } }),
+  removeScenario: (project, name) => request('DELETE', `/api/webtest/login/${seg(project)}/${seg(name)}`),
 };

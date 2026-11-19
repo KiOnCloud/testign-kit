@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Review table</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/kestrel/tokens.css">
+<link rel="stylesheet" href="ds/kestrel/components/bundle.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:var(--accent-text)}a:hover{color:var(--accent-hover)}
+</style>
+</helmet>
+<div data-theme="{{theme}}" lang="{{lang}}" style="min-height: 100vh; display: flex; flex-wrap: wrap; background: var(--surface-0); color: var(--text-1); font-family: var(--font-sans); font-size: var(--fs-small); line-height: var(--lh-ui); letter-spacing: var(--ls-ui);">
+
+  <nav class="k-sidebar" aria-label="{{t.nav_main}}" style="flex: 1 1 232px; min-height: 100%;">
+    <div class="k-sidebar__ws"><span class="k-avatar">T</span>testign<span class="k-muted" style="font-weight: var(--fw-regular);">· usupp</span></div>
+    <div class="k-sidebar__section">{{t.nav_work}}</div>
+    <a class="k-nav-item" href="Tickets.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5h5l3 3v8H4v-11Z"></path><path d="M9 2.5v3h3M6 8h4M6 10.5h4"></path></svg>{{t.nav_tickets}}<span class="k-nav-item__count">3</span></a>
+    <a class="k-nav-item" href="Runs.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3" width="11" height="8" rx="1"></rect><path d="M6 13.5h4M7 6l2.5 1.5L7 9Z"></path></svg>{{t.nav_runs}}</a>
+    <a class="k-nav-item is-active" href="Jobs.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 8A5 5 0 0 1 4.3 11.3M3 8a5 5 0 0 1 8.7-3.3"></path><path d="M11.7 2.5v2.2h-2.2M4.3 13.5v-2.2h2.2"></path></svg>{{t.nav_jobs}}<span class="k-badge k-badge--warning" style="margin-left: auto;">{{t.nav_waiting}}</span></a>
+    <div class="k-sidebar__section">{{t.nav_setup}}</div>
+    <a class="k-nav-item" href="Templates.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 2.5 5.5 3L8 8.5l-5.5-3Z"></path><path d="m2.5 8.5 5.5 3 5.5-3"></path></svg>{{t.nav_templates}}<span class="k-nav-item__count">2</span></a>
+    <a class="k-nav-item" href="Login.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5.5" cy="10.5" r="2.5"></circle><path d="m7.5 8.5 5-5M10.5 5.5 12 7"></path></svg>{{t.nav_login}}<span class="k-nav-item__count">3</span></a>
+    <a class="k-nav-item" href="Cache.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-7.5Z"></path></svg>{{t.nav_cache}}</a>
+    <a class="k-nav-item" href="Settings.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2"></circle><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.8 3.8l1 1M11.2 11.2l1 1M3.8 12.2l1-1M11.2 4.8l1-1"></path></svg>{{t.nav_settings}}</a>
+    <div style="margin-top: auto; padding: var(--space-8); border-top: var(--hairline) solid var(--border-1); display: flex; flex-direction: column; gap: var(--space-8);">
+      <div style="display: flex; flex-direction: column; gap: var(--space-4);">
+        <span class="k-section-label">{{t.ui_lang}}</span>
+        <div class="k-tabs k-tabs--segmented" role="radiogroup" aria-label="{{t.ui_lang}}">
+          <button class="k-tab {{viOn}}" role="radio" aria-checked="{{viSel}}" lang="vi" onClick="{{setVi}}">Tiếng Việt</button>
+          <button class="k-tab {{enOn}}" role="radio" aria-checked="{{enSel}}" lang="en" onClick="{{setEn}}">English</button>
+          <button class="k-tab {{jaOn}}" role="radio" aria-checked="{{jaSel}}" lang="ja" onClick="{{setJa}}">日本語</button>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+        <span style="display: flex; align-items: center; gap: var(--space-6); color: var(--text-2);"><span class="k-badge__dot" style="color: var(--success);"></span>{{t.agent_ok}}</span>
+        <span class="k-note">{{t.local_only}}</span>
+      </div>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column;">
+    <header class="k-topbar">
+      <nav class="k-breadcrumb" aria-label="breadcrumb"><a class="k-breadcrumb__item" href="Jobs.dc.html">{{t.nav_jobs}}</a><span class="k-breadcrumb__item">#12 · {{t.kind_plan}}</span><span class="k-breadcrumb__item">{{t.crumb}}</span></nav>
+      <div class="k-topbar__spacer"></div>
+      <span class="k-note">{{t.nothing_runs}}</span>
+    </header>
+
+    <div style="padding: var(--space-24); display: flex; flex-direction: column; gap: var(--space-20, 20px); max-width: 1400px; width: 100%; box-sizing: border-box;">
+      <section style="display: flex; flex-direction: column; gap: var(--space-4);">
+        <h1 style="margin: 0; font-size: var(--fs-title-1); line-height: var(--lh-body); font-weight: var(--fw-semibold); letter-spacing: var(--ls-title);">{{t.title}}</h1>
+        <p class="k-note">{{t.subtitle}}</p>
+        <div style="display: flex; flex-wrap: wrap; gap: var(--space-6); align-items: center;"><span class="k-section-label">{{t.hosts}}</span><span class="k-chip">dev.u-supp-u.devkarte.jp</span><span class="k-note">{{t.hosts_note}}</span></div>
+      </section>
+
+      <section class="k-card" aria-labelledby="cols-h">
+        <div class="k-card__body" style="display: flex; flex-direction: column; gap: var(--space-12);">
+          <div style="display: flex; flex-wrap: wrap; gap: var(--space-8); align-items: center;">
+            <h2 id="cols-h" class="k-card__title" style="margin: 0;">{{t.cols_title}}</h2>
+            <span class="k-card__meta">customer-a · {{t.sheet}} TC · {{t.header_row}} 3</span>
+            <div style="flex: 1;"></div>
+            <button class="k-btn k-btn--secondary k-btn--sm" type="button">{{t.add_col}}</button>
+          </div>
+          <div class="k-table-wrap" style="overflow-x: auto;">
+            <table class="k-table k-table--compact">
+              <thead><tr><th style="width: 48px;">{{t.c_letter}}</th><th>{{t.c_header}}</th><th style="width: 184px;">{{t.c_field}}</th><th>{{t.c_s1}}</th><th>{{t.c_s2}}</th><th>{{t.c_s3}}</th><th style="width: 96px;"><span class="k-muted">{{t.c_move}}</span></th></tr></thead>
+              <tbody>
+                <tr><td class="k-mono">A</td><td lang="ja">No</td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.c_field}} A"><option>no</option></select></span></td><td class="k-mono">2</td><td class="k-mono">29</td><td class="k-mono">18</td><td><button class="k-btn k-btn--ghost k-btn--xs k-btn--icon" aria-label="{{t.up}} A">↑</button><button class="k-btn k-btn--ghost k-btn--xs k-btn--icon" aria-label="{{t.down}} A">↓</button></td></tr>
+                <tr><td class="k-mono">B</td><td lang="ja">確認項目</td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.c_field}} B"><option>content</option></select></span></td><td lang="ja">予約確認 → 予約履歴</td><td>{{t.r29}}</td><td>{{t.r18}}</td><td><button class="k-btn k-btn--ghost k-btn--xs k-btn--icon" aria-label="{{t.up}} B">↑</button><button class="k-btn k-btn--ghost k-btn--xs k-btn--icon" aria-label="{{t.down}} B">↓</button></td></tr>
+                <tr><td class="k-mono">D</td><td lang="ja">期待結果</td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.c_field}} D"><option>expected</option></select></span></td><td>{{t.e2}}</td><td>{{t.e29}}</td><td class="k-muted">—</td><td><button class="k-btn k-btn--ghost k-btn--xs k-btn--icon" aria-label="{{t.up}} D">↑</button><button class="k-btn k-btn--ghost k-btn--xs k-btn--icon" aria-label="{{t.down}} D">↓</button></td></tr>
+                <tr><td class="k-mono">F</td><td lang="ja">結果</td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.c_field}} F"><option>verdict</option></select></span></td><td class="k-muted" colspan="3">{{t.filled_after}}</td><td><button class="k-btn k-btn--ghost k-btn--xs k-btn--icon" aria-label="{{t.up}} F">↑</button><button class="k-btn k-btn--ghost k-btn--xs k-btn--icon" aria-label="{{t.down}} F">↓</button></td></tr>
+                <tr><td class="k-mono">H <span class="k-badge k-badge--accent">{{t.new}}</span></td><td><input class="k-input k-input--sm" type="text" value="画面" aria-label="{{t.c_header}} H" lang="ja"></td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.c_field}} H"><option>screen</option></select></span></td><td class="k-mono">/</td><td class="k-mono">/mypage/history</td><td class="k-mono">/</td><td><button class="k-btn k-btn--ghost k-btn--xs" type="button">{{t.remove}}</button></td></tr>
+                <tr><td class="k-mono">I <span class="k-badge k-badge--accent">{{t.new}}</span></td><td><input class="k-input k-input--sm" type="text" value="Evidence" aria-label="{{t.c_header}} I"></td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.c_field}} I"><option>evidence</option></select></span></td><td class="k-muted" colspan="3">{{t.filled_after}}</td><td><button class="k-btn k-btn--ghost k-btn--xs" type="button">{{t.remove}}</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: var(--space-12); align-items: flex-end;">
+            <label class="k-field" style="flex: 0 1 140px;"><span class="k-field__label">{{t.lbl_pass}}</span><input class="k-input k-input--sm" type="text" value="OK"></label>
+            <label class="k-field" style="flex: 0 1 140px;"><span class="k-field__label">{{t.lbl_fail}}</span><input class="k-input k-input--sm" type="text" value="NG"></label>
+            <span class="k-note" style="flex: 1 1 260px;">{{t.lbl_note}}</span>
+          </div>
+        </div>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: var(--space-8);" aria-labelledby="rows-h">
+        <div class="k-toolbar">
+          <h2 id="rows-h" style="margin: 0; font-size: var(--fs-body, 14px); font-weight: var(--fw-semibold);">{{t.rows_title}}</h2>
+          <div class="k-toolbar__group"><span class="k-badge k-badge--outline">{{t.c_sure}} 28</span><span class="k-badge k-badge--accent">{{t.c_choice}} 6</span><span class="k-badge k-badge--outline">{{t.c_notweb}} 11</span><span class="k-badge k-badge--warning">{{t.no_screen}} 9</span></div>
+          <div class="k-toolbar__spacer"></div>
+          <div class="k-toolbar__group"><span class="k-note">2 {{t.selected}}</span><span class="k-select-wrap"><select class="k-select" aria-label="{{t.bulk}}"><option>{{t.bulk}}</option><option>{{t.bulk_delegate}}</option><option>{{t.bulk_self}}</option><option>{{t.bulk_scenario}}</option></select></span></div>
+        </div>
+        <div class="k-table-wrap" style="overflow-x: auto;">
+          <table class="k-table k-table--compact">
+            <thead><tr><th style="width: 32px;"><input type="checkbox" aria-label="{{t.select_all}}"></th><th style="width: 40px;">No</th><th>{{t.col_content}}</th><th style="width: 200px;">{{t.col_screen}}</th><th style="width: 150px;">{{t.col_class}}</th><th style="width: 120px;">{{t.col_runner}}</th><th style="width: 110px;">{{t.col_scenario}}</th><th style="width: 220px;">{{t.col_precond}}</th></tr></thead>
+            <tbody>
+              <tr><td><input type="checkbox" aria-label="{{t.select}} 2"></td><td class="k-id">2</td><td><span lang="ja" class="k-cell-title">予約確認 → 予約履歴</span><div class="k-note">{{t.why2}}</div></td><td><input class="k-input k-input--sm" type="text" value="/" aria-label="{{t.col_screen}} 2"><div class="k-note">{{t.conf_low}}</div></td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.col_class}} 2"><option>{{t.c_sure}}</option></select></span></td><td>Agent</td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.col_scenario}} 2"><option>client</option></select></span></td><td class="k-muted">—</td></tr>
+              <tr><td><input type="checkbox" aria-label="{{t.select}} 9"></td><td class="k-id">9</td><td><span class="k-cell-title">{{t.r9}}</span><div class="k-note">{{t.why9}}</div></td><td><input class="k-input k-input--sm" type="text" value="/reservation" aria-label="{{t.col_screen}} 9"><div class="k-note">{{t.conf_high}} · Desktop - Step 1</div></td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.col_class}} 9"><option>{{t.c_sure}}</option></select></span></td><td>Agent</td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.col_scenario}} 9"><option>client</option></select></span></td><td class="k-muted">—</td></tr>
+              <tr><td><input type="checkbox" aria-label="{{t.select}} 18"></td><td class="k-id">18</td><td><span class="k-cell-title">{{t.r18}}</span><div class="k-note">{{t.why18}}</div></td><td><input class="k-input k-input--sm" type="text" value="/" aria-label="{{t.col_screen}} 18"><div class="k-note">{{t.conf_low}}</div></td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.col_class}} 18"><option>{{t.c_notweb}}</option></select></span></td><td>{{t.r_manual}}</td><td class="k-muted">—</td><td class="k-muted">—</td></tr>
+              <tr style="background: var(--surface-2);"><td><input type="checkbox" checked aria-label="{{t.select}} 29"></td><td class="k-id">29</td><td><span class="k-cell-title">{{t.r29}}</span><div class="k-note">{{t.why29}}</div></td><td><input class="k-input k-input--sm" type="text" value="/mypage/history" aria-label="{{t.col_screen}} 29"><div class="k-note">{{t.conf_high}} · Desktop - Booking History</div></td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.col_class}} 29"><option>{{t.c_choice}}</option></select></span></td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.col_runner}} 29"><option>{{t.r_unset}}</option><option>Agent</option><option>{{t.r_tester}}</option></select></span></td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.col_scenario}} 29"><option>client</option></select></span></td><td><input class="k-input k-input--sm" type="text" placeholder="{{t.precond_ph}}" aria-label="{{t.col_precond}} 29"></td></tr>
+              <tr style="background: var(--surface-2);"><td><input type="checkbox" checked aria-label="{{t.select}} 31"></td><td class="k-id">31</td><td><span class="k-cell-title">{{t.r31}}</span><div class="k-note">{{t.why31}}</div></td><td><input class="k-input k-input--sm" type="text" value="/reservation" aria-label="{{t.col_screen}} 31"><div class="k-note">{{t.conf_high}} · Desktop - Step 1</div></td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.col_class}} 31"><option>{{t.c_choice}}</option></select></span></td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.col_runner}} 31"><option>Agent</option></select></span></td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.col_scenario}} 31"><option>client</option></select></span></td><td><input class="k-input k-input--sm" type="text" aria-invalid="true" aria-label="{{t.col_precond}} 31"><div class="k-note" style="color: var(--danger);">{{t.precond_required}}</div></td></tr>
+              <tr><td><input type="checkbox" aria-label="{{t.select}} 32"></td><td class="k-id">32</td><td><span class="k-cell-title">[Mobile] {{t.r32}}</span><div class="k-note">{{t.why32}}</div></td><td><input class="k-input k-input--sm" type="text" value="/reservation" aria-label="{{t.col_screen}} 32"><div class="k-note">{{t.conf_high}} · Mobile - Step 3</div></td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.col_class}} 32"><option>{{t.c_notweb}}</option></select></span></td><td>{{t.r_tester}}</td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.col_scenario}} 32"><option>client</option></select></span></td><td class="k-muted">—</td></tr>
+              <tr><td><input type="checkbox" aria-label="{{t.select}} 41"></td><td class="k-id">41</td><td><span class="k-cell-title">{{t.r41}}</span><div class="k-note">{{t.why41}}</div></td><td><input class="k-input k-input--sm" type="text" placeholder="{{t.screen_ph}}" aria-label="{{t.col_screen}} 41"><div class="k-note" style="color: var(--warning-text, var(--text-2));">{{t.conf_none}}</div></td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.col_class}} 41"><option>{{t.c_sure}}</option></select></span></td><td>Agent</td><td><span class="k-select-wrap"><select class="k-select" aria-label="{{t.col_scenario}} 41"><option>staff · {{t.not_approved}}</option></select></span></td><td class="k-muted">—</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <span class="k-note">{{t.more_rows}}</span>
+      </section>
+
+      <footer style="display: flex; flex-wrap: wrap; gap: var(--space-8); align-items: center; padding-top: var(--space-12); border-top: var(--hairline) solid var(--border-1);">
+        <span class="k-note" style="margin-right: auto; color: var(--danger);">{{t.blocker}}</span>
+        <button class="k-btn k-btn--ghost" type="button">{{t.reject}}</button>
+        <button class="k-btn k-btn--primary" type="button" disabled>{{t.confirm}}</button>
+      </footer>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"lang":{"editor":"enum","options":["vi","en","ja"],"default":"vi"},"$preview":{"width":1440,"height":1320}}'>
+const NAV = {
+  vi: { nav_main: "Điều hướng chính", nav_work: "Làm việc", nav_tickets: "Tickets", nav_runs: "Test runs", nav_jobs: "Jobs", nav_waiting: "1 chờ bạn", nav_setup: "Thiết lập", nav_templates: "Templates", nav_login: "Kịch bản login", nav_cache: "Scout cache", nav_settings: "Cấu hình", ui_lang: "Ngôn ngữ giao diện", agent_ok: "Agent đã kết nối", local_only: "127.0.0.1 · chỉ máy này truy cập" },
+  en: { nav_main: "Main navigation", nav_work: "Work", nav_tickets: "Tickets", nav_runs: "Test runs", nav_jobs: "Jobs", nav_waiting: "1 needs you", nav_setup: "Setup", nav_templates: "Templates", nav_login: "Login scenarios", nav_cache: "Scout cache", nav_settings: "Settings", ui_lang: "Interface language", agent_ok: "Agent connected", local_only: "127.0.0.1 · this machine only" },
+  ja: { nav_main: "メインナビゲーション", nav_work: "作業", nav_tickets: "チケット", nav_runs: "テスト実行", nav_jobs: "ジョブ", nav_waiting: "1件 回答待ち", nav_setup: "設定", nav_templates: "テンプレート", nav_login: "ログインシナリオ", nav_cache: "スカウトキャッシュ", nav_settings: "環境設定", ui_lang: "表示言語", agent_ok: "エージェント接続中", local_only: "127.0.0.1 · このPCのみ" }
+};
+const PAGE = {
+  vi: { kind_plan: "Nhập và phân loại", crumb: "Bảng xác nhận", nothing_runs: "Chưa row nào chạy trước khi bạn xác nhận", title: "Xác nhận lần chạy · USUPP update 11月", subtitle: "Agent đã đoán cột, màn hình, phân loại và kịch bản login cho 45 row. Sửa chỗ sai rồi xác nhận một lần.", hosts: "Host của lần chạy", hosts_note: "Lấy từ dự án usupp. Chỉ sửa được ở màn hình Kịch bản login.", cols_title: "Cột trong file Excel", sheet: "sheet", header_row: "dòng tiêu đề", add_col: "Thêm cột", c_letter: "Cột", c_header: "Tiêu đề", c_field: "Lấy từ", c_s1: "Mẫu · chắc chắn", c_s2: "Mẫu · cần chọn", c_s3: "Mẫu · không chạy", c_move: "Thứ tự", up: "Lên", down: "Xuống", new: "mới", remove: "Bỏ cột", filled_after: "Điền sau khi chạy", lbl_pass: "Nhãn khi Pass", lbl_fail: "Nhãn khi Fail", lbl_note: "Lấy từ danh sách chọn của cột 結果 trong template (OK, NG, 保留, 対象外).", rows_title: "45 row", c_sure: "Chắc chắn", c_choice: "Cần bạn chọn", c_notweb: "Không chạy trên web", no_screen: "Thiếu màn hình", selected: "row đang chọn", bulk: "Sửa hàng loạt…", bulk_delegate: "Uỷ thác cho agent", bulk_self: "Tôi tự chạy", bulk_scenario: "Đổi kịch bản login", select_all: "Chọn tất cả", select: "Chọn row", col_content: "Nội dung và lý do phân loại", col_screen: "Màn hình", col_class: "Phân loại", col_runner: "Ai chạy", col_scenario: "Kịch bản", col_precond: "Tiền điều kiện", conf_high: "Tin cậy cao", conf_low: "Đề xuất, tin cậy thấp", conf_none: "Agent không đoán được", r_manual: "Manual", r_unset: "Chưa chọn", r_tester: "Tôi tự chạy", r9: "PC mở tab mới, MB giữ nguyên", r18: "Thêm section news, nền aurora chuyển động", r29: "Cho phép cancel theo rule và status", r31: "Hiển thị sort theo create time", r32: "Đổi description phần bữa ăn trưa", r41: "Thay label", e2: "Link ghi 予約履歴", e29: "Nút cancel chỉ hiện khi đúng rule", why2: "Đổi chữ trên một link đang hiển thị", why9: "Điều hướng, không ghi dữ liệu", why18: "Hiệu ứng chuyển động, cần người nhìn", why29: "Phụ thuộc trạng thái booking, có thao tác ghi", why31: "Cần dữ liệu có thứ tự tạo khác nhau", why32: "Cỡ điện thoại: agent không đặt được cửa sổ", why41: "Đổi chữ; node thường, không rõ thuộc trang nào", precond_ph: "Dữ liệu nào, trạng thái nào", precond_required: "Bắt buộc khi agent chạy row này", screen_ph: "Nhập đường dẫn, ví dụ /news", not_approved: "chưa duyệt", more_rows: "Hiển thị 7 trong 45 row.", blocker: "Còn 1 row uỷ thác thiếu tiền điều kiện, 1 row thiếu màn hình và kịch bản staff chưa duyệt.", reject: "Không xác nhận", confirm: "Xác nhận và lưu kế hoạch" },
+  en: { kind_plan: "Import and triage", crumb: "Review table", nothing_runs: "No row runs before you confirm", title: "Confirm the run · USUPP update 11月", subtitle: "The agent guessed the columns, screens, classes and login scenarios for 45 rows. Fix what is wrong, then confirm once.", hosts: "Run hosts", hosts_note: "From the project usupp. Editable only on the Login scenarios screen.", cols_title: "Columns in the Excel file", sheet: "sheet", header_row: "header row", add_col: "Add column", c_letter: "Col", c_header: "Header", c_field: "Filled from", c_s1: "Sample · sure", c_s2: "Sample · your choice", c_s3: "Sample · not runnable", c_move: "Order", up: "Up", down: "Down", new: "new", remove: "Remove", filled_after: "Filled after the run", lbl_pass: "Label for Pass", lbl_fail: "Label for Fail", lbl_note: "Taken from the fixed list of the template's 結果 column (OK, NG, 保留, 対象外).", rows_title: "45 rows", c_sure: "Sure", c_choice: "Your choice", c_notweb: "Not runnable on web", no_screen: "No screen", selected: "rows selected", bulk: "Bulk edit…", bulk_delegate: "Delegate to the agent", bulk_self: "I run it myself", bulk_scenario: "Change login scenario", select_all: "Select all", select: "Select row", col_content: "Change and reason for its class", col_screen: "Screen", col_class: "Class", col_runner: "Run by", col_scenario: "Scenario", col_precond: "Preconditions", conf_high: "High confidence", conf_low: "Proposal, low confidence", conf_none: "The agent could not guess", r_manual: "Manual", r_unset: "Not chosen", r_tester: "Myself", r9: "PC opens a new tab, mobile stays", r18: "News section with a moving aurora background", r29: "Allow cancel by booking rule and status", r31: "Sort by create time", r32: "Change the lunch description", r41: "Change label", e2: "The link reads 予約履歴", e29: "The cancel button shows only when the rule holds", why2: "Text change on a visible link", why9: "Navigation, no data written", why18: "Motion effect, needs a person to look", why29: "Depends on booking status and writes data", why31: "Needs data created at different times", why32: "Phone width: the agent cannot set the window", why41: "Text change; plain node, page unknown", precond_ph: "Which data, in which state", precond_required: "Required when the agent runs this row", screen_ph: "Enter a path, for example /news", not_approved: "not approved", more_rows: "Showing 7 of 45 rows.", blocker: "1 delegated row has no preconditions, 1 row has no screen and the staff scenario is not approved.", reject: "Do not confirm", confirm: "Confirm and save the plan" },
+  ja: { kind_plan: "取り込みと分類", crumb: "確認表", nothing_runs: "承認するまで行は実行されません", title: "実行内容の確認 · USUPP update 11月", subtitle: "エージェントが 45行の列・画面・分類・ログインシナリオを推定しました。誤りを直して 1回で承認します。", hosts: "実行対象ホスト", hosts_note: "プロジェクト usupp の設定です。ログインシナリオ画面でのみ編集できます。", cols_title: "Excel ファイルの列", sheet: "シート", header_row: "見出し行", add_col: "列を追加", c_letter: "列", c_header: "見出し", c_field: "入力元", c_s1: "例 · 確実", c_s2: "例 · 要選択", c_s3: "例 · 実行不可", c_move: "順序", up: "上へ", down: "下へ", new: "新規", remove: "列を外す", filled_after: "実行後に記入", lbl_pass: "Pass のラベル", lbl_fail: "Fail のラベル", lbl_note: "テンプレートの「結果」列の選択肢（OK, NG, 保留, 対象外）から取得。", rows_title: "45行", c_sure: "確実", c_choice: "要選択", c_notweb: "Web では実行不可", no_screen: "画面未設定", selected: "行を選択中", bulk: "一括編集…", bulk_delegate: "エージェントに任せる", bulk_self: "自分で実行", bulk_scenario: "シナリオを変更", select_all: "すべて選択", select: "行を選択", col_content: "変更内容と分類理由", col_screen: "画面", col_class: "分類", col_runner: "実行者", col_scenario: "シナリオ", col_precond: "前提条件", conf_high: "信頼度 高", conf_low: "提案・信頼度 低", conf_none: "推定できませんでした", r_manual: "手動", r_unset: "未選択", r_tester: "自分", r9: "PC は新規タブ、モバイルは同一タブ", r18: "ニュースセクション追加（動くオーロラ背景）", r29: "ルールとステータスによるキャンセル可否", r31: "作成日時順で表示", r32: "昼食の説明文を変更", r41: "ラベル変更", e2: "リンクが「予約履歴」と表示", e29: "ルールを満たす場合のみキャンセルボタン表示", why2: "表示中リンクの文言変更", why9: "画面遷移のみ、データ書き込みなし", why18: "モーション効果、目視が必要", why29: "予約ステータスに依存、書き込みあり", why31: "作成日時の異なるデータが必要", why32: "スマホ幅: エージェントはウィンドウ幅を変更不可", why41: "文言変更。通常ノードのためページ不明", precond_ph: "どのデータが、どの状態か", precond_required: "エージェントが実行する場合は必須", screen_ph: "パスを入力（例: /news）", not_approved: "未承認", more_rows: "45行中 7行を表示。", blocker: "前提条件のない委任行が 1件、画面未設定が 1件、staff シナリオが未承認です。", reject: "承認しない", confirm: "承認して計画を保存" }
+};
+class Component extends DCLogic {
+  renderVals() {
+    const lang = (this.state && this.state.lang) || this.props.lang || 'vi';
+    const pick = (l) => () => this.setState({ lang: l });
+    return {
+      theme: this.props.theme ?? 'light',
+      lang: lang,
+      t: Object.assign({}, NAV[lang] || NAV.vi, PAGE[lang] || PAGE.vi),
+      viOn: lang === 'vi' ? 'is-active' : '', enOn: lang === 'en' ? 'is-active' : '', jaOn: lang === 'ja' ? 'is-active' : '',
+      viSel: lang === 'vi', enSel: lang === 'en', jaSel: lang === 'ja',
+      setVi: pick('vi'), setEn: pick('en'), setJa: pick('ja')
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -16,10 +16,26 @@ const ERROR_KEYS = {
   'not-found': 'job_err_no_revision',
   conflict: 'job_err_conflict',
   'session-too-new': 'job_err_session_too_new',
+  'unknown-project': 'job_err_unknown_project',
+  'off-host': 'job_err_off_host',
+  'bad-source': 'job_err_bad_source',
+  'bad-base-url': 'job_err_bad_base_url',
+  'plan-not-confirmed': 'job_err_plan_not_confirmed',
+  'unknown-run': 'job_err_unknown_run',
+  'open-rows': 'job_err_open_rows',
+  'preconditions-required': 'job_err_preconditions',
+  'scenario-changed': 'job_err_scenario_changed',
+  'not-an-image': 'job_err_not_an_image',
+  'scenario-not-approved': 'job_err_scenario_not_approved',
+  'unknown-scenario': 'job_err_unknown_scenario',
+  'bad-columns': 'job_err_bad_columns',
+  'mobile-agent': 'job_err_mobile_agent',
+  'too-long': 'job_err_too_long',
 };
 
 export function jobErrorText(t, err) {
   const key = err && ERROR_KEYS[err.code];
+  if (key === 'job_err_bad_columns') return t(key, { message: err.message || '' });
   if (key) return t(key);
   if (err && err.code === 'bad-request') return t('job_err_bad_request', { message: err.message || '' });
   return errorText(t, err);
@@ -38,11 +54,18 @@ export function revOf(name) {
 }
 
 export function kindLabel(t, kind) {
-  return t(`job_kind_${kind}`) === `job_kind_${kind}` ? kind : t(`job_kind_${kind}`);
+  const key = `job_kind_${String(kind).replace(/-/g, '_')}`;
+  return t(key) === key ? kind : t(key);
 }
 
 /** "Close QA · DEMO-1 r2" (plus mode and focus when the full record is known). */
 export function jobTitle(t, job) {
+  const p0 = job.params || {};
+  if (job.kind === 'webtest-plan' || job.kind === 'webtest-run') {
+    const parts = [kindLabel(t, job.kind), p0.name || job.run || job.ticket].filter(Boolean);
+    if (job.kind === 'webtest-run' && p0.mode === 'export') parts.push(t('job_mode_export'));
+    return parts.join(' · ');
+  }
   const parts = [kindLabel(t, job.kind), [job.ticket, revOf(job.base_revision)].filter(Boolean).join(' ')];
   const p = job.params || {};
   if (job.kind === 'testcase' && p.mode === 'trace') parts.push(t('job_mode_trace'));
@@ -163,6 +186,16 @@ export function chooseTemplate(ctx, listing, title) {
 export function requeueBody(job, testerName) {
   const p = job.params || {};
   if (job.kind === 'close') return { kind: 'close', ticket: job.ticket, tester: p.tester || testerName };
+  if (job.kind === 'webtest-plan') {
+    const body = { kind: 'webtest-plan', name: p.name, figma_url: p.source && p.source.url, base_url: p.base_url,
+      project: p.project, template: p.template };
+    if (p.ticket) body.ticket = p.ticket;
+    if (job.report_lang) body.report_lang = job.report_lang;
+    return body;
+  }
+  if (job.kind === 'webtest-run') {
+    return { kind: 'webtest-run', run: p.run || job.run, tester: p.tester || testerName, mode: p.mode || 'run' };
+  }
   if (job.kind === 'testcase') {
     const body = { kind: 'testcase', ticket: job.ticket, mode: p.mode, template: p.template };
     if (p.workbook) body.workbook = p.workbook;

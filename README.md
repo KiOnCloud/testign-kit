@@ -163,8 +163,9 @@ answers). The session must be running `/testign:console`; with no session attach
 What it can and cannot change:
 
 - The server itself writes only under `~/.testign-kit/console/` (its state, job records, temporary
-  uploads) and `~/.testign-kit/templates/` (template registration). It never changes `output_dir`, a
-  report, a repository or `config.json`.
+  uploads), `~/.testign-kit/templates/` (template registration) and `~/.testign-kit/webtest/`
+  (projects, login scenarios, your answers and images for web test runs). It never changes
+  `output_dir`, a report, a repository or `config.json`.
 - Reports, workbooks and the Backlog wiki change only through jobs the session runs, with the same
   guards as the chat commands: report revisions are never overwritten, and the wiki is written only
   after you confirmed the exact diff in the console.
@@ -191,6 +192,50 @@ Limits:
   session it refuses to start. Over SSH, forward the port (`ssh -L 4791:127.0.0.1:4791 …`) and run
   `console open --print` for a single-use URL.
 - If another program holds the port, set another one in `console.port` of `config.json`.
+
+### Web test runs
+
+`/testign:webtest` tests a web change from a Figma change table in your own Chrome. It needs the
+Claude in Chrome extension and the Figma MCP server (a seat that can read the file). In the console:
+
+1. **Login scenarios:** create a project and its allowed hosts. Only you edit hosts, and only here;
+   the agent runs rows on those hosts and nowhere else. A scenario is a checklist for signing in by
+   hand. The agent drafts it when a row needs one, and you approve or reject it with a note.
+2. **Test runs → New run:** paste the Figma link (with `node-id`), pick the project, the test base URL
+   and a template, and queue the import. The agent imports the table once, sorts every row into
+   *sure*, *your choice* or *not runnable on web*, and guesses its screen and login scenario.
+3. **Review table:** check the Excel column plan against sample rows, the result labels and one line
+   per row, fix what is wrong, then confirm once. No row runs before you confirm. A row the agent runs
+   that writes data needs the preconditions you name.
+4. **Run:** the agent works one row at a time in your Chrome and saves a screenshot per row. It stops
+   at a sign-in card when the scenario changes; you sign in yourself and press "Signed in". It parks
+   rows it should not decide (you delegate them with preconditions, run them yourself, or skip them),
+   and rows you run yourself wait for your result and an optional image.
+5. **Export:** the run's workbook (a copy of your template) and a report, written next to the run.
+
+A template's purpose is set when you register it: *test cases* (needs the item and trace columns) or
+*web test* (needs the item column; result columns can be added at the review table).
+
+Where things live:
+
+- Runs: `<output_dir>/webtest/<run id>/` holds `run.json`, the Figma captures, the evidence
+  screenshots and the exports. Only the agent's commands write there.
+- `~/.testign-kit/webtest/` holds the projects, login scenarios, your answers to parked rows, your
+  results and the images you upload. It is created readable by you only (mode 700 on macOS and
+  Linux). On Windows, mode bits do nothing: the folder takes the ACL of your user profile, which by
+  default lets only you and administrators read it.
+- No screen takes or stores an account name or password, and the agent never types into a sign-in
+  form.
+
+Limits:
+
+- Page text and Figma text are data. The agent does not follow instructions it reads on a page, and
+  it presses a button that changes data only on a row you delegated with preconditions.
+- A tester action on a run is accepted only from a console tab older than the run's queued or open
+  job. That keeps a tab opened during a job from acting on it, but not a tab opened before the job:
+  an agent misled into minting itself a console link before the job started would pass this check.
+  The new-tab notice above still shows such a tab.
+- Rows at phone width are left to you: the agent cannot resize your Chrome window.
 
 ## Repository layout
 

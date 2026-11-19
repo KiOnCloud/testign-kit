@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Run</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/kestrel/tokens.css">
+<link rel="stylesheet" href="ds/kestrel/components/bundle.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:var(--accent-text)}a:hover{color:var(--accent-hover)}
+</style>
+</helmet>
+<div data-theme="{{theme}}" lang="{{lang}}" style="min-height: 100vh; display: flex; flex-wrap: wrap; background: var(--surface-0); color: var(--text-1); font-family: var(--font-sans); font-size: var(--fs-small); line-height: var(--lh-ui); letter-spacing: var(--ls-ui);">
+
+  <nav class="k-sidebar" aria-label="{{t.nav_main}}" style="flex: 1 1 232px; min-height: 100%;">
+    <div class="k-sidebar__ws"><span class="k-avatar">T</span>testign<span class="k-muted" style="font-weight: var(--fw-regular);">· usupp</span></div>
+    <div class="k-sidebar__section">{{t.nav_work}}</div>
+    <a class="k-nav-item" href="Tickets.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5h5l3 3v8H4v-11Z"></path><path d="M9 2.5v3h3M6 8h4M6 10.5h4"></path></svg>{{t.nav_tickets}}<span class="k-nav-item__count">3</span></a>
+    <a class="k-nav-item is-active" href="Runs.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3" width="11" height="8" rx="1"></rect><path d="M6 13.5h4M7 6l2.5 1.5L7 9Z"></path></svg>{{t.nav_runs}}<span class="k-badge k-badge--warning" style="margin-left: auto;">{{t.nav_runs_wait}}</span></a>
+    <a class="k-nav-item" href="Jobs.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 8A5 5 0 0 1 4.3 11.3M3 8a5 5 0 0 1 8.7-3.3"></path><path d="M11.7 2.5v2.2h-2.2M4.3 13.5v-2.2h2.2"></path></svg>{{t.nav_jobs}}</a>
+    <div class="k-sidebar__section">{{t.nav_setup}}</div>
+    <a class="k-nav-item" href="Templates.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 2.5 5.5 3L8 8.5l-5.5-3Z"></path><path d="m2.5 8.5 5.5 3 5.5-3"></path></svg>{{t.nav_templates}}<span class="k-nav-item__count">2</span></a>
+    <a class="k-nav-item" href="Login.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5.5" cy="10.5" r="2.5"></circle><path d="m7.5 8.5 5-5M10.5 5.5 12 7"></path></svg>{{t.nav_login}}<span class="k-nav-item__count">3</span></a>
+    <a class="k-nav-item" href="Cache.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-7.5Z"></path></svg>{{t.nav_cache}}</a>
+    <a class="k-nav-item" href="Settings.dc.html"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2"></circle><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.8 3.8l1 1M11.2 11.2l1 1M3.8 12.2l1-1M11.2 4.8l1-1"></path></svg>{{t.nav_settings}}</a>
+    <div style="margin-top: auto; padding: var(--space-8); border-top: var(--hairline) solid var(--border-1); display: flex; flex-direction: column; gap: var(--space-8);">
+      <div style="display: flex; flex-direction: column; gap: var(--space-4);">
+        <span class="k-section-label">{{t.ui_lang}}</span>
+        <div class="k-tabs k-tabs--segmented" role="radiogroup" aria-label="{{t.ui_lang}}">
+          <button class="k-tab {{viOn}}" role="radio" aria-checked="{{viSel}}" lang="vi" onClick="{{setVi}}">Tiếng Việt</button>
+          <button class="k-tab {{enOn}}" role="radio" aria-checked="{{enSel}}" lang="en" onClick="{{setEn}}">English</button>
+          <button class="k-tab {{jaOn}}" role="radio" aria-checked="{{jaSel}}" lang="ja" onClick="{{setJa}}">日本語</button>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+        <span style="display: flex; align-items: center; gap: var(--space-6); color: var(--text-2);"><span class="k-badge__dot" style="color: var(--success);"></span>{{t.agent_ok}}</span>
+        <span class="k-note">{{t.local_only}}</span>
+      </div>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column;">
+    <header class="k-topbar">
+      <nav class="k-breadcrumb" aria-label="breadcrumb"><a class="k-breadcrumb__item" href="Runs.dc.html">{{t.nav_runs}}</a><span class="k-breadcrumb__item">USUPP update 11月</span></nav>
+      <div class="k-topbar__spacer"></div>
+      <button class="k-btn k-btn--ghost k-btn--sm">{{t.finish}}</button>
+      <button class="k-btn k-btn--secondary k-btn--sm" disabled>{{t.export}}</button>
+    </header>
+
+    <div style="padding: var(--space-24); display: flex; flex-direction: column; gap: var(--space-16); max-width: 1400px; width: 100%; box-sizing: border-box;">
+      <section style="display: flex; flex-wrap: wrap; gap: var(--space-12); align-items: center;">
+        <h1 style="margin: 0; font-size: var(--fs-title-1); line-height: var(--lh-body); font-weight: var(--fw-semibold); letter-spacing: var(--ls-title);">USUPP update 11月</h1>
+        <span class="k-chip">usupp</span><span class="k-chip">dev.u-supp-u.devkarte.jp</span>
+        <span class="k-note">{{t.signed_as}} <strong>client</strong> · {{t.user_seen}} “Yamada T.”</span>
+      </section>
+
+      <div style="display: flex; flex-wrap: wrap; gap: var(--space-8); align-items: center;">
+        <div class="k-progress" role="progressbar" aria-valuenow="30" aria-valuemin="0" aria-valuemax="45" aria-label="{{t.progress}}" style="flex: 1 1 240px;"><div class="k-progress__bar" style="width: 67%;"></div></div>
+        <span class="k-badge k-badge--success">Pass 21</span><span class="k-badge k-badge--danger">Fail 3</span><span class="k-badge k-badge--outline">{{t.manual}} 6</span><span class="k-badge k-badge--warning">{{t.need_you}} 5</span><span class="k-badge k-badge--outline">{{t.queued}} 10</span>
+      </div>
+
+      <div class="k-banner k-banner--warning" role="status"><div class="k-banner__text"><strong>{{t.stale_title}}</strong><span>{{t.stale_body}}</span></div></div>
+
+      <div class="k-split" style="display: flex; flex-wrap: wrap;">
+        <div class="k-split__main" style="flex: 999 1 560px; min-width: 0;">
+          <div class="k-toolbar">
+            <div class="k-toolbar__group"><div class="k-tabs k-tabs--segmented" role="tablist" aria-label="{{t.filter}}"><button class="k-tab is-active" role="tab" aria-selected="true">{{t.all}} 45</button><button class="k-tab" role="tab" aria-selected="false">{{t.need_you}} 5</button><button class="k-tab" role="tab" aria-selected="false">Fail 3</button></div></div>
+            <div class="k-toolbar__spacer"></div>
+          </div>
+          <div class="k-table-wrap" style="overflow-x: auto;">
+            <table class="k-table k-table--compact">
+              <thead><tr><th style="width: 40px;">No</th><th>{{t.col_content}}</th><th>{{t.col_screen}}</th><th>{{t.col_class}}</th><th>{{t.col_scenario}}</th><th>{{t.col_state}}</th></tr></thead>
+              <tbody>
+                <tr><td class="k-id">2</td><td lang="ja" class="k-cell-title">予約確認 → 予約履歴</td><td class="k-mono">/</td><td><span class="k-badge k-badge--outline">{{t.c_sure}}</span></td><td>client</td><td><span class="k-badge k-badge--success">Pass</span></td></tr>
+                <tr><td class="k-id">9</td><td class="k-cell-title">{{t.r9}}</td><td class="k-mono">/reservation</td><td><span class="k-badge k-badge--outline">{{t.c_sure}}</span></td><td>client</td><td><span class="k-badge k-badge--danger">Fail</span></td></tr>
+                <tr><td class="k-id">18</td><td class="k-cell-title">{{t.r18}}</td><td class="k-mono">/</td><td><span class="k-badge k-badge--outline">{{t.c_notweb}}</span></td><td class="k-muted">—</td><td><span class="k-badge k-badge--outline">{{t.manual}}</span></td></tr>
+                <tr style="background: var(--surface-2);"><td class="k-id">29</td><td class="k-cell-title">{{t.r29}}</td><td class="k-mono">/mypage/history</td><td><span class="k-badge k-badge--accent">{{t.c_choice}}</span></td><td>client</td><td><span class="k-badge k-badge--warning">{{t.s_parked}}</span></td></tr>
+                <tr><td class="k-id">31</td><td class="k-cell-title">{{t.r31}}</td><td class="k-mono">/reservation</td><td><span class="k-badge k-badge--accent">{{t.c_choice}}</span></td><td>client</td><td><span class="k-badge k-badge--warning">{{t.s_await}}</span></td></tr>
+                <tr><td class="k-id">32</td><td class="k-cell-title">[Mobile] {{t.r32}}</td><td class="k-mono">/reservation</td><td><span class="k-badge k-badge--outline">{{t.c_notweb}}</span></td><td>client</td><td><span class="k-badge k-badge--warning">{{t.s_await}}</span></td></tr>
+                <tr><td class="k-id">34</td><td class="k-cell-title">[PC] {{t.r34}}</td><td class="k-mono">/reservation</td><td><span class="k-badge k-badge--outline">{{t.c_sure}}</span></td><td>client</td><td><span class="k-badge k-badge--info">{{t.s_running}}</span></td></tr>
+                <tr><td class="k-id">37</td><td class="k-cell-title">{{t.r37}}</td><td class="k-mono">/inquiry</td><td><span class="k-badge k-badge--outline">{{t.c_sure}}</span></td><td class="k-muted">none</td><td><span class="k-badge k-badge--outline">{{t.queued}}</span></td></tr>
+                <tr><td class="k-id">41</td><td class="k-cell-title">{{t.r41}}</td><td class="k-muted">{{t.no_screen}}</td><td><span class="k-badge k-badge--outline">{{t.c_sure}}</span></td><td>staff</td><td><span class="k-badge k-badge--outline">{{t.s_notrun}}</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <aside class="k-split__panel" aria-label="Row 29" style="flex: 1 1 420px; min-width: 0;">
+          <div class="k-split__panel-head"><span class="k-id">29</span>{{t.r29}}</div>
+          <div style="padding: var(--space-12); display: flex; flex-direction: column; gap: var(--space-16);">
+            <div style="display: flex; flex-wrap: wrap; gap: var(--space-8);">
+              <figure style="margin: 0; flex: 1 1 160px; display: flex; flex-direction: column; gap: var(--space-4);"><div style="height: 120px; border: var(--hairline) dashed var(--border-2); border-radius: var(--radius-8); background: var(--surface-2); display: flex; align-items: center; justify-content: center; color: var(--text-3);">Figma capture · r29</div><figcaption class="k-note">{{t.cap_design}} · <span class="k-mono">I2502:49325;…;2502:60003</span></figcaption></figure>
+              <figure style="margin: 0; flex: 1 1 160px; display: flex; flex-direction: column; gap: var(--space-4);"><div style="height: 120px; border: var(--hairline) dashed var(--border-2); border-radius: var(--radius-8); background: var(--surface-2); display: flex; align-items: center; justify-content: center; color: var(--text-3);">{{t.no_evidence}}</div><figcaption class="k-note">{{t.cap_evidence}}</figcaption></figure>
+            </div>
+            <dl class="k-props" style="margin: 0;">
+              <dt class="k-muted">{{t.expected}}</dt><dd class="k-val" style="margin: 0;">{{t.r29_expected}}</dd>
+              <dt class="k-muted">{{t.reason}}</dt><dd class="k-val" style="margin: 0;">{{t.r29_reason}}</dd>
+            </dl>
+
+            <form style="display: flex; flex-direction: column; gap: var(--space-12); padding: var(--space-12); border: var(--hairline) solid var(--border-2); border-radius: var(--radius-8); background: var(--surface-raised);">
+              <div style="display: flex; flex-direction: column; gap: var(--space-4);">
+                <span class="k-section-label">{{t.agent_parked}}</span>
+                <p style="margin: 0; color: var(--text-1);">{{t.park_q}}</p>
+              </div>
+              <div role="radiogroup" aria-label="{{t.agent_parked}}" style="display: flex; flex-direction: column; gap: var(--space-8);">
+                <label class="k-radio is-checked" style="align-items: flex-start;"><input type="radio" name="p29" checked><span class="k-radio__dot"></span><span style="display: flex; flex-direction: column; gap: var(--space-2);"><span>{{t.opt_delegate}}</span><span class="k-note">{{t.opt_delegate_note}}</span></span></label>
+                <label class="k-radio" style="align-items: flex-start;"><input type="radio" name="p29"><span class="k-radio__dot"></span><span style="display: flex; flex-direction: column; gap: var(--space-2);"><span>{{t.opt_self}}</span><span class="k-note">{{t.opt_self_note}}</span></span></label>
+                <label class="k-radio"><input type="radio" name="p29"><span class="k-radio__dot"></span><span>{{t.opt_skip}}</span></label>
+              </div>
+              <label class="k-field"><span class="k-field__label">{{t.precond}}</span><textarea class="k-textarea" rows="2" placeholder="{{t.precond_ph}}"></textarea><span class="k-field__help">{{t.precond_help}}</span></label>
+              <div style="display: flex; gap: var(--space-8); justify-content: flex-end; align-items: center; flex-wrap: wrap;">
+                <span class="k-note" style="margin-right: auto;">{{t.queue_continues}}</span>
+                <button class="k-btn k-btn--primary" type="submit">{{t.send}}</button>
+              </div>
+            </form>
+
+            <form style="display: flex; flex-direction: column; gap: var(--space-8); padding: var(--space-12); border: var(--hairline) solid var(--border-1); border-radius: var(--radius-8);">
+              <span class="k-section-label">{{t.self_title}}</span>
+              <div role="radiogroup" aria-label="{{t.self_title}}" style="display: flex; gap: var(--space-12); flex-wrap: wrap;">
+                <label class="k-radio"><input type="radio" name="v31"><span class="k-radio__dot"></span><span>Pass</span></label>
+                <label class="k-radio"><input type="radio" name="v31"><span class="k-radio__dot"></span><span>Fail</span></label>
+              </div>
+              <label class="k-field"><span class="k-field__label">{{t.actual}}</span><textarea class="k-textarea" rows="2"></textarea></label>
+              <label class="k-field"><span class="k-field__label">{{t.image}} <span class="k-muted" style="font-weight: var(--fw-regular);">{{t.optional}}</span></span><input class="k-input" type="file" accept="image/png,image/jpeg"></label>
+              <div style="display: flex; justify-content: flex-end;"><button class="k-btn k-btn--secondary" type="submit">{{t.save_result}}</button></div>
+            </form>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"lang":{"editor":"enum","options":["vi","en","ja"],"default":"vi"},"$preview":{"width":1440,"height":1180}}'>
+const NAV = {
+  vi: { nav_main: "Điều hướng chính", nav_work: "Làm việc", nav_tickets: "Tickets", nav_runs: "Test runs", nav_runs_wait: "5 chờ bạn", nav_jobs: "Jobs", nav_setup: "Thiết lập", nav_templates: "Templates", nav_login: "Kịch bản login", nav_cache: "Scout cache", nav_settings: "Cấu hình", ui_lang: "Ngôn ngữ giao diện", agent_ok: "Agent đã kết nối", local_only: "127.0.0.1 · chỉ máy này truy cập" },
+  en: { nav_main: "Main navigation", nav_work: "Work", nav_tickets: "Tickets", nav_runs: "Test runs", nav_runs_wait: "5 need you", nav_jobs: "Jobs", nav_setup: "Setup", nav_templates: "Templates", nav_login: "Login scenarios", nav_cache: "Scout cache", nav_settings: "Settings", ui_lang: "Interface language", agent_ok: "Agent connected", local_only: "127.0.0.1 · this machine only" },
+  ja: { nav_main: "メインナビゲーション", nav_work: "作業", nav_tickets: "チケット", nav_runs: "テスト実行", nav_runs_wait: "5件 回答待ち", nav_jobs: "ジョブ", nav_setup: "設定", nav_templates: "テンプレート", nav_login: "ログインシナリオ", nav_cache: "スカウトキャッシュ", nav_settings: "環境設定", ui_lang: "表示言語", agent_ok: "エージェント接続中", local_only: "127.0.0.1 · このPCのみ" }
+};
+const PAGE = {
+  vi: { finish: "Kết thúc với các row đang mở", export: "Xuất Excel và báo cáo", signed_as: "Đang đăng nhập kịch bản", user_seen: "trang hiển thị", progress: "Tiến độ", manual: "Manual", need_you: "Chờ bạn", queued: "Hàng đợi", stale_title: "Agent im lặng hơn 2 phút.", stale_body: "Có thể nó đang chờ bạn cấp quyền trình duyệt trong terminal.", filter: "Lọc row", all: "Tất cả", col_content: "Nội dung thay đổi", col_screen: "Màn hình", col_class: "Phân loại", col_scenario: "Kịch bản", col_state: "Trạng thái", c_sure: "Chắc chắn", c_choice: "Cần bạn chọn", c_notweb: "Không chạy trên web", s_parked: "Đỗ, chờ trả lời", s_await: "Chờ bạn nhập kết quả", s_running: "Đang chạy", s_notrun: "Không chạy: thiếu màn hình", no_screen: "chưa có", r9: "PC mở tab mới, MB giữ nguyên", r18: "Thêm section news, nền aurora chuyển động", r29: "Cho phép cancel theo rule và status", r31: "Hiển thị sort theo create time", r32: "Đổi description phần bữa ăn trưa", r34: "Đổi description phần bữa ăn trưa", r37: "Thay label", r41: "Thay label", cap_design: "Design", cap_evidence: "Evidence", no_evidence: "Chưa có ảnh", expected: "Mong đợi", reason: "Lý do đỗ", r29_expected: "Nút cancel chỉ hiện khi booking đúng rule và chưa bị user, admin huỷ hay đóng.", r29_reason: "Cần một booking ở trạng thái huỷ được. Kiểm tra sẽ phải bấm nút làm đổi dữ liệu.", agent_parked: "Agent đỗ row này", park_q: "Row này cần dữ liệu và thao tác ghi. Bạn muốn xử lý thế nào?", opt_delegate: "Uỷ thác cho agent", opt_delegate_note: "Agent được bấm các nút mà bước kiểm tra nêu, chỉ ở row này.", opt_self: "Tôi tự chạy", opt_self_note: "Row chờ bạn nhập kết quả ở khung bên dưới.", opt_skip: "Bỏ qua row này", precond: "Tiền điều kiện (bắt buộc khi uỷ thác)", precond_ph: "Ví dụ: booking #1042 của tài khoản client, trạng thái Confirmed", precond_help: "Agent chỉ dùng dữ liệu bạn nêu ở đây.", queue_continues: "Hàng đợi vẫn chạy các row khác trong lúc bạn trả lời.", send: "Gửi trả lời", self_title: "Kết quả bạn tự chạy · row 31", actual: "Thực tế", image: "Ảnh evidence", optional: "(không bắt buộc)", save_result: "Lưu kết quả" },
+  en: { finish: "Finish with open rows", export: "Export Excel and report", signed_as: "Signed-in scenario", user_seen: "the page shows", progress: "Progress", manual: "Manual", need_you: "Needs you", queued: "Queued", stale_title: "The agent has been silent for over 2 minutes.", stale_body: "It may be waiting for a browser permission in the terminal.", filter: "Filter rows", all: "All", col_content: "Change", col_screen: "Screen", col_class: "Class", col_scenario: "Scenario", col_state: "State", c_sure: "Sure", c_choice: "Your choice", c_notweb: "Not runnable on web", s_parked: "Parked, waiting for you", s_await: "Waiting for your result", s_running: "Running", s_notrun: "Not run: no screen", no_screen: "none yet", r9: "PC opens a new tab, mobile stays", r18: "News section with a moving aurora background", r29: "Allow cancel by booking rule and status", r31: "Sort by create time", r32: "Change the lunch description", r34: "Change the lunch description", r37: "Change label", r41: "Change label", cap_design: "Design", cap_evidence: "Evidence", no_evidence: "No image yet", expected: "Expected", reason: "Why it parked", r29_expected: "The cancel button shows only when the booking meets the rule and was not cancelled by the user or an admin, or closed.", r29_reason: "It needs a booking that can be cancelled. Checking it means pressing a button that changes data.", agent_parked: "The agent parked this row", park_q: "This row needs data and a write action. How do you want to handle it?", opt_delegate: "Delegate to the agent", opt_delegate_note: "The agent may press the buttons the steps name, on this row only.", opt_self: "I will run it myself", opt_self_note: "The row waits for your result in the box below.", opt_skip: "Skip this row", precond: "Preconditions (required to delegate)", precond_ph: "For example: booking #1042 of the client account, status Confirmed", precond_help: "The agent uses only the data you name here.", queue_continues: "The queue keeps running other rows while you answer.", send: "Send answer", self_title: "Your own result · row 31", actual: "Actual", image: "Evidence image", optional: "(optional)", save_result: "Save result" },
+  ja: { finish: "未完了の行を残して終了", export: "Excel とレポートを出力", signed_as: "ログイン中のシナリオ", user_seen: "画面の表示名", progress: "進捗", manual: "手動", need_you: "回答待ち", queued: "待機中", stale_title: "エージェントが 2分以上応答していません。", stale_body: "ターミナルでブラウザの権限確認を待っている可能性があります。", filter: "行の絞り込み", all: "すべて", col_content: "変更内容", col_screen: "画面", col_class: "分類", col_scenario: "シナリオ", col_state: "状態", c_sure: "確実", c_choice: "要選択", c_notweb: "Web では実行不可", s_parked: "保留・回答待ち", s_await: "結果入力待ち", s_running: "実行中", s_notrun: "未実行: 画面未設定", no_screen: "未設定", r9: "PC は新規タブ、モバイルは同一タブ", r18: "ニュースセクション追加（動くオーロラ背景）", r29: "ルールとステータスによるキャンセル可否", r31: "作成日時順で表示", r32: "昼食の説明文を変更", r34: "昼食の説明文を変更", r37: "ラベル変更", r41: "ラベル変更", cap_design: "デザイン", cap_evidence: "エビデンス", no_evidence: "画像なし", expected: "期待結果", reason: "保留理由", r29_expected: "予約がルールを満たし、ユーザー・管理者によるキャンセルやクローズがない場合のみキャンセルボタンを表示。", r29_reason: "キャンセル可能な予約が必要です。確認にはデータを変更するボタン操作が伴います。", agent_parked: "エージェントがこの行を保留しました", park_q: "この行はデータと書き込み操作が必要です。どう対応しますか？", opt_delegate: "エージェントに任せる", opt_delegate_note: "手順に記載のボタンのみ、この行に限り操作します。", opt_self: "自分で実行する", opt_self_note: "下の入力欄で結果を登録します。", opt_skip: "この行をスキップ", precond: "前提条件（任せる場合は必須）", precond_ph: "例: client アカウントの予約 #1042、ステータス Confirmed", precond_help: "エージェントはここに書いたデータだけを使います。", queue_continues: "回答中も他の行の実行は続きます。", send: "回答を送信", self_title: "自分で実行した結果 · 行 31", actual: "実際の結果", image: "エビデンス画像", optional: "（任意）", save_result: "結果を保存" }
+};
+class Component extends DCLogic {
+  renderVals() {
+    const lang = (this.state && this.state.lang) || this.props.lang || 'vi';
+    const pick = (l) => () => this.setState({ lang: l });
+    return {
+      theme: this.props.theme ?? 'light',
+      lang: lang,
+      t: Object.assign({}, NAV[lang] || NAV.vi, PAGE[lang] || PAGE.vi),
+      viOn: lang === 'vi' ? 'is-active' : '', enOn: lang === 'en' ? 'is-active' : '', jaOn: lang === 'ja' ? 'is-active' : '',
+      viSel: lang === 'vi', enSel: lang === 'en', jaSel: lang === 'ja',
+      setVi: pick('vi'), setEn: pick('en'), setJa: pick('ja')
+    };
+  }
+}
+</script>
+</body>
+</html>

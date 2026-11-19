@@ -297,7 +297,9 @@ def test_no_route_writes_reports_repo_or_config(home, demo_repo, tmp_path):
     assert (_tree_hash(out_dir(home)), _tree_hash(demo_repo.path)) == before
     assert not config.config_path(home).exists()
     written = {p.relative_to(home / ".testign-kit").parts[0] for p in (home / ".testign-kit").rglob("*")}
-    assert written <= {"console", "templates"}
+    assert written <= {"console", "templates", "webtest"}
+    # the web test store holds only its empty owner-only folders until a tester acts on a run
+    assert not [p for p in (home / ".testign-kit" / "webtest").rglob("*") if p.is_file()]
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows creation flag")

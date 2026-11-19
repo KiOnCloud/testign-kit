@@ -1,7 +1,8 @@
 # Console bridge
 
 How the attached Claude Code session works the testign console's job queue. The `console` skill
-follows this file; `spec-qa`, `qa-close` and `testcase` point here for their "In a console job" parts.
+follows this file; `spec-qa`, `qa-close`, `testcase` and `webtest` point here for their "In a console
+job" parts.
 Below, `<run>` means `<python> "${CLAUDE_PLUGIN_ROOT}/scripts/run.py"`.
 
 ## Job loop
@@ -86,6 +87,51 @@ Never write these by hand. Save the `wiki-append-preview` output to a file and r
 Then write with `<run> wiki-update --rows <file> --approval <approval> --job <job> --session <s>`. It
 refuses unless the tester confirmed exactly that approval in the console.
 
+### `review-table` (web test plan)
+
+Never write this by hand. Run `<run> webtest-columns --run <r> --ask > <file>` and pass the file with
+`--question`. The ask carries the column plan with three sample rows, the template's headers and one
+line per case; the server adds the run's hosts and the project's login scenarios itself, so values
+for those in the file are ignored. It belongs to the `webtest-plan` job whose run it names.
+
+Answer: `{columns, verdict_labels, rows: {"<row>": {screen?, class?, runner?, scenario?, preconditions?, viewport?}}, confirm}`.
+The server enforces the row rules (a `choice` row run by the agent needs `preconditions`, scenarios
+exist, every screen is on a run host). `confirm: false` fails the job as `not-confirmed`. After the
+answer, run `<run> webtest-plan --run <r> --job <j> --session <s>`: it reads the confirmed answer
+from the server (`GET /agent/jobs/:id/review`) and refuses when there is none.
+
+### `sign-in` (web test run)
+
+`{"type": "sign-in", "id": "signin-<scenario>-<n>", "scenario": "<name>", "switching_from"?: "<name>"}`.
+The scenario must be approved by the tester (else `scenario-not-approved`); the server attaches its
+checklist, account hint and sign-out link, and the previous scenario's sign-out link when
+switching. The tester signs in by hand in their own Chrome. Answer `{choice: "signed-in" | "skip"}`,
+or `{choice: "finish"}` when the tester ended the run from the run screen. Then run
+`<run> webtest-signed-in --run <r> --job <j> --session <s> --scenario <name>`. Make no Chrome tool
+call while this question is open.
+
+## Web test runs
+
+- `<run> console queue --file <job.json>` queues a `webtest-plan` or `webtest-run` job from the chat
+  with the same checks as the console; the console shows it as "queued from the chat" until the
+  tester opens it. Never mint a browser session for yourself.
+- `webtest-plan` parameters: `name`, `figma_url` (a Figma design URL with `node-id`), `base_url` on
+  one of the project's hosts, `project`, optional `template`, `ticket`, `report_lang`. The job's
+  `params.hosts` are the project's hosts when it was queued; only the tester edits hosts.
+- `webtest-run` parameters: `run` (a run whose plan is confirmed), `tester`, `mode: run | export`.
+- The tester answers parked rows (`delegate` with preconditions, `self-run`, `skip`) and enters
+  results for rows they run on the run screen. Those answers live on the server, keyed by
+  `<row>-a<attempt>` (answers) and `<row>-r<attempt>` (results), and outlive the job. `<run> webtest-resolve --run <r> --job <j> --session <s>`
+  applies them to `run.json` and marks them applied; `--wait` holds until one arrives or the tester
+  presses "Finish".
+- `console done --result done` on a `webtest-run` job is refused with `open-rows` while the run has
+  an open row and the tester has not finished it. Close the run (`webtest-close`) first.
+- Call `console progress` at least every two minutes while a worker runs: a web job's silence counts
+  from its last progress line, and after two minutes the console tells the tester the agent may be
+  waiting for a browser permission in the terminal.
+- A tester action on a run is accepted only from a console tab older than the run's queued or open
+  job.
+
 ## Interaction mapping
 
 | Skill and moment | In a console job |
@@ -105,6 +151,12 @@ refuses unless the tester confirmed exactly that approval in the console.
 | testcase: hash check stale | `questions` ask: "Continue on this revision" or "Stop"; Stop fails the job with reason `stale` (the console offers "Survey again"; a testcase job never runs spec-qa) |
 | testcase `mode: trace` | `trace --template <t> --xlsx <workbook> --write-revision` only; no case writing |
 | testcase `focus` | Write cases only for the listed rows, into `--into <workbook>` |
+| webtest: project or hosts missing | Never asked in the chat: the tester creates the project and its hosts on the Login screen, then queues again |
+| webtest plan: confirm columns, classes, screens, scenarios | One `review-table` ask from `webtest-columns --ask`; then `webtest-plan`. A changed table gets a new ask id, so ask again after the rows change |
+| webtest plan: a row needs a login scenario that does not exist | The agent drafts it with `login-scenario-save`; the tester approves it on the Login screen |
+| webtest run: sign in or switch accounts | `sign-in` ask; then `webtest-signed-in`. No Chrome call while it is open |
+| webtest run: a parked row, a row the tester runs | Answered on the run screen; `webtest-resolve` applies them |
+| webtest run: the tester stops with rows open | "Finish with open rows" on the run screen; `webtest-resolve` reports it, then `webtest-close` and the export |
 
 ## Errors
 
@@ -119,3 +171,9 @@ refuses unless the tester confirmed exactly that approval in the console.
 | `transport` | The call was cut off | Call again once; if it repeats at a fixed interval, lower `--timeout` |
 | `bad-request` | The ask or parameters are not valid | Fix the file (the message says what) and call again |
 | `conflict`, `revision-moved` | The job is no longer open, or the report moved on | Leave the job; go back to `wait` |
+| `open-rows` | `done` on a run job with open rows | Wait with `webtest-resolve --wait`, or close the run, then call `done` again |
+| `scenario-not-approved` | The sign-in question names a scenario the tester has not approved | Ask the tester to approve it on the Login screen, or skip its rows |
+| `unknown-project`, `off-host`, `bad-source`, `plan-not-confirmed`, `unknown-run` | A web job's parameters are not valid | Fix the job file (the message says what) and queue again |
+| `preconditions-required`, `unknown-scenario`, `bad-columns`, `mobile-agent`, `too-long` | A tester answer (review table or parked row) broke a rule | Only the console sends answers; the tester sees the message there |
+| `bad-request` on a `review-table` ask naming a choice row with `runner: agent`, or an agent row with `viewport: mobile` | Only the tester delegates a choice row; phone-width rows go to the tester | Offer those rows with `runner: tester` and ask again |
+| `unknown-template` on a `review-table` ask | The ask names another template than the job's, or the template file cannot be read | Use the job's template; the server reads its headers itself |

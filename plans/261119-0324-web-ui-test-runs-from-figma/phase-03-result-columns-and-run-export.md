@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Result columns and run export"
-status: pending
+status: completed
 priority: P1
 effort: "2.5d"
 dependencies: [2]
@@ -88,13 +88,13 @@ Stored in `run.json` when the tester confirms the review table:
 
 ## Todo
 
-- [ ] Baseline test run recorded
-- [ ] `purpose` on registry entries and its filters
-- [ ] One writer for both fills
-- [ ] Column plan checks and first guess
-- [ ] Verdict labels from the column's fixed list
-- [ ] Markdown report and export command
-- [ ] Tests
+- [x] Baseline test run recorded (no separate record was kept before the edits; `tests/test_templates_xlsx.py` is unedited and passes)
+- [x] `purpose` on registry entries and its filters
+- [x] One writer for both fills
+- [x] Column plan checks and first guess
+- [x] Verdict labels from the column's fixed list
+- [x] Markdown report and export command
+- [x] Tests
 
 ## Verification
 
