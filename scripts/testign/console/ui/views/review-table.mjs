@@ -1,6 +1,6 @@
 // The review table: the one confirmation of a web test plan. The tester checks the Excel column
 // plan against sample rows, the verdict labels, and one line per row (screen, class, who runs it,
-// login scenario, viewport, preconditions), then confirms once. The pure functions mirror the
+// login scenario, viewport and how a phone-width row is checked, preconditions), then confirms once. The pure functions mirror the
 // server's rules so problems show before sending; the server checks the answer again.
 
 import { h, icon, mount } from '../dom.mjs';
@@ -10,14 +10,21 @@ import { jobErrorText } from './job-actions.mjs';
 import { hostOf } from './run-form.mjs';
 import { badge, banner, breadcrumb, emptyState, errorState, loading, openDialog, pageHead, spacer } from './shell.mjs';
 
-export const FIELDS = ['no', 'type', 'content', 'creator', 'screen', 'viewport', 'kind', 'class', 'reason', 'scenario',
-  'runner', 'preconditions', 'steps', 'expected', 'target_node', 'verdict', 'actual', 'evidence', 'executed_at', 'by'];
+export const FIELDS = ['no', 'type', 'content', 'creator', 'screen', 'viewport', 'mobile_method', 'kind', 'class', 'reason',
+  'scenario', 'runner', 'preconditions', 'steps', 'expected', 'target_node', 'verdict', 'actual', 'evidence', 'executed_at', 'by'];
 export const RESULT_FIELDS = new Set(['verdict', 'actual', 'evidence', 'executed_at', 'by']);
 export const LABEL_KEYS = ['pass', 'fail', 'not-run', 'not-applicable', 'manual'];
-export const EDIT_KEYS = ['screen', 'class', 'runner', 'scenario', 'preconditions', 'viewport'];
+export const EDIT_KEYS = ['screen', 'class', 'runner', 'scenario', 'preconditions', 'viewport', 'mobile_method'];
 const CLASSES = ['sure', 'choice', 'not-web'];
 const RUNNERS = ['agent', 'tester', 'none'];
 const VIEWPORTS = ['pc', 'mobile'];
+export const MOBILE_METHODS = ['device', 'emulation'];
+
+/** How a row is checked on a phone: none on pc rows; a real device unless the row says emulation. */
+export function mobileMethod(viewport, method) {
+  if (viewport !== 'mobile') return null;
+  return MOBILE_METHODS.includes(method) ? method : 'device';
+}
 
 export function colIndex(letter) {
   let n = 0;
@@ -118,7 +125,8 @@ export function setEdit(draft, line, key, value) {
 }
 
 export function finalLine(draft, line) {
-  return { ...line, ...(draft.rows[line.row] || {}) };
+  const f = { ...line, ...(draft.rows[line.row] || {}) };
+  return { ...f, mobile_method: mobileMethod(f.viewport, f.mobile_method) };
 }
 
 /**
@@ -164,11 +172,11 @@ export function reviewTableAnswer(ask, draft) {
   const rows = {};
   for (const line of ask.lines || []) {
     const edit = draft.rows[line.row] || {};
-    const final = { ...line, ...edit };
+    const final = finalLine(draft, line);
     if (final.class === 'choice' && final.runner === 'agent' && !String(final.preconditions || '').trim()) {
       errors.push({ key: 'rt_err_preconditions', row: line.row, params: { row: line.row } });
     }
-    if (final.runner === 'agent' && final.viewport === 'mobile') {
+    if (final.runner === 'agent' && final.mobile_method === 'device') {
       errors.push({ key: 'rt_err_mobile_agent', row: line.row, params: { row: line.row } });
     }
     const scenarioChecked = 'scenario' in edit || final.runner === 'agent';
@@ -199,7 +207,10 @@ export function reviewTableAnswer(ask, draft) {
 export function bulkEdit(draft, ask, rowIds, key, value) {
   let next = draft;
   for (const line of ask.lines || []) {
-    if (rowIds.has(line.row)) next = setEdit(next, line, key, value);
+    if (!rowIds.has(line.row)) continue;
+    // A check method means nothing on a pc row: leave those rows as they are.
+    if (key === 'mobile_method' && finalLine(next, line).viewport !== 'mobile') continue;
+    next = setEdit(next, line, key, value);
   }
   return next;
 }
@@ -365,6 +376,7 @@ function drawTable(ctx, body, job, ask, state) {
       ['scenario:none', t('rt_bulk_scenario', { name: t('login_l_none') })],
       ...CLASSES.map((c) => [`class:${c}`, t('rt_bulk_class', { cls: t(`wt_class_${c.replace(/-/g, '_')}`) })]),
       ...VIEWPORTS.map((v) => [`viewport:${v}`, t('rt_bulk_viewport', { vp: t(`wt_viewport_${v}`) })]),
+      ...MOBILE_METHODS.map((m) => [`mobile_method:${m}`, t('rt_bulk_mobile_method', { method: t(`wt_mobile_${m}`) })]),
     ].map(([v, text]) => h('option', { value: v }, text)));
     mount(bulkBox, h('div.k-toolbar.toolbar-wrap.rt-bulk', [
       h('span.k-note', t('rt_selected', { n })),
@@ -404,7 +416,11 @@ function drawTable(ctx, body, job, ask, state) {
         h('td', selectEl(`rt-class-${line.row}`, CLASSES.map((c) => [c, t(`wt_class_${c.replace(/-/g, '_')}`)]), f.class, (v) => set('class', v, true), t('rt_col_class'))),
         h('td', selectEl(`rt-runner-${line.row}`, RUNNERS.map((r) => [r, t(`wt_runner_${r}`)]), f.runner, (v) => set('runner', v, true), t('rt_col_runner'))),
         h('td', selectEl(`rt-scenario-${line.row}`, scenarioOptions, f.scenario || '', (v) => set('scenario', v || null, true), t('rt_col_scenario'))),
-        h('td', selectEl(`rt-viewport-${line.row}`, VIEWPORTS.map((v) => [v, t(`wt_viewport_${v}`)]), f.viewport, (v) => set('viewport', v, false), t('wt_field_viewport'))),
+        h('td.stack-4', [
+          selectEl(`rt-viewport-${line.row}`, VIEWPORTS.map((v) => [v, t(`wt_viewport_${v}`)]), f.viewport, (v) => set('viewport', v, true), t('wt_field_viewport')),
+          f.mobile_method ? selectEl(`rt-mobile-${line.row}`, MOBILE_METHODS.map((m) => [m, t(`wt_mobile_${m}`)]), f.mobile_method,
+            (v) => set('mobile_method', v, true), t('wt_field_mobile_method')) : null,
+        ]),
         h('td.rt-pre', [pre, needsPre ? h('span.k-note.block', t('rt_precond_required')) : null]),
       ]);
     });

@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
-  addColumn, bulkEdit, colIndex, colLetter, initialDraft, moveColumn, removeColumn, render, reviewTableAnswer, sampleGrid,
-  screenOk, setEdit,
+  addColumn, bulkEdit, colIndex, colLetter, finalLine, initialDraft, mobileMethod, moveColumn, removeColumn, render,
+  reviewTableAnswer, sampleGrid, screenOk, setEdit,
 } from '../views/review-table.mjs';
 import { byData, fakeContext } from './web-helpers.mjs';
 
@@ -39,7 +39,7 @@ test('the agent\'s plan confirms as it is', () => {
   assert.equal(reviewTableAnswer(r02, initialDraft(r02)).ok, false);
 });
 
-test('a phone-width row cannot go to the agent', () => {
+test('a phone-width row on a real device cannot go to the agent', () => {
   const a = ask([line('r01', { runner: 'tester', viewport: 'mobile' })]);
   const draft = setEdit(initialDraft(a), a.lines[0], 'runner', 'agent');
   assert.deepEqual(reviewTableAnswer(a, draft).errors.map((e) => [e.key, e.row]), [['rt_err_mobile_agent', 'r01']]);
@@ -141,4 +141,28 @@ test('the review table renders 45 lines and keeps Confirm off while a row blocks
   const confirm = byData(view, 'confirmTable')[0];
   assert.equal(confirm.disabled, true);
   assert.deepEqual(sent, []);
+});
+
+test('a phone-width row defaults to a real device and pc rows carry no method', () => {
+  assert.equal(mobileMethod('pc', 'emulation'), null);
+  assert.equal(mobileMethod('mobile', undefined), 'device');
+  assert.equal(mobileMethod('mobile', 'emulation'), 'emulation');
+  const a = ask([line('r01', { runner: 'tester', viewport: 'mobile' })]);
+  assert.equal(finalLine(initialDraft(a), a.lines[0]).mobile_method, 'device');
+});
+
+test('an emulated phone row may go to the agent; a real-device row may not', () => {
+  const a = ask([line('r01', { runner: 'tester', viewport: 'mobile', mobile_method: 'device' })]);
+  let draft = setEdit(initialDraft(a), a.lines[0], 'runner', 'agent');
+  assert.deepEqual(reviewTableAnswer(a, draft).errors.map((e) => e.key), ['rt_err_mobile_agent']);
+  draft = setEdit(draft, a.lines[0], 'mobile_method', 'emulation');
+  const result = reviewTableAnswer(a, draft);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.answer.rows, { r01: { runner: 'agent', mobile_method: 'emulation' } });
+});
+
+test('bulk phone check only touches phone-width rows', () => {
+  const a = ask([line('r01', { viewport: 'mobile', runner: 'tester', mobile_method: 'device' }), line('r02')]);
+  const draft = bulkEdit(initialDraft(a), a, new Set(['r01', 'r02']), 'mobile_method', 'emulation');
+  assert.deepEqual(draft.rows, { r01: { mobile_method: 'emulation' } });
 });

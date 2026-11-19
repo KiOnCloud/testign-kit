@@ -10,6 +10,7 @@ import { href } from '../router.mjs';
 import { askTesterName, jobErrorText, queueJob } from './job-actions.mjs';
 import { signInCard } from './login.mjs';
 import { activeJob, classBadge, countBadges, fromChat, NEEDS_YOU, reviewJob, rowStateBadge } from './runs.mjs';
+import { mobileMethod } from './review-table.mjs';
 import { badge, banner, breadcrumb, emptyState, errorState, loading, openDialog, pageHead, radioGroup, spacer } from './shell.mjs';
 
 const PARK_ACTIONS = ['delegate', 'self-run', 'skip'];
@@ -266,6 +267,7 @@ function textBlock(label, text) {
 export function rowPanel(ctx, run, c, onSent) {
   const { t } = ctx;
   const evidence = currentEvidence(c);
+  const method = mobileMethod(c.viewport, c.mobile_method);
   const parts = [
     h('div.run-shots', [
       h('figure.stack-4', [h('figcaption.k-section-label', t('run_cap_design')),
@@ -279,6 +281,7 @@ export function rowPanel(ctx, run, c, onSent) {
       h('dt', t('run_col_class')), h('dd', classBadge(t, c.class)),
       h('dt', t('run_runner')), h('dd', c.runner ? t(`wt_runner_${c.runner}`) : NONE),
       h('dt', t('run_viewport')), h('dd', c.viewport ? t(`wt_viewport_${c.viewport}`) : NONE),
+      method ? h('dt', t('wt_field_mobile_method')) : null, method ? h('dd', t(`wt_mobile_${method}`)) : null,
       h('dt', t('run_col_scenario')), h('dd', c.scenario || NONE),
     ]),
     textBlock(t('run_expected'), c.expected),
@@ -295,6 +298,7 @@ export function rowPanel(ctx, run, c, onSent) {
   }
   if (c.state === 'not-run' && c.not_run_reason) parts.push(h('p.k-note', rowStateBadge(t, c.state, c.not_run_reason)));
   if (c.state === 'parked' && c.question) parts.push(parkForm(ctx, run, c, onSent));
+  if (c.state === 'awaiting-tester' && method) parts.push(h('p.k-note', t(`run_howto_${method}`)));
   if (c.state === 'awaiting-tester') parts.push(resultForm(ctx, run, c, onSent));
   return [
     h('div.k-split__panel-head.panel-head-wrap', [

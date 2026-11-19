@@ -162,7 +162,9 @@ Loop on `<run> webtest-next --run <r> --job <j> --session <s>`:
 
 ### The worker
 
-Spawn the `testign:webtest-worker` agent with: the absolute path of
+Spawn the `testign:webtest-phone-worker` agent for a row whose `case` has `viewport: mobile` and
+`mobile_method: emulation`, and the `testign:webtest-worker` agent for every other row, with: the
+absolute path of
 `${CLAUDE_PLUGIN_ROOT}/skills/webtest/worker-brief.md`, the `case` JSON as `webtest-next` printed
 it, the capture as `<folder>/<case.capture>` when set, `report_lang`, and on the first row after a
 sign-in the scenario's `signed_in_check` (from `login-scenario-list`). Run it in the background
@@ -176,7 +178,7 @@ worker brief yourself, one row at a time, for the rest of the job.
 | `pass` or `fail` with images | `<run> webtest-evidence --run <r> --row <row> --file <path>` for each path, then write `{"verdict", "actual", "url"}` and run `<run> webtest-row --run <r> --row <row> --result <file>` |
 | `fail` with `reason: off-site` | `webtest-row` directly; the CLI records the row as `not-run: off-site` |
 | `pass` or `fail` without an image | Treat as `stuck` |
-| `stuck` | `<run> webtest-park --run <r> --row <row> --question <file>` with `{"body": "…"}`: what could not be done (reason, what the page shows) and the tester's choices (delegate with preconditions, run it themselves, skip). The next row starts at once |
+| `stuck` | `<run> webtest-park --run <r> --row <row> --question <file>` with `{"body": "…"}`: what could not be done (reason, what the page shows) and the tester's choices (delegate with preconditions, run it themselves, skip). For a phone frame reason ("the site refuses the phone frame", "the step opens outside the phone frame"), say that running it themselves means a real phone or Chrome's device mode. The next row starts at once |
 | `blocked-env` | `<run> webtest-requeue --run <r> --row <row> --reason "<reason>"`, with `--signed-out` for a login page or a failed signed-in check |
 | `signed_in_as` set | A progress line: the scenario and the name the page shows |
 

@@ -47,6 +47,10 @@ KINDS = ("label", "element", "visual", "behaviour", "data-rule", "motion", "desi
 CLASSES = ("sure", "choice", "not-web")
 RUNNERS = ("agent", "tester", "none")
 VIEWPORTS = ("pc", "mobile")
+# How a phone-width row is checked: on a real phone by the tester (the default), or by the agent in a
+# phone-width frame of the tester's Chrome.
+MOBILE_METHODS = ("device", "emulation")
+EMULATION_IS_THE_TESTERS = "only the tester switches a phone-width row to emulation, in the review table"
 CONFIDENCE = ("high", "low", "none")
 STATES = ("draft", "queued", "running", "parked", "awaiting-tester",
           "pass", "fail", "manual", "not-applicable", "self-run", "not-run")
@@ -74,11 +78,11 @@ CASE_KEYS = {
     "row", "source", "type", "content", "creator", "capture", "screen", "viewport", "kind", "class",
     "reason", "scenario", "runner", "preconditions", "steps", "expected", "state", "attempt",
     "owner_job", "question", "questions", "decided_by", "result", "evidence", "not_run_reason",
-    "class_changed", "started_at", "last_requeue",
+    "class_changed", "started_at", "last_requeue", "mobile_method",
 }
 STAGED_KEYS = {"row", "source", "type", "content", "creator"}
 TRIAGE_KEYS = {"kind", "class", "reason", "viewport", "steps", "expected", "screen", "scenario", "runner",
-               "preconditions"}
+               "preconditions", "mobile_method"}
 SOURCE_KINDS = ("figma", "workbook")
 
 
@@ -268,7 +272,8 @@ def check_triage(row: str, fields: Any, hosts: list[str]) -> dict:
     if extra:
         raise WebtestError(f"{row}: unknown keys {', '.join(sorted(extra))}")
     out: dict[str, Any] = {}
-    for key, allowed in (("kind", KINDS), ("class", CLASSES), ("viewport", VIEWPORTS), ("runner", RUNNERS)):
+    for key, allowed in (("kind", KINDS), ("class", CLASSES), ("viewport", VIEWPORTS), ("runner", RUNNERS),
+                         ("mobile_method", MOBILE_METHODS)):
         if key in fields:
             if fields[key] not in allowed:
                 raise WebtestError(f"{row}: {key} must be one of {', '.join(allowed)}")
@@ -281,6 +286,18 @@ def check_triage(row: str, fields: Any, hosts: list[str]) -> dict:
     if "scenario" in fields:
         out["scenario"] = _check_scenario(fields["scenario"], row)
     return out
+
+
+def mobile_method(viewport: Any, method: Any) -> str | None:
+    """The check method of a row: none on pc rows, ``device`` on a phone-width row that names none."""
+    if viewport != "mobile":
+        return None
+    return method if method in MOBILE_METHODS else "device"
+
+
+def agent_may_run(viewport: Any, method: Any) -> bool:
+    """A phone-width row reaches the agent only as an emulation; a real phone is the tester's."""
+    return mobile_method(viewport, method) in (None, "emulation")
 
 
 def check_case(case: Any, hosts: list[str]) -> None:
@@ -296,6 +313,8 @@ def check_case(case: Any, hosts: list[str]) -> None:
         raise WebtestError(f"run.json: {row} has an unknown state")
     if not isinstance(case.get("attempt", 0), int) or case.get("attempt", 0) < 0:
         raise WebtestError(f"run.json: {row} has a bad attempt count")
+    if case.get("runner") == "agent" and not agent_may_run(case.get("viewport"), case.get("mobile_method")):
+        raise WebtestError(f"run.json: {row}: phone-width rows on a real device go to the tester")
     if case["state"] == "not-run" and case.get("not_run_reason") not in REASONS:
         raise WebtestError(f"run.json: {row} is not-run without a known reason")
     for key in ("question", "result", "decided_by"):
@@ -391,7 +410,7 @@ def open_rows(run: dict) -> int:
 
 
 DIGEST_KEYS = ("content", "kind", "steps", "expected")
-PLAN_LINE_KEYS = ("row", "class", "runner", "scenario", "viewport", "preconditions", "screen")
+PLAN_LINE_KEYS = ("row", "class", "runner", "scenario", "viewport", "mobile_method", "preconditions", "screen")
 
 
 def cases_digest(run: dict) -> str:
@@ -547,7 +566,10 @@ def triage(folder: Path, rows: Any) -> dict:
     changed = []
     for row, fields in rows.items():
         case = case_of(run, row)
+        if isinstance(fields, dict) and fields.get("mobile_method") == "emulation":
+            raise WebtestError(f"{row}: {EMULATION_IS_THE_TESTERS}")
         case.update(check_triage(row, fields, run["hosts"]))
+        case["mobile_method"] = mobile_method(case.get("viewport"), case.get("mobile_method"))
         changed.append(row)
     save(folder, run)
     return {"run": run["id"], "changed": changed}
@@ -596,8 +618,10 @@ def apply_plan(folder: Path, server: ConsoleReader, job: str, session: str,
     decided = {"by": review.get("answered_by"), "at": review.get("answered_at")}
     for case in run["cases"]:
         line = {**lines[case["row"]], **(answer.get("rows") or {}).get(case["row"], {})}
-        fields = {k: line[k] for k in ("class", "runner", "scenario", "viewport", "preconditions", "screen")
-                  if k in line}
+        fields = {k: line[k] for k in ("class", "runner", "scenario", "viewport", "mobile_method", "preconditions",
+                                       "screen") if k in line}
+        if fields.get("mobile_method") is None:
+            fields.pop("mobile_method", None)
         if isinstance(fields.get("screen"), str):
             current = case.get("screen") or {}
             if fields["screen"] == current.get("url"):
@@ -608,10 +632,13 @@ def apply_plan(folder: Path, server: ConsoleReader, job: str, session: str,
         fields = check_triage(case["row"], fields, run["hosts"])
         if fields.get("class") == "choice" and fields.get("runner") == "agent" and not fields.get("preconditions", "").strip():
             raise WebtestError(f"{case['row']}: a delegated choice row needs preconditions")
-        if fields.get("runner") == "agent" and fields.get("viewport", case.get("viewport")) == "mobile":
-            raise WebtestError(f"{case['row']}: phone-width rows go to the tester")
+        viewport = fields.get("viewport", case.get("viewport"))
+        method = mobile_method(viewport, fields.get("mobile_method"))
+        if fields.get("runner") == "agent" and not agent_may_run(viewport, method):
+            raise WebtestError(f"{case['row']}: phone-width rows on a real device go to the tester")
         before = case.get("class")
         case.update(fields)
+        case["mobile_method"] = method
         if before and case.get("class") != before:
             case["class_changed"] = {"from": before, "to": case["class"], "at": now_iso(), "by": "review"}
         _initial_state(case, decided)
@@ -683,6 +710,7 @@ def worker_view(run: dict, case: dict) -> dict:
         url = (run.get("base_url") or "").rstrip("/") + url
     return {
         "row": case["row"], "url": url, "screen": screen.get("name") or "", "viewport": case.get("viewport"),
+        "mobile_method": mobile_method(case.get("viewport"), case.get("mobile_method")),
         "kind": case.get("kind"), "steps": case.get("steps"), "expected": case.get("expected"),
         "preconditions": case.get("preconditions"), "capture": case.get("capture"),
         "hosts": list(run["hosts"]), "delegated": case.get("class") == "choice", "scenario": case.get("scenario"),

@@ -162,8 +162,8 @@ def list_runs(state) -> dict:
     return {"runs": runs}
 
 
-CASE_VIEW = ("row", "content", "creator", "type", "capture", "screen", "viewport", "kind", "class", "reason",
-             "scenario", "runner", "preconditions", "steps", "expected", "state", "attempt", "not_run_reason",
+CASE_VIEW = ("row", "content", "creator", "type", "capture", "screen", "viewport", "mobile_method", "kind", "class",
+             "reason", "scenario", "runner", "preconditions", "steps", "expected", "state", "attempt", "not_run_reason",
              "question", "questions", "result", "evidence", "class_changed", "last_requeue")
 
 
