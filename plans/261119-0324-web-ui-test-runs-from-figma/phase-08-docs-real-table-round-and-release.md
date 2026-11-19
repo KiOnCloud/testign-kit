@@ -86,7 +86,7 @@ When `visual` verdicts are unreliable, `visual` becomes `choice` by default, dec
 - [ ] Round on Windows
 - [ ] Injection check on both platforms
 - [x] README
-- [ ] Version bump and full test run
+- [x] Version bump and full test run (0.4.0, released before the real-table rounds at the user's request)
 - [ ] Journal entry
 
 ## Verification

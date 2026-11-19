@@ -96,7 +96,7 @@ preconditions, so the agent derives them and the tester confirms.
 | 5 | [Login scenarios and manual sign-in](./phase-05-login-scenarios-and-manual-sign-in.md) | Completed |
 | 6 | [Webtest skill, orchestrator and worker](./phase-06-webtest-skill-orchestrator-and-worker.md) | In progress: command, skill, triage rules, worker brief and agent written; the dry run in Chrome and the Windows spike open |
 | 7 | [Test runs and login screens](./phase-07-test-runs-and-login-screens.md) | In progress: screens, i18n and unit tests done; the e2e smoke is written but not run |
-| 8 | [Docs, real table round and release](./phase-08-docs-real-table-round-and-release.md) | In progress: README done; the rounds on macOS and Windows, the injection check, the version bump and the journal open |
+| 8 | [Docs, real table round and release](./phase-08-docs-real-table-round-and-release.md) | In progress: README and 0.4.0 done; the rounds on macOS and Windows, the injection check and the journal entry open |
 
 The spike has set the routes for phase 6; what is left of phase 1 (Windows, the fifteen-row
 measurement) does not block phases 2 to 5. Windows is supported in the first release, so the
