@@ -340,6 +340,14 @@ def _review_answer(ask: dict, answer: Any) -> dict:
         if "preconditions" in edit:
             clean["preconditions"] = data_text(edit["preconditions"], "preconditions", cap=2000)
         final = {**line, **clean}
+        # Only an explicit edit is refused: values inherited from the agent's line are normalized, as
+        # confirmation does, so the tester is never blocked by a value they did not set.
+        if final.get("class") == "not-web":
+            if clean.get("runner") not in (None, "none"):
+                raise bad(f"{row}: {webtest.NOT_WEB_RUNNER}", "not-web-runner")
+            final["runner"] = "none"
+        if "mobile_method" in clean and final.get("viewport") != "mobile":
+            raise bad(f"{row}: {webtest.PC_METHOD}", "pc-method")
         if final.get("class") == "choice" and final.get("runner") == "agent" and not (final.get("preconditions") or "").strip():
             raise bad(f"{row}: a delegated choice row needs preconditions", "preconditions-required")
         final["mobile_method"] = webtest.mobile_method(final.get("viewport"), final.get("mobile_method"))
@@ -668,6 +676,22 @@ class MemoryStore:
         self.data.pop(job_id, None)
 
 
+# tab age --------------------------------------------------------------------------------------
+NO_OLDER_TAB = "no console tab is older than this job, so no one can answer it; queue the job again"
+
+
+def answer_cutoff(job: dict) -> float | None:
+    """Tabs created at or after this time cannot answer the job: a web job counts from its creation
+    (the agent can queue those itself), any other job from its start."""
+    value = job.get("created_ts") if job["kind"] in WEB_KINDS else job.get("started_ts")
+    return value if isinstance(value, (int, float)) else None
+
+
+def tab_can_answer(cutoff: float | None, created: float | None) -> bool:
+    """A tab created at ``created`` may answer what has the ``cutoff``; no cutoff, no limit."""
+    return cutoff is None or (created is not None and created < cutoff)
+
+
 # the bridge -----------------------------------------------------------------------------------
 class Bridge:
     """Queue, sessions and held calls. Every method takes the lock; held calls wait on ``cond``."""
@@ -694,6 +718,8 @@ class Bridge:
         self.progress_at: dict[str, float] = {}  # web job id → clock of its claim or last progress line
         self.closed = False
         self.on_change = on_change
+        # Creation times of the browser sessions; None when unknown (then nothing is refused for age).
+        self.sessions: Callable[[], list[float]] | None = None
 
     # persistence ------------------------------------------------------------------------------
     def startup(self) -> None:
@@ -816,7 +842,7 @@ class Bridge:
     @staticmethod
     def summary(job: dict) -> dict:
         keys = ("id", "kind", "ticket", "base_revision", "ui_lang", "state", "created_at", "started_at",
-                "finished_at", "reason", "result", "run", "queued_by", "opened")
+                "finished_at", "reason", "result", "run", "queued_by", "opened", "queued_after")
         out = {k: job.get(k) for k in keys}
         out["ask"] = {"id": job["ask"]["id"], "type": job["ask"]["type"]} if job.get("ask") else None
         return out
@@ -826,7 +852,8 @@ class Bridge:
             jobs = sorted(self.jobs.values(), key=lambda j: j["created_at"], reverse=True)
             return [self.summary(j) for j in jobs[:100]]
 
-    def get(self, job_id: str, *, opened: bool = False) -> dict:
+    def get(self, job_id: str, *, opened: bool = False, session_created: float | None = None) -> dict:
+        """The job for a browser tab; ``can_answer`` says whether this tab may answer it."""
         with self.cond:
             job = self.jobs.get(job_id)
             if job is None:
@@ -839,6 +866,7 @@ class Bridge:
                 out["ask"].pop("answer", None)
             out["silent"] = self.open_job() is job and self._silent(job)
             out["progress_stale"] = self.open_job() is job and self._stale(job)
+            out["can_answer"] = tab_can_answer(answer_cutoff(job), session_created)
             return out
 
     # tester actions ---------------------------------------------------------------------------
@@ -846,6 +874,12 @@ class Bridge:
         """Queue from the chat (``console queue``): web test kinds only, marked ``queued_by: agent``."""
         if not isinstance(body, dict) or body.get("kind") not in WEB_KINDS:
             raise bad("the agent can queue webtest-plan and webtest-run jobs only")
+        if body.get("queued_after") not in (None, "no-older-tab"):
+            raise bad("queued_after must be no-older-tab")
+        if body.get("queued_after") and self.sessions is not None and not self.sessions():
+            # No console tab at all (a restarted server, a tab that never opened): a job queued now
+            # would fail the same way, and each failure would push real job history out.
+            raise ApiError(409, "no-tab", "no console tab is open; ask the tester to open the console, then queue again")
         return self.create(body, queued_by="agent")
 
     def create(self, body: Any, queued_by: str = "tester") -> dict:
@@ -880,7 +914,8 @@ class Bridge:
         }
         if kind in WEB_KINDS:
             job.update(run=checked["params"].get("run"), queued_by=queued_by, opened=queued_by == "tester",
-                       created_ts=time.time(), confirmed_review=None, signed_in=None)
+                       created_ts=time.time(), confirmed_review=None, signed_in=None,
+                       queued_after=body.get("queued_after") if queued_by == "agent" else None)
         with self.cond:
             while job["id"] in self.jobs:
                 job["id"] = new_job_id()
@@ -933,10 +968,8 @@ class Bridge:
         with self.cond:
             job = self._job(job_id)
             # A tab opened after the job started cannot answer it, so a session minted by the agent
-            # during the job cannot approve its own questions. A web job counts from its creation,
-            # since the agent can queue those itself.
-            since = job.get("created_ts") if job["kind"] in WEB_KINDS else job.get("started_ts")
-            if session_created is not None and since is not None and session_created >= since:
+            # during the job cannot approve its own questions.
+            if session_created is not None and not tab_can_answer(answer_cutoff(job), session_created):
                 raise ApiError(403, "session-too-new",
                                "this console tab was opened after the job started; answer from an older tab "
                                "or queue the job again")
@@ -990,11 +1023,29 @@ class Bridge:
 
         Called with ``cond`` held. With no job queued or open, the agent is not working on the run.
         """
-        times = [j["created_ts"] for j in self.jobs.values()
-                 if j.get("run") == run_id and j["state"] in ACTIVE and isinstance(j.get("created_ts"), (int, float))]
-        if times and (session_created is None or session_created >= max(times)):
+        if not tab_can_answer(self.run_cutoff(run_id), session_created):
             raise ApiError(403, "session-too-new",
                            "this console tab was opened after the run's job was queued; answer from an older tab")
+
+    def run_cutoff(self, run_id: str) -> float | None:
+        """Creation time of the run's newest queued or open job. Called with ``cond`` held."""
+        times = [j["created_ts"] for j in self.jobs.values()
+                 if j.get("run") == run_id and j["state"] in ACTIVE and isinstance(j.get("created_ts"), (int, float))]
+        return max(times) if times else None
+
+    def refuse_without_older_tab(self, job: dict, cutoff: float | None) -> None:
+        """Fail ``job`` as ``no-older-tab`` when no browser tab is older than ``cutoff``.
+
+        Called with ``cond`` held, before the agent spends work or holds a call: tabs are only ever
+        added, so a job no tab can answer now never becomes answerable.
+        """
+        if self.sessions is None or cutoff is None:
+            return
+        if any(tab_can_answer(cutoff, created) for created in self.sessions()):
+            return
+        if job["state"] in OPEN:
+            self._fail(job, "no-older-tab")
+        raise ApiError(409, "no-older-tab", NO_OLDER_TAB)
 
     def run_changed(self) -> None:
         """A tester action on a run: wake held calls and let open tabs refresh. Called with ``cond`` held."""
@@ -1136,10 +1187,12 @@ class Bridge:
         with self.cond:
             session = self._agent(session)
             job = self._owned(job_id, session)
-            if job["state"] in ("running", "needs-input"):
-                return {"ok": True}
-            moved = self.claim_implicit(job)
-            return moved or {"ok": True}
+            if job["state"] not in ("running", "needs-input"):
+                moved = self.claim_implicit(job)
+                if moved:
+                    return moved
+            self.refuse_without_older_tab(job, answer_cutoff(job))
+            return {"ok": True}
 
     def _running(self, job_id: str, session: Any) -> tuple[str, dict]:
         session = self._agent(session)
@@ -1204,6 +1257,8 @@ class Bridge:
             session, job = self._running(job_id, session)
             if clean["type"] in ("review-table", "sign-in"):
                 clean = self._web_ask(job, clean)
+            if not any(a["id"] == clean["id"] and a.get("outcome") == "answered" for a in job["asked"]):
+                self.refuse_without_older_tab(job, answer_cutoff(job))
             current = job.get("ask")
             earlier = next((a for a in job["asked"] if a["id"] == clean["id"]), None)
             if earlier is not None:
@@ -1446,6 +1501,7 @@ def install(state, store=None) -> Bridge:
         folder = lifecycle.ensure_state_dirs(state.home) / "jobs"
         store = FileStore(folder, lifecycle.write_secure)
     bridge = Bridge(store, make_context(state))
+    bridge.sessions = state.session_times
     bridge.startup()
     state.busy = bridge.busy
     state.shutdown_hooks.append(bridge.shutdown)
@@ -1496,7 +1552,8 @@ def install(state, store=None) -> Bridge:
     r.add("GET", "/api/state", "browser", lambda q: bridge.state_view(state.session_times()))
     r.add("GET", "/api/jobs", "browser", lambda q: {"jobs": bridge.list_jobs()})
     r.add("POST", "/api/jobs", "browser", lambda q: bridge.create(q.body))
-    r.add("GET", "/api/jobs/:id", "browser", lambda q: bridge.get(q.params["id"], opened=True))
+    r.add("GET", "/api/jobs/:id", "browser",
+          lambda q: bridge.get(q.params["id"], opened=True, session_created=state.session_created(q.session)))
     r.add("POST", "/api/jobs/:id/answer", "browser",
           lambda q: bridge.answer(q.params["id"], q.body, q.session, state.session_created(q.session)))
     r.add("POST", "/api/jobs/:id/cancel", "browser", lambda q: bridge.cancel(q.params["id"]))

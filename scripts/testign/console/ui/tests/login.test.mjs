@@ -53,3 +53,15 @@ test('the sign-in card lists the checklist and answers with the tester\'s choice
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(sent, [['j9', 'signin-1', { choice: 'signed-in' }]]);
 });
+
+test('a tab newer than the job sees a notice instead of the sign-in buttons', () => {
+  const { ctx } = fakeContext({ answer: async () => { throw new Error('must not answer'); } });
+  const job = {
+    id: 'j9', kind: 'webtest-run', state: 'needs-input', can_answer: false,
+    ask: { id: 'signin-1', type: 'sign-in', scenario: 'client', checklist: { name: 'client', label: 'Client', steps: [] } },
+  };
+  const card = signInCard(ctx, job);
+  assert.equal(byData(card, 'signIn').length, 0);
+  assert.equal(byData(card, 'tooNew').length, 1);
+  assert.ok(card.textContent.includes('This tab cannot answer'));
+});

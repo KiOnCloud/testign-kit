@@ -366,6 +366,8 @@
   "job_reason_not_closed_body": "このジョブが未完了のまま、エージェントが次のジョブを要求しました。",
   "job_reason_marked": "失敗: テスターが失敗にしました",
   "job_reason_marked_body": "エージェントが無応答になったため、ジョブを失敗にしました。",
+  "job_reason_no_older_tab": "失敗: 回答できるコンソールのタブがありません",
+  "job_reason_no_older_tab_body": "開いているコンソールのタブはすべてジョブ登録後に開かれたため、回答できません。エージェントが再投入します。",
   "job_reason_revision_moved": "失敗: レポートが更新されました",
   "job_reason_revision_moved_body": "ジョブ投入後にレポートの新しいリビジョンが作成されたため、古いリビジョンでは実行しませんでした。",
   "job_reason_agent": "失敗: エージェントが報告",
@@ -470,6 +472,7 @@
   "tpl_partial_large": "このブックは大きすぎるため、ここでは結合セルとプルダウンを読み込めません。",
   "err_workbook_unreadable": "このブックを読み込めません。Excel で開いて確認するか、別のブックを選んでください。",
   "job_err_session_too_new": "このタブはジョブ開始後に開かれました。以前から開いていたコンソールのタブで回答するか、ジョブを再投入してください。",
+  "job_too_new_title": "このタブでは回答できません",
   "session_dismiss": "自分で開いた",
   "session_no_agent": "接続中のエージェントはありませんでした",
   "nav_runs": "テスト実行",
@@ -483,6 +486,8 @@
   "jobs_ask_type_sign_in": "ログイン",
   "jobs_ask_review_table": "エージェントが実行計画を提案しました。確認表で確認して承認してください。承認するまで行は実行されません。",
   "jobs_from_chat_body": "このジョブはチャットからエージェントが登録しました。",
+  "jobs_requeued": "再投入",
+  "jobs_queued_after_no_older_tab": "前のジョブに回答できるコンソールのタブがなかったため、エージェントがこのジョブを再投入しました。",
   "jobs_open_run": "実行を開く",
   "jobs_p_name": "実行名",
   "jobs_p_project": "プロジェクト",
@@ -831,5 +836,7 @@
   "login_skip_note": "スキップすると、このシナリオの行は実行されません。",
   "rt_err_mobile_agent": "{row}: 実機で確認するスマートフォン幅の行はあなたが実施します。確認方法をエミュレーションにするか、実施者をあなたに変更してください。",
   "job_err_mobile_agent": "実機で確認するスマートフォン幅の行はあなたしか実施できません。確認方法をエミュレーションにするか、実施者か表示幅を変更してください。",
+  "job_err_not_web_runner": "not-web の行は誰も実行しません。実行者を none のままにするか、先に分類を変更してください。",
+  "job_err_pc_method": "pc の行にはスマホでの確認方法がありません。先に行をスマホ幅に切り替えてください。",
   "job_err_too_long": "テキストが長すぎます。短くしてから再送してください。"
 }

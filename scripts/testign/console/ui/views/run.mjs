@@ -7,7 +7,7 @@ import { h, icon, mount } from '../dom.mjs';
 import { NONE, timeOrDay } from '../format.mjs';
 import { askBody } from '../markdown.mjs';
 import { href } from '../router.mjs';
-import { askTesterName, jobErrorText, queueJob } from './job-actions.mjs';
+import { askTesterName, jobErrorText, queueJob, tooNewNotice } from './job-actions.mjs';
 import { signInCard } from './login.mjs';
 import { activeJob, classBadge, countStrip, fromChat, NEEDS_YOU, reviewJob, rowStateBadge } from './runs.mjs';
 import { mobileMethod } from './review-table.mjs';
@@ -109,7 +109,7 @@ export function render(ctx) {
       actions.push(h('button.k-btn.k-btn--primary.k-btn--sm', { type: 'button', dataset: { runAction: 'run' }, on: { click: () => queue('run') } },
         [icon('play'), t('run_run')]));
     }
-    if (runJob && run.open > 0 && !finished) {
+    if (runJob && run.open > 0 && !finished && run.can_act !== false) {
       actions.push(h('button.k-btn.k-btn--secondary.k-btn--sm', { type: 'button', dataset: { runAction: 'finish' }, on: { click: () => finishRun(run) } },
         t('run_finish')));
     }
@@ -135,6 +135,7 @@ export function render(ctx) {
       ]),
     ]);
     const notices = [];
+    if (run.can_act === false && active) notices.push(tooNewNotice(t));
     if (stale) notices.push(banner('warning', t('run_stale_title'), t('run_stale_body')));
     if (!run.confirmed && !review) notices.push(banner('info', t('run_not_confirmed'), t('run_not_confirmed_body')));
     if (review) {
@@ -329,6 +330,7 @@ function parkForm(ctx, run, c, onSent) {
   const { t } = ctx;
   const head = [h('span.k-section-label', t('run_agent_parked')), c.question.body ? askBody(c.question.body, run.report_lang) : null];
   if (c.answer) return h('div.ask-form.stack-12', [...head, sentAnswer(t, c.answer)]);
+  if (run.can_act === false) return h('div.ask-form.stack-12', [...head, tooNewNotice(t)]);
   const name = `park-${c.row}`;
   let action = null;
   const errorBox = h('div', { role: 'alert' });
@@ -378,6 +380,9 @@ function resultForm(ctx, run, c, onSent) {
         h('strong', t('run_result_saved', { verdict: t(`wt_verdict_${r.verdict}`) })),
         r.actual ? h('span.pre-wrap', r.actual) : null,
         h('span', t('run_answer_wait'))])])]);
+  }
+  if (run.can_act === false) {
+    return h('div.ask-form.stack-8', [h('span.k-section-label', t('run_self_title', { row: c.row })), tooNewNotice(t)]);
   }
   const name = `result-${c.row}`;
   let verdict = null;

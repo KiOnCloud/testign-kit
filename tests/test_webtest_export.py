@@ -193,7 +193,7 @@ def test_the_report_says_how_each_phone_row_was_checked(root, sample):
     every_row = report.split("## All rows")[1].splitlines()
     assert "Phone check" in every_row[2]
     r08 = next(line for line in every_row if line.startswith("| r08 |"))
-    assert r08.endswith("| Real device |")  # r08 is the fixture's phone-width row
+    assert "| Real device |" in r08  # r08 is the fixture's phone-width row
     assert next(line for line in every_row if line.startswith("| r02 |")).endswith("|  |")
 
 
@@ -247,3 +247,86 @@ def test_xlsm_templates_keep_their_macros(home, tmp_path):
     assert out["path"].endswith(".xlsm")
     with zipfile.ZipFile(out["path"]) as z:
         assert z.read("xl/vbaProject.bin") == b"fake macro project"
+
+
+# cover placeholders and capture links -------------------------------------------------------------------
+def cell_texts(path):
+    wb = openpyxl.load_workbook(path)
+    return {(ws.title, c.coordinate): c for ws in wb.worksheets for row in ws.iter_rows() for c in row
+            if c.value not in (None, "")}
+
+
+def test_the_cover_takes_the_run_and_no_placeholder_is_left(root, sample):
+    server = FakeConsole()
+    folder = finished_run(root, server)
+    run = webtest.load(folder)
+    run.update(ticket="DEMO-7", tester="=HYPERLINK(\"x\")")
+    webtest.save(folder, run)
+    cells = cell_texts(webtest_export.export(folder, webtest.load(folder))["workbook"])
+    assert not [k for k, c in cells.items() if isinstance(c.value, str) and c.value.strip().startswith("<")
+                and c.value.strip().endswith(">")]
+    assert cells[("表紙", "C4")].value == "demo" and cells[("表紙", "C5")].value == "DEMO-7"
+    tester = cells[("表紙", "C6")]
+    assert tester.value == "=HYPERLINK(\"x\")" and tester.data_type == "s"  # text, never a formula
+    assert cells[("テストケース", "B2")].value == "DEMO-7"
+    assert len(cells[("表紙", "C7")].value) == 10  # the export date
+
+
+def test_without_ticket_or_tester_the_placeholders_are_cleared(root, sample):
+    folder = finished_run(root, FakeConsole())
+    cells = cell_texts(webtest_export.export(folder, webtest.load(folder))["workbook"])
+    assert ("表紙", "C5") not in cells and ("表紙", "C6") not in cells and ("テストケース", "B2") not in cells
+
+
+def test_recover_stores_the_run_jobs_tester(root, sample):
+    server = FakeConsole()
+    folder = finished_run(root, server)
+    server.add_job("j-export", "webtest-run", run=folder.name, tester=" Asher ")
+    webtest.recover(folder, server, "j-export", S)
+    assert webtest.load(folder)["tester"] == "Asher"
+
+
+def test_a_template_without_placeholders_keeps_its_own_text(home, root, tmp_path):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "TC"
+    ws["A1"] = "Project <project> overview"  # not a whole-cell placeholder
+    for c, h in enumerate(["No", "確認内容", "結果"], start=1):
+        ws.cell(row=2, column=c, value=h)
+    path = tmp_path / "own.xlsx"
+    wb.save(path)
+    templates.register(path, "own", home=home, purpose="webtest")
+    filled = xlsx.fill_columns(path, "TC", 2, {"content": "B"}, [{"content": "x"}], tmp_path / "out.xlsx",
+                               placeholders=webtest_export.cover_values({"project": "demo"}))
+    assert openpyxl.load_workbook(filled["path"])["TC"]["A1"].value == "Project <project> overview"
+
+
+def test_no_cells_link_to_the_staged_capture(root, sample):
+    folder = finished_run(root, FakeConsole())
+    (folder / "source" / "r02.png").write_bytes(PNG)
+    run = webtest.load(folder)
+    out = webtest_export.export(folder, run)
+    ws = openpyxl.load_workbook(out["workbook"])[templates.resolve("sample")["sheet"]]
+    links = {c.value: c.hyperlink.target for c in ws["A"] if c.hyperlink is not None}
+    assert links == {"2": "source/r02.png"}  # the No cell keeps its value
+    assert (Path(out["workbook"]).parent / links["2"]).read_bytes() == PNG
+    report = Path(out["report"]).read_text(encoding="utf-8")
+    assert "[r02](source/r02.png)" in report and "Capture links point into the run folder" in report
+
+
+def test_runs_without_captures_export_without_links(root, sample):
+    folder = finished_run(root, FakeConsole())
+    out = webtest_export.export(folder, webtest.load(folder))
+    ws = openpyxl.load_workbook(out["workbook"])[templates.resolve("sample")["sheet"]]
+    assert not [c for row in ws.iter_rows() for c in row if c.hyperlink is not None]
+    assert "Capture links" not in Path(out["report"]).read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("capture", [r"\\server\share\x.png", "source/../../x.png", "evidence/r01-a1-1.png",
+                                     "C:/x.png", "source/r01.gif"])
+def test_a_capture_outside_the_source_folder_fails_the_load(root, capture):
+    folder = webtest.find_run(root, build(root, FakeConsole(), confirm=False))
+    run = webtest.load(folder)
+    run["cases"][0]["capture"] = capture
+    with pytest.raises(WebtestError, match="capture"):
+        webtest.save(folder, run)

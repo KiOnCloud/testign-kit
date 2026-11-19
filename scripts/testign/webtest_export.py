@@ -349,7 +349,9 @@ REPORT = {
            "all": "All rows", "none": "None.", "draft": "Results are a draft for the tester to review.",
            "expected": "Expected", "actual": "Actual", "evidence": "Evidence", "verdict": "Result",
            "from": "From", "to": "To", "content": "Content", "scenario": "Scenario", "screen": "Screen",
-           "class": "Class", "workbook": "Workbook"},
+           "class": "Class", "workbook": "Workbook", "capture": "Capture",
+           "capture_note": "Capture links point into the run folder: keep the workbook and this report next to its "
+                           "source folder."},
     "ja": {"title": "Webテスト実施レポート", "source": "ソース", "base": "ベースURL", "hosts": "対象ホスト",
            "project": "プロジェクト", "template": "テンプレート", "confirmed": "計画確認", "counts": "件数",
            "state": "状態", "count": "件数", "fail": "NGの行", "notrun": "未実施の行", "reason": "理由",
@@ -358,7 +360,9 @@ REPORT = {
            "all": "全行", "none": "なし。", "draft": "結果はテスターが確認するための下書きです。",
            "expected": "期待結果", "actual": "実際の結果", "evidence": "エビデンス", "verdict": "結果",
            "from": "変更前", "to": "変更後", "content": "内容", "scenario": "シナリオ", "screen": "画面",
-           "class": "分類", "workbook": "ワークブック"},
+           "class": "分類", "workbook": "ワークブック", "capture": "キャプチャ",
+           "capture_note": "キャプチャへのリンクは実施フォルダー内を指します。ワークブックとこのレポートは source "
+                           "フォルダーと同じ場所に置いてください。"},
     "vi": {"title": "Báo cáo chạy test web", "source": "Nguồn", "base": "URL gốc", "hosts": "Host",
            "project": "Dự án", "template": "Template", "confirmed": "Kế hoạch đã xác nhận", "counts": "Số lượng",
            "state": "Trạng thái", "count": "Số dòng", "fail": "Các dòng fail", "notrun": "Các dòng không chạy",
@@ -367,7 +371,9 @@ REPORT = {
            "all": "Tất cả các dòng", "none": "Không có.", "draft": "Kết quả là bản nháp để tester xem lại.",
            "expected": "Mong đợi", "actual": "Thực tế", "evidence": "Bằng chứng", "verdict": "Kết quả",
            "from": "Từ", "to": "Sang", "content": "Nội dung", "scenario": "Kịch bản", "screen": "Màn hình",
-           "class": "Phân loại", "workbook": "Workbook"},
+           "class": "Phân loại", "workbook": "Workbook", "capture": "Ảnh chụp",
+           "capture_note": "Liên kết ảnh chụp trỏ vào thư mục của lần chạy: giữ workbook và báo cáo này cạnh thư mục "
+                           "source."},
 }
 
 
@@ -381,7 +387,18 @@ def _table(head: list[str], rows: list[list[Any]]) -> list[str]:
     return out
 
 
-def report_markdown(run: dict, workbook_name: str) -> str:
+def capture_links(folder: Path, run: dict) -> dict[str, str]:
+    """Row → its staged capture, relative to the run folder; found from the row id, never from text."""
+    out = {}
+    for case in run["cases"]:
+        found = webtest._staged_capture(folder, case["row"])
+        if found is not None:
+            out[case["row"]] = f"source/{found.name}"
+    return out
+
+
+def report_markdown(run: dict, workbook_name: str, captures: dict[str, str] | None = None) -> str:
+    captures = captures or {}
     t = REPORT.get(run.get("report_lang") or "en", REPORT["en"])
     cases = run["cases"]
     src = run.get("source") or {}
@@ -423,10 +440,21 @@ def report_markdown(run: dict, workbook_name: str) -> str:
     lines += ["", f"## {t['all']}", ""]
     lang = run.get("report_lang") or "en"
     phone = HEADERS.get(lang, HEADERS["en"])["mobile_method"]
-    lines += _table(["Row", "No", t["state"], t["class"], t["scenario"], t["screen"], phone],
+    # A capture link is built from the row id and a file name this code chose: nothing to escape.
+    lines += _table(["Row", "No", t["state"], t["class"], t["scenario"], t["screen"], phone, t["capture"]],
                     [[c["row"], value_for(c, "no", {}), c["state"], c.get("class"), c.get("scenario"),
-                      value_for(c, "screen", {}), mobile_text(c, lang)] for c in cases])
+                      value_for(c, "screen", {}), mobile_text(c, lang),
+                      f"[{c['row']}]({captures[c['row']]})" if c["row"] in captures else ""] for c in cases])
+    if captures:
+        lines += ["", f"> {t['capture_note']}"]
     return "\n".join(lines) + "\n"
+
+
+def cover_values(run: dict, today: str | None = None) -> dict[str, str]:
+    """The sample template's cover placeholders and what replaces them; empty when the run has none."""
+    tester = run.get("tester") if isinstance(run.get("tester"), str) else ""
+    return {"<project>": str(run.get("project") or ""), "<TICKET-ID>": str(run.get("ticket") or ""),
+            "<tester>": tester, "<YYYY-MM-DD>": today or webtest.now_iso()[:10]}
 
 
 def export(folder: Path, run: dict) -> dict:
@@ -439,12 +467,16 @@ def export(folder: Path, run: dict) -> dict:
     entry = _entry(plan.get("template"))
     columns = {c["field"]: c["letter"] for c in plan["columns"]}
     new_headers = {c["letter"]: c["header"] for c in plan["columns"] if c.get("new")}
+    captures = capture_links(folder, run)
     written = xlsx.fill_columns(Path(entry["path"]), plan.get("sheet") or entry["sheet"],
                                 int(plan.get("header_row") or entry["header_row"]), columns,
-                                rows_for(run["cases"], plan, run.get("report_lang") or "en"), folder / f"{run['id']}.xlsx", new_headers)
+                                rows_for(run["cases"], plan, run.get("report_lang") or "en"), folder / f"{run['id']}.xlsx",
+                                new_headers, placeholders=cover_values(run),
+                                links=[captures.get(c["row"]) for c in run["cases"]],
+                                link_key="no" if "no" in columns else "content")
     workbook = Path(written["path"])
     report_path = xlsx._unique(folder / f"{run['id']}-report.md")
-    report_path.write_text(report_markdown(run, workbook.name), encoding="utf-8")
+    report_path.write_text(report_markdown(run, workbook.name, captures), encoding="utf-8")
     run.setdefault("exports", []).append({"workbook": workbook.name, "report": report_path.name,
                                           "at": webtest.now_iso()})
     webtest.save(folder, run)

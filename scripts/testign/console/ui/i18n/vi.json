@@ -366,6 +366,8 @@
   "job_reason_not_closed_body": "Agent xin việc mới khi job này còn đang mở.",
   "job_reason_marked": "Thất bại: tester đánh dấu",
   "job_reason_marked_body": "Job bị đánh dấu thất bại sau khi agent im lặng.",
+  "job_reason_no_older_tab": "Thất bại: không tab console nào trả lời được",
+  "job_reason_no_older_tab_body": "Mọi tab console đang mở đều được mở sau khi job được xếp, nên không tab nào được trả lời. Agent sẽ xếp lại job.",
   "job_reason_revision_moved": "Thất bại: report đã đổi",
   "job_reason_revision_moved_body": "Report có revision mới hơn sau khi job được xếp, nên job không chạy trên bản cũ.",
   "job_reason_agent": "Thất bại: agent báo lỗi",
@@ -470,6 +472,7 @@
   "tpl_partial_large": "Workbook này quá lớn để đọc ô gộp và danh sách thả xuống tại đây.",
   "err_workbook_unreadable": "Không đọc được workbook này. Mở bằng Excel để kiểm tra, hoặc chọn workbook khác.",
   "job_err_session_too_new": "Tab này được mở sau khi job bắt đầu. Hãy trả lời từ tab console đã mở trước đó, hoặc xếp lại job.",
+  "job_too_new_title": "Tab này không trả lời được",
   "session_dismiss": "Tôi đã mở",
   "session_no_agent": "Không có agent nào đang kết nối",
   "nav_runs": "Test runs",
@@ -483,6 +486,8 @@
   "jobs_ask_type_sign_in": "Đăng nhập",
   "jobs_ask_review_table": "Agent đã đề xuất kế hoạch chạy. Kiểm tra và xác nhận trong bảng xác nhận; chưa row nào chạy trước khi bạn xác nhận.",
   "jobs_from_chat_body": "Job này do agent xếp từ chat.",
+  "jobs_requeued": "Đã xếp lại",
+  "jobs_queued_after_no_older_tab": "Agent xếp lại job này vì không tab console nào đang mở trả lời được job trước.",
   "jobs_open_run": "Mở lần chạy",
   "jobs_p_name": "Tên lần chạy",
   "jobs_p_project": "Dự án",
@@ -831,5 +836,7 @@
   "login_skip_note": "Bỏ qua thì các row của kịch bản này không chạy.",
   "rt_err_mobile_agent": "{row}: dòng khổ điện thoại kiểm tra trên điện thoại thật do bạn chạy. Đổi cách kiểm tra sang giả lập, hoặc đổi người chạy sang bạn.",
   "job_err_mobile_agent": "Dòng khổ điện thoại kiểm tra trên điện thoại thật chỉ có bạn chạy được. Hãy đổi cách kiểm tra sang giả lập, hoặc đổi người chạy hay khổ màn hình.",
+  "job_err_not_web_runner": "Dòng not-web không ai chạy. Để người chạy là none, hoặc đổi class trước.",
+  "job_err_pc_method": "Dòng pc không có cách kiểm tra trên điện thoại. Hãy đổi dòng sang khổ điện thoại trước.",
   "job_err_too_long": "Nội dung quá dài. Hãy rút ngắn rồi gửi lại."
 }

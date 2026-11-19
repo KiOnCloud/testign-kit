@@ -166,3 +166,20 @@ test('bulk phone check only touches phone-width rows', () => {
   const draft = bulkEdit(initialDraft(a), a, new Set(['r01', 'r02']), 'mobile_method', 'emulation');
   assert.deepEqual(draft.rows, { r01: { mobile_method: 'emulation' } });
 });
+
+test('a row switched to pc sends no phone method, and a not-web row sends runner none', () => {
+  const lines = ask([line('r19', { viewport: 'mobile', runner: 'tester', mobile_method: 'device' }), line('r11')]);
+  let draft = initialDraft(lines);
+  draft = setEdit(draft, lines.lines[0], 'mobile_method', 'emulation');
+  draft = setEdit(draft, lines.lines[0], 'runner', 'agent');
+  draft = setEdit(draft, lines.lines[0], 'viewport', 'pc');
+  draft = setEdit(draft, lines.lines[1], 'class', 'not-web');
+  const result = reviewTableAnswer(lines, draft);
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  assert.deepEqual(result.answer.rows.r19, { runner: 'agent', viewport: 'pc' });
+  assert.deepEqual(result.answer.rows.r11, { class: 'not-web', runner: 'none' });
+  assert.equal(finalLine(draft, lines.lines[1]).runner, 'none');
+  // Back to sure: the runner choice is the tester's again.
+  draft = setEdit(draft, lines.lines[1], 'class', 'sure');
+  assert.deepEqual(reviewTableAnswer(lines, draft).answer.rows.r11, undefined);
+});

@@ -4,7 +4,7 @@
 
 import { h, icon, statusGlyph } from '../dom.mjs';
 import { href } from '../router.mjs';
-import { badge, errorText, openDialog } from './shell.mjs';
+import { badge, banner, errorText, openDialog } from './shell.mjs';
 
 const ERROR_KEYS = {
   'tester-required': 'job_err_tester',
@@ -16,6 +16,7 @@ const ERROR_KEYS = {
   'not-found': 'job_err_no_revision',
   conflict: 'job_err_conflict',
   'session-too-new': 'job_err_session_too_new',
+  'no-older-tab': 'job_err_session_too_new',
   'unknown-project': 'job_err_unknown_project',
   'off-host': 'job_err_off_host',
   'bad-source': 'job_err_bad_source',
@@ -30,6 +31,8 @@ const ERROR_KEYS = {
   'unknown-scenario': 'job_err_unknown_scenario',
   'bad-columns': 'job_err_bad_columns',
   'mobile-agent': 'job_err_mobile_agent',
+  'not-web-runner': 'job_err_not_web_runner',
+  'pc-method': 'job_err_pc_method',
   'too-long': 'job_err_too_long',
 };
 
@@ -39,6 +42,20 @@ export function jobErrorText(t, err) {
   if (key) return t(key);
   if (err && err.code === 'bad-request') return t('job_err_bad_request', { message: err.message || '' });
   return errorText(t, err);
+}
+
+/** Shown instead of answer controls when this tab is newer than the job: the server would refuse it. */
+export function tooNewNotice(t) {
+  const notice = banner('warning', t('job_too_new_title'), t('job_err_session_too_new'));
+  notice.dataset.tooNew = '1';
+  return notice;
+}
+
+/** A job the agent queued again because no console tab could answer the first one. */
+export function requeuedNote(t, job) {
+  return job && job.queued_after === 'no-older-tab'
+    ? h('p.k-note', { dataset: { queuedAfter: job.queued_after } }, [badge(t('jobs_requeued'), 'info'), ' ', t('jobs_queued_after_no_older_tab')])
+    : null;
 }
 
 /** A short handle for a job id: its last part, e.g. "#c07d". */

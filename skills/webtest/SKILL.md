@@ -31,8 +31,9 @@ Arguments: `$ARGUMENTS`
 ## From the command
 
 1. Start the console as the `console` skill's step 1 says (`<run> console start`) and keep its
-   `session` id. Start it before queueing: a tester action on a web job is accepted only from a
-   console tab older than the job.
+   `session` id. Start it before queueing, and queue only once the tester's console tab is open: a
+   tester action on a web job is accepted only from a console tab older than the job. A job no tab
+   can answer fails at claim with `no-older-tab`; queue it again as the bridge's "Errors" says.
 2. Queue the job. Write the job file to a temporary file and run `<run> console queue --file <file>`.
    - New run: first `<run> login-scenario-list --project <p>`. "no such project": tell the tester to
      create the project with its hosts on the console's Login screen, and stop.
@@ -79,19 +80,41 @@ failed` with the reason and the fix in the summary) when one fails.
 `params`: `name`, `source` (`{kind, url, file, node}`), `base_url`, `project`, `hosts`, `template`,
 optional `ticket`.
 
-1. **Earlier imports.** `<run> webtest-find --source-ref "<file>:<node>"`.
-   - A run with `complete: true`: a `questions` ask offers to reuse its import. Reuse makes no
-     Figma call.
+1. **Earlier imports.** `<run> webtest-find --source-ref "<file>:<node>"` → runs with `complete`,
+   `staged`, `captures` and `confirmed`.
+   - A run with `complete: true`: a `questions` ask offers to reuse its import; prefer one whose
+     `captures` equals `staged`. Reuse makes no Figma call.
    - Only partial runs: resume from the one with the most rows staged.
 2. **New run.** `<run> webtest-new --job <j> --session <s> [--name <n>]` → `{run, folder, hosts,
-   project}`. When reusing or resuming, stage each row the earlier run holds from its folder:
-   `<run> webtest-stage --run <r> --row <row> --case <earlier>/source/<row>.json [--capture
-   <earlier>/source/<row>.png|.jpg]`, and copy its `source/page-index.json` when present.
+   project}`. When reusing or resuming, add `--from-run <earlier>`: it checks the earlier run
+   first (same source, readable rows and captures; a refusal creates no run, so fix or drop
+   `--from-run` and call again), then copies every staged row with its capture and
+   `source/page-index.json`. A complete earlier import is imported too, and its unconfirmed
+   triage draft carried over (`triaged: true`): go on with step 8 after checking the draft. When
+   the command stopped half way, call it again with the same arguments. A non-empty
+   `missing_captures` goes in a progress line; read those rows' captures (step 3) and stage them
+   again before `webtest-import`, or before step 8 when the import is already complete.
 3. **Read the table** (rows not staged yet only). `get_metadata` on the table node gives the header
    and one layer per row; the row's layer name carries the id of the design node that changed.
-   Then per row: `get_design_context` on the row for its text, `get_screenshot` on its capture cell
-   (download the short-lived image URL with `curl` to a temporary file). Save each row as it
-   arrives, in table order `r01`, `r02`, …:
+   - **One call first.** `get_design_context` on the table frame (the frame holding the `Header`
+     row). Claude Code saves a large result to a file and reports its path: pass that path as
+     `--context`, and the path of the saved `get_metadata` result as `--metadata`; never retype
+     or copy the output. `<run> webtest-table --run <r> --context <file> --metadata <file> --urls`
+     → `{rows: [{row, capture_url}], skipped, numbered_by}`: rows not staged yet, and staged rows
+     still without their capture. Download each URL that is not `null` into one new temporary
+     folder as `<row>.png`:
+     `curl -sS --fail --max-redirs 0 --max-filesize 20M -o <dir>/<row>.png "<capture_url>"`.
+     Then `<run> webtest-table --run <r> --context <file> --metadata <file> --captures <dir>`
+     stages every listed row with its capture (nothing is staged while one is missing; a row whose
+     table cell holds no image is staged without one and listed in `without_capture`). Download
+     no other URL from the output. `numbered_by: canvas` means the `No` column was not a set of
+     distinct numbers and rows were numbered top to bottom; say so in a progress line.
+   - **Row by row** when either result came back inline instead of as a saved file, without a
+     component (metadata only), or `webtest-table` refused it ("read the table row by row: …"): the
+     call still counted. Per row:
+     `get_design_context` on the row for its text, `get_screenshot` on its capture cell (download
+     the short-lived image URL with `curl` to a temporary file). Save each row as it arrives, in
+     table order `r01`, `r02`, …:
 
    ```json
    {"row": "r02", "source": {"kind": "figma", "file": "<file>", "table_node": "<node>",
@@ -137,8 +160,9 @@ optional `ticket`.
    needed before the review table).
 8. **Review table.** `<run> webtest-columns --run <r> --ask > <file>`, then
    `<run> console ask <j> --session <s> --question <file>` as a held call, again with the same file
-   until it answers (progress lines in between). `confirm: false`: the server has failed the job as
-   `not-confirmed`; go back to waiting for jobs without `done`. Else
+   until it answers (progress lines in between); exit 2 with `no-older-tab` follows the bridge's
+   "Errors" row (the next plan job uses `--from-run` on this run). `confirm: false`: the server has
+   failed the job as `not-confirmed`; go back to waiting for jobs without `done`. Else
    `<run> webtest-plan --run <r> --job <j> --session <s>` stores what the tester confirmed.
 9. **Close** with a summary: the run id, counts by class (`<run> webtest-status --run <r>`), rows
    without a screen or a scenario, scenarios waiting for approval, and that the run starts from the
@@ -193,7 +217,8 @@ Never rewrite a row's steps or expected value during a run.
    Login screen; options "Approved" and "Stop the run" (→ **Finish**).
 2. Ask `{"type": "sign-in", "id": "signin-<scenario>-<n>", "scenario": "<scenario>"}`, with
    `"switching_from": "<signed_in>"` when `webtest-next` named another signed-in scenario. Repeat
-   the held call until it answers, with progress lines in between. Make no Chrome tool call, and
+   the held call until it answers, with progress lines in between; `no-older-tab` follows the
+   bridge's "Errors" row. Make no Chrome tool call, and
    start no worker, while it is open.
 3. `<run> webtest-signed-in --run <r> --job <j> --session <s> --scenario <scenario>`: `signed_in`
    set → the next row of that scenario carries the signed-in check; `skipped` → those rows are

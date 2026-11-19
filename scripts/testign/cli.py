@@ -11,8 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import (
-    __version__, backlog_wiki, cache, config, decisions, gitscope, hashcheck, login_scenarios, report, templates, trace,
-    webtest, webtest_export, xlsx,
+    __version__, backlog_wiki, cache, config, decisions, figma_table, gitscope, hashcheck, login_scenarios, report,
+    templates, trace, webtest, webtest_export, xlsx,
 )
 from .console import client as console_client
 from .console import lifecycle
@@ -587,6 +587,9 @@ def _job_args(args: argparse.Namespace) -> tuple[str, str]:
 @_webtest_command
 def _cmd_webtest_new(args: argparse.Namespace) -> dict:
     job, session = _job_args(args)
+    if args.from_run:
+        return webtest.new_run_from(webtest.runs_root(), console_client.Reader(), job, session, args.name,
+                                    args.from_run)
     return webtest.new_run(webtest.runs_root(), console_client.Reader(), job, session, args.name)
 
 
@@ -605,6 +608,24 @@ def _cmd_webtest_stage(args: argparse.Namespace) -> dict:
         raise webtest.WebtestError("the case file names another row than --row")
     return webtest.stage(_run_folder(args), case,
                          Path(args.capture) if args.capture else None)
+
+
+@_webtest_command
+def _cmd_webtest_table(args: argparse.Namespace) -> dict:
+    folder = _run_folder(args)
+    source = webtest.load(folder).get("source") or {}
+    if source.get("kind") != "figma" or not source.get("file") or not source.get("node"):
+        raise webtest.WebtestError("this run's source is not a Figma table")
+    try:
+        context = Path(args.context).read_text(encoding="utf-8")
+        metadata = Path(args.metadata).read_text(encoding="utf-8")
+    except (OSError, ValueError) as exc:
+        raise webtest.WebtestError(f"cannot read a saved Figma result: {type(exc).__name__}") from None
+    try:
+        rows = figma_table.parse(context, metadata, file_key=source["file"], table_node=source["node"])
+    except figma_table.TableError as exc:
+        raise webtest.WebtestError(f"read the table row by row: {exc}") from None
+    return webtest.stage_table(folder, rows, Path(args.captures) if args.captures else None)
 
 
 @_webtest_command
@@ -735,12 +756,19 @@ def _add_webtest_parser(sub) -> None:
 
     p = cmd("webtest-new", _cmd_webtest_new, "create a web test run from an open webtest-plan job", run=False, job=True)
     p.add_argument("--name", help="run name (default: the name in the job)")
+    p.add_argument("--from-run", help="copy the import (and an unconfirmed triage draft) of this earlier run")
     p = cmd("webtest-find", _cmd_webtest_find, "runs that hold an import of a source", run=False)
     p.add_argument("--source-ref", required=True, help="<figma file key>:<node id>")
     p = cmd("webtest-stage", _cmd_webtest_stage, "save one imported row, so an import can stop and resume")
     p.add_argument("--row", required=True)
     p.add_argument("--case", required=True, help='JSON file: {"row", "source": {"kind", ...}, "content", ...}')
     p.add_argument("--capture", help="PNG or JPEG capture of the row")
+    p = cmd("webtest-table", _cmd_webtest_table, "stage the rows of one saved get_design_context of the table")
+    p.add_argument("--context", required=True, help="the file Claude Code saved the get_design_context result to")
+    p.add_argument("--metadata", required=True, help="the file Claude Code saved get_metadata of the table to")
+    out = p.add_mutually_exclusive_group(required=True)
+    out.add_argument("--urls", action="store_true", help="print the capture URLs of rows not staged yet")
+    out.add_argument("--captures", help="folder of downloaded captures named <row>.png or <row>.jpg: stage the rows")
     cmd("webtest-import", _cmd_webtest_import, "turn the staged rows into the case list")
     p = cmd("webtest-triage", _cmd_webtest_triage, "store the draft kind, class, screen and steps per case")
     p.add_argument("--file", required=True, help='JSON file: {"<row>": {kind, class, reason, screen, ...}}')

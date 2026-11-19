@@ -61,6 +61,13 @@ exit notification where the runtime has that, else in the foreground within the 
 `{ok: false, reason: "revision-moved"}`: the report changed since the job was queued; the job has
 already failed with that reason. Wait for the next job.
 
+Exit 2 with `no-older-tab` (from `claim`, a held `console ask` or `webtest-resolve --wait`): every
+console tab was opened after the job was queued, so none may answer it, and the server has failed
+the job. Do no work for it: queue it again once as `references/console-bridge.md` "Errors" says,
+tell the tester in one line, and wait again. A job queued again that fails the same way is not
+queued a third time; `no-tab` from `console queue` means the console has no tab at all. In both
+cases ask the tester to open the console themselves.
+
 ### 3. Do the job
 
 A job carries `kind`, `ticket`, `base_revision`, `params`, `ui_lang` and `report_lang`. It allows its

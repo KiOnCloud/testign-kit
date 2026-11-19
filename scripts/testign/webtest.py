@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,6 +52,8 @@ VIEWPORTS = ("pc", "mobile")
 # phone-width frame of the tester's Chrome.
 MOBILE_METHODS = ("device", "emulation")
 EMULATION_IS_THE_TESTERS = "only the tester switches a phone-width row to emulation, in the review table"
+NOT_WEB_RUNNER = "a not-web row is run by no one; leave runner none"
+PC_METHOD = "a pc row has no phone check method"
 CONFIDENCE = ("high", "low", "none")
 STATES = ("draft", "queued", "running", "parked", "awaiting-tester",
           "pass", "fail", "manual", "not-applicable", "self-run", "not-run")
@@ -322,6 +325,9 @@ def check_case(case: Any, hosts: list[str]) -> None:
             raise WebtestError(f"run.json: {row}.{key} must be an object")
     if not isinstance(case.get("evidence", []), list):
         raise WebtestError(f"run.json: {row}.evidence must be a list")
+    capture = case.get("capture")
+    if capture is not None and capture not in (f"source/{row}.png", f"source/{row}.jpg"):
+        raise WebtestError(f"run.json: {row}.capture is not the row's file in the run's source folder")
 
 
 def check_run(run: Any) -> dict:
@@ -492,9 +498,138 @@ def find_source(root: Path, file_key: str, node: str) -> list[dict]:
             continue
         src = run.get("source") or {}
         if src.get("file") == file_key and src.get("node") == node:
-            out.append({"run": run_id, "complete": run["import"]["complete"],
-                        "staged": len(run["import"]["staged"]), "confirmed": bool(run.get("confirmed"))})
+            staged = run["import"]["staged"]
+            out.append({"run": run_id, "complete": run["import"]["complete"], "staged": len(staged),
+                        "captures": sum(1 for row in staged if _staged_capture(folder, row)),
+                        "confirmed": bool(run.get("confirmed"))})
     return out
+
+
+def _is_link(path: Path) -> bool:
+    """A symlink or a junction (Python before 3.12 has no ``isjunction``: compare resolved paths)."""
+    try:
+        if path.is_symlink() or getattr(os.path, "isjunction", lambda _p: False)(path):
+            return True
+        return path.exists() and path.resolve() != path.parent.resolve() / path.name
+    except OSError:
+        return True
+
+
+def _source_ref(source: Any) -> tuple:
+    source = source if isinstance(source, dict) else {}
+    return tuple(str(source.get(k) or "") for k in ("kind", "file", "node"))
+
+
+def check_import_source(earlier: Path, job_source: Any, hosts: list[str]) -> dict:
+    """Everything a copy of ``earlier``'s import needs, checked before any run is created.
+
+    Refused: another source than the job's, a linked folder, a staged row whose file fails
+    ``check_staged`` or names another row, a capture that is linked, unreadable or not a PNG or JPEG
+    under 20 MB. An unconfirmed draft of a complete import is carried only when it fits ``hosts``.
+    """
+    if _is_link(earlier) or _is_link(earlier / "source"):
+        raise WebtestError(f"run {earlier.name} is a linked folder")
+    run = load(earlier)
+    if not any(_source_ref(job_source)[1:]) or _source_ref(run.get("source")) != _source_ref(job_source):
+        raise WebtestError(f"run {earlier.name} holds another source than this job")
+    rows = []
+    for row in run["import"]["staged"]:
+        path = earlier / "source" / f"{row}.json"
+        try:
+            if _is_link(path):
+                raise OSError
+            case = check_staged(json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            raise WebtestError(f"source/{row}.json of run {earlier.name} cannot be read") from None
+        if case["row"] != row:
+            raise WebtestError(f"source/{row}.json of run {earlier.name} names another row")
+        capture = _staged_capture(earlier, row)
+        if capture is not None:
+            try:
+                if _is_link(capture) or capture.stat().st_size > IMAGE_CAP:
+                    raise OSError
+                if _image_ext(capture.read_bytes()) is None:
+                    raise OSError
+            except OSError:
+                raise WebtestError(f"the capture of {row} in run {earlier.name} cannot be used") from None
+        rows.append((case, capture))
+    page_index = earlier / "source" / "page-index.json"
+    try:
+        page_ok = page_index.is_file() and not _is_link(page_index) and page_index.stat().st_size <= IMAGE_CAP
+    except OSError:
+        page_ok = False
+    drafts = None
+    if run["import"]["complete"] and not run.get("confirmed"):
+        drafts = {}
+        for case in run["cases"]:
+            fields = {k: case[k] for k in TRIAGE_KEYS if case.get(k) is not None}
+            if fields.get("class") == "not-web":
+                fields["runner"] = "none"
+            fields.pop("mobile_method", None)  # rebuilt from the viewport; emulation is the tester's
+            if fields:
+                drafts[case["row"]] = fields
+        try:
+            for row, fields in drafts.items():
+                check_triage(row, fields, hosts)
+        except WebtestError:
+            drafts = None  # a screen off this job's hosts: the draft is redone, the import is still copied
+    return {"run": run["id"], "rows": rows, "page_index": page_index if page_ok else None,
+            "complete": run["import"]["complete"], "drafts": drafts}
+
+
+def copy_import(folder: Path, earlier: dict) -> dict:
+    """Stage every row of a checked earlier import (``check_import_source``) into ``folder``.
+
+    Safe to repeat after an interrupted copy: identical rows are skipped by ``stage``. A complete,
+    unconfirmed earlier import is also imported here and its triage draft re-applied.
+    """
+    run = load(folder)
+    if run.get("confirmed"):
+        raise WebtestError("the plan of this run is confirmed; nothing can be copied into it")
+    if not run["import"]["complete"]:
+        for case, capture in earlier["rows"]:
+            stage(folder, case, capture)
+    missing = [case["row"] for case, _ in earlier["rows"] if _staged_capture(folder, case["row"]) is None]
+    page_index = False
+    if earlier["page_index"] is not None:
+        fsutil.atomic_write_bytes(folder / "source" / "page-index.json", earlier["page_index"].read_bytes())
+        page_index = True
+    triaged = False
+    if earlier["complete"]:
+        if not load(folder)["import"]["complete"]:
+            import_staged(folder)
+        if earlier["drafts"]:
+            triage(folder, earlier["drafts"])
+            triaged = True
+    staged = load(folder)["import"]["staged"]
+    return {"run": run["id"], "from_run": earlier["run"], "staged": len(staged),
+            "captures": len(staged) - len(missing), "missing_captures": missing,
+            "page_index": page_index, "triaged": triaged}
+
+
+def new_run_from(root: Path, server: ConsoleReader, job: str, session: str, name: str | None,
+                 earlier_id: Any, when: datetime | None = None) -> dict:
+    """``new_run`` with the import of an earlier run; the earlier run is checked first.
+
+    A job that already has a run (a copy that stopped half way) gets the copy into that run.
+    """
+    view = _need_job(server, job, session, "webtest-plan")
+    params = view.get("params") or {}
+    earlier = check_import_source(find_run(root, earlier_id), params.get("source"),
+                                  list(params.get("hosts") or []))
+    if view.get("run"):
+        folder = find_run(root, view["run"])
+        current = load(folder)
+        if current.get("plan_job") != job:
+            raise WebtestError(f"job {job} already has run {view['run']}")
+        made = {"run": view["run"], "folder": str(folder), "hosts": current["hosts"], "project": current["project"]}
+    else:
+        made = new_run(root, server, job, session, name, when)
+        folder = Path(made["folder"])
+    if made["run"] == earlier["run"]:
+        raise WebtestError("a run cannot copy its own import")
+    copied = copy_import(folder, earlier)
+    return {**made, **copied}
 
 
 def _image_ext(data: bytes) -> str | None:
@@ -510,8 +645,11 @@ def _staged_capture(folder: Path, row: str) -> Path | None:
 
 
 def stage(folder: Path, case_data: Any, capture: Path | None = None) -> dict:
+    """Save one imported row. After a complete import only a missing capture is still taken,
+    until the plan is confirmed."""
     run = load(folder)
-    if run["import"]["complete"]:
+    complete = run["import"]["complete"]
+    if complete and (capture is None or run.get("confirmed")):
         raise WebtestError("the import of this run is complete")
     case = check_staged(case_data)
     row = case["row"]
@@ -519,10 +657,14 @@ def stage(folder: Path, case_data: Any, capture: Path | None = None) -> dict:
     text = json.dumps(case, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
     data = ext = None
     if capture is not None:
+        if Path(capture).stat().st_size > IMAGE_CAP:
+            raise WebtestError("the capture must be a PNG or JPEG under 20 MB")
         data = Path(capture).read_bytes()
         ext = _image_ext(data)
         if ext is None or len(data) > IMAGE_CAP:
             raise WebtestError("the capture must be a PNG or JPEG under 20 MB")
+    if complete and not (target.exists() and _staged_capture(folder, row) is None):
+        raise WebtestError("the import of this run is complete")
     if target.exists():
         if target.read_text(encoding="utf-8") != text:
             raise WebtestError(f"{row} is already staged with other content")
@@ -533,6 +675,9 @@ def stage(folder: Path, case_data: Any, capture: Path | None = None) -> dict:
         if stored is None:
             # A row first staged without its capture takes the capture now instead of dropping it.
             fsutil.atomic_write_bytes(folder / "source" / f"{row}{ext}", data)
+            if complete:
+                case_of(run, row)["capture"] = f"source/{row}{ext}"
+                save(folder, run)
             return {**again, "capture_added": True}
         if stored.read_bytes() != data:
             raise WebtestError(f"{row} is already staged with another capture")
@@ -543,6 +688,51 @@ def stage(folder: Path, case_data: Any, capture: Path | None = None) -> dict:
     run["import"]["staged"] = sorted(set(run["import"]["staged"]) | {row}, key=lambda r: int(r[1:]))
     save(folder, run)
     return {"row": row, "staged": len(run["import"]["staged"]), "again": False}
+
+
+def stage_table(folder: Path, rows: list[dict], captures: Path | None = None) -> dict:
+    """Rows read from one table (``figma_table.parse``) that still need staging or a capture.
+
+    A row is to do when its row layer is not staged yet, or is staged under the same row id without
+    a capture file. Without ``captures``: their capture URLs, to download. With it: each is staged
+    with ``<captures>/<row>.png|.jpg`` (a row whose table cell holds no image is staged without
+    one); when a needed capture is missing nothing is staged. Everything is checked before the
+    first row is staged.
+    """
+    run = load(folder)
+    staged = {}  # row layer → row id it is staged under
+    for row in run["import"]["staged"]:
+        try:
+            data = json.loads((folder / "source" / f"{row}.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            raise WebtestError(f"source/{row}.json cannot be read") from None
+        staged[(data.get("source") or {}).get("row_node")] = row
+    todo, skipped = [], []
+    for r in rows:
+        at = staged.get(r["source"].get("row_node"))
+        if at is None:
+            if r["row"] in run["import"]["staged"]:
+                raise WebtestError(f"{r['row']} is already staged for another table row; read the table row by row")
+            todo.append(r)
+        elif at == r["row"] and r.get("capture_url") and _staged_capture(folder, at) is None:
+            todo.append(r)  # staged earlier without its capture
+        else:
+            skipped.append(r["row"])
+    if run["import"]["complete"] and any(r["row"] not in run["import"]["staged"] for r in todo):
+        raise WebtestError("the import of this run is complete")
+    if captures is None:
+        return {"run": run["id"], "rows": [{"row": r["row"], "capture_url": r.get("capture_url")} for r in todo],
+                "skipped": skipped, "numbered_by": rows[0].get("numbered_by") if rows else None}
+    files = {r["row"]: next((p for p in (captures / f"{r['row']}{ext}" for ext in (".png", ".jpg"))
+                             if p.is_file()), None) for r in todo}
+    missing = [r["row"] for r in todo if r.get("capture_url") and files[r["row"]] is None]
+    if missing:
+        raise WebtestError(f"no capture for {', '.join(missing)} in {captures.name}; nothing was staged")
+    for r in todo:
+        stage(folder, {k: r[k] for k in STAGED_KEYS}, files[r["row"]] if r.get("capture_url") else None)
+    return {"run": run["id"], "staged": [r["row"] for r in todo], "skipped": skipped,
+            "without_capture": [r["row"] for r in todo if not r.get("capture_url")],
+            "total": len(load(folder)["import"]["staged"])}
 
 
 def import_staged(folder: Path) -> dict:
@@ -585,6 +775,10 @@ def triage(folder: Path, rows: Any) -> dict:
         if isinstance(fields, dict) and fields.get("mobile_method") == "emulation":
             raise WebtestError(f"{row}: {EMULATION_IS_THE_TESTERS}")
         case.update(check_triage(row, fields, run["hosts"]))
+        if case.get("class") == "not-web":
+            if fields.get("runner") not in (None, "none"):
+                raise WebtestError(f"{row}: {NOT_WEB_RUNNER}")
+            case["runner"] = "none"
         case["mobile_method"] = mobile_method(case.get("viewport"), case.get("mobile_method"))
         changed.append(row)
     save(folder, run)
@@ -633,7 +827,9 @@ def apply_plan(folder: Path, server: ConsoleReader, job: str, session: str,
     answer = review["answer"]
     decided = {"by": review.get("answered_by"), "at": review.get("answered_at")}
     for case in run["cases"]:
-        line = {**lines[case["row"]], **(answer.get("rows") or {}).get(case["row"], {})}
+        edit = (answer.get("rows") or {}).get(case["row"], {})
+        edit = edit if isinstance(edit, dict) else {}
+        line = {**lines[case["row"]], **edit}
         fields = {k: line[k] for k in ("class", "runner", "scenario", "viewport", "mobile_method", "preconditions",
                                        "screen") if k in line}
         if fields.get("mobile_method") is None:
@@ -646,9 +842,16 @@ def apply_plan(folder: Path, server: ConsoleReader, job: str, session: str,
                 fields["screen"] = {"url": fields["screen"], "name": "",
                                     "confidence": "high" if fields["screen"] else "none"}
         fields = check_triage(case["row"], fields, run["hosts"])
+        viewport = fields.get("viewport", case.get("viewport"))
+        # As in the review table: refuse an explicit edit confirmation would drop, normalize the rest.
+        if fields.get("class", case.get("class")) == "not-web":
+            if edit.get("runner") not in (None, "none"):
+                raise WebtestError(f"{case['row']}: {NOT_WEB_RUNNER}")
+            fields["runner"] = "none"
+        if edit.get("mobile_method") is not None and viewport != "mobile":
+            raise WebtestError(f"{case['row']}: {PC_METHOD}")
         if fields.get("class") == "choice" and fields.get("runner") == "agent" and not fields.get("preconditions", "").strip():
             raise WebtestError(f"{case['row']}: a delegated choice row needs preconditions")
-        viewport = fields.get("viewport", case.get("viewport"))
         method = mobile_method(viewport, fields.get("mobile_method"))
         if fields.get("runner") == "agent" and not agent_may_run(viewport, method):
             raise WebtestError(f"{case['row']}: phone-width rows on a real device go to the tester")
@@ -669,7 +872,10 @@ def apply_plan(folder: Path, server: ConsoleReader, job: str, session: str,
 
 def recover(folder: Path, server: ConsoleReader, job: str, session: str) -> dict:
     run = load(folder)
-    _need_run_job(server, job, session, run)
+    view = _need_run_job(server, job, session, run)
+    tester = (view.get("params") or {}).get("tester")
+    if isinstance(tester, str) and tester.strip():
+        run["tester"] = tester.strip()[:100]  # the export's cover names the last run job's tester
     requeued = []
     for case in run["cases"]:
         if case["state"] != "running":

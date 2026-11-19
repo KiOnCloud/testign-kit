@@ -167,7 +167,8 @@ CASE_VIEW = ("row", "content", "creator", "type", "capture", "screen", "viewport
              "question", "questions", "result", "evidence", "class_changed", "last_requeue")
 
 
-def run_view(state, run_id: Any) -> dict:
+def run_view(state, run_id: Any, session: str | None = None) -> dict:
+    """The run for a browser tab; ``can_act`` says whether this tab may answer on the run screen."""
     folder = run_folder(state, run_id)
     run = load_run(folder)
     answers = read_answers(state.home, run["id"])
@@ -182,15 +183,19 @@ def run_view(state, run_id: Any) -> dict:
             view["tester_result"] = answers["results"][rid]
         cases.append(view)
     bridge = getattr(state, "bridge", None)
+    from .jobs import tab_can_answer  # noqa: PLC0415 - jobs imports this module
+
     jobs = []
+    can_act = True
     if bridge is not None:
         with bridge.cond:
             jobs = [bridge.summary(j) for j in sorted(bridge.jobs.values(), key=lambda j: j["created_at"],
                                                       reverse=True) if j.get("run") == run["id"]]
+            can_act = tab_can_answer(bridge.run_cutoff(run["id"]), state.session_created(session))
     keep = ("id", "name", "created_at", "source", "base_url", "project", "hosts", "template", "ticket",
             "report_lang", "confirmed", "columns", "signed_in", "halted", "closed", "exports", "import")
     return {**{k: run.get(k) for k in keep}, "counts": webtest.counts(run), "open": webtest.open_rows(run),
-            "cases": cases, "jobs": jobs, "finish": answers["finish"],
+            "cases": cases, "jobs": jobs, "finish": answers["finish"], "can_act": can_act,
             "waiting_on_tester": _waiting_on_tester(run, answers)}
 
 
@@ -330,7 +335,9 @@ def pending(state, run_id: Any, body: Any) -> dict:
     folder = run_folder(state, run_id)
     run_id = folder.name
     with bridge.cond:
-        bridge.run_job(body.get("job"), body.get("session"), run_id)
+        job = bridge.run_job(body.get("job"), body.get("session"), run_id)
+        if seconds:
+            bridge.refuse_without_older_tab(job, bridge.run_cutoff(run_id))
         deadline = bridge.clock() + seconds
         while True:
             out = _pending(state, run_id)
@@ -374,7 +381,7 @@ def install(state) -> None:
 
     r = state.router
     r.add("GET", "/api/webtest/runs", "browser", lambda q: list_runs(state))
-    r.add("GET", "/api/webtest/runs/:run", "browser", lambda q: run_view(state, q.params["run"]))
+    r.add("GET", "/api/webtest/runs/:run", "browser", lambda q: run_view(state, q.params["run"], q.session))
     r.add("GET", "/api/webtest/runs/:run/evidence/:name", "browser",
           lambda q: _file(run_folder(state, q.params["run"]), "evidence", q.params["name"]))
     r.add("GET", "/api/webtest/runs/:run/captures/:name", "browser",

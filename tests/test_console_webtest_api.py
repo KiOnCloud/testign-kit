@@ -323,3 +323,30 @@ def test_server_store_is_owner_only(console, home, run_id):
     answers = root / "runs" / run_id / "answers.json"
     assert stat.S_IMODE(answers.stat().st_mode) == 0o600
     assert json.loads(answers.read_text(encoding="utf-8"))["results"]["r08-r0"]["verdict"] == "pass"
+
+
+def test_can_act_and_a_held_resolve_without_an_older_tab(console, home, run_id):
+    job = queue_run_job(console, run_id)
+    assert browser(console, "GET", f"/api/webtest/runs/{run_id}")[2]["can_act"] is True
+    newer = {srv.SESSION_HEADER: console.session()}
+    status, _, run = call(console.port, "GET", f"/api/webtest/runs/{run_id}", headers=newer)
+    assert status == 200 and run["can_act"] is False
+    status, _, view = call(console.port, "GET", f"/api/jobs/{job}", headers=newer)
+    assert status == 200 and view["can_answer"] is False
+    assert browser(console, "GET", f"/api/jobs/{job}")[2]["can_answer"] is True
+    # The older tab is still there, so a held resolve goes on; without it the job fails at once.
+    status, _, data = agent(console, "POST", f"/agent/webtest/runs/{run_id}/pending",
+                            {"session": AGENT, "job": job, "wait": 0.01})
+    assert status == 200, data
+    with console.state.lock:
+        console.state._sessions = {k: v for k, v in console.state._sessions.items()
+                                   if k != console.headers[srv.SESSION_HEADER]}
+    status, _, data = agent(console, "POST", f"/agent/webtest/runs/{run_id}/pending",
+                            {"session": AGENT, "job": job, "wait": 5})
+    assert status == 409 and data["error"]["code"] == "no-older-tab"
+    assert browser_state_job(console, job)["reason"] == "no-older-tab"
+
+
+def browser_state_job(console, job):
+    with console.state.bridge.cond:
+        return dict(console.state.bridge.jobs[job])

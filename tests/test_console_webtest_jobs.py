@@ -400,3 +400,111 @@ def test_needs_input_counts_run_questions(bridge, world):
     assert b.state_view()["needs_input"] == 3
     ctx.run_needs_input = lambda: 1 / 0
     assert b.state_view()["needs_input"] == 0
+
+
+# no older tab ----------------------------------------------------------------------------------------
+@pytest.mark.parametrize("gap", [0.0, 0.0004, 0.5])
+def test_tab_age_helper_matches_answer(bridge, gap):
+    job = plan_with_run(bridge)
+    bridge.ask(job, A, review_ask(), 0)
+    cutoff = jobs.answer_cutoff(bridge.jobs[job])
+    for created in (cutoff - gap, cutoff + gap):
+        allowed = jobs.tab_can_answer(cutoff, created)
+        try:
+            bridge.answer(job, {"ask_id": "nope", "answer": ANSWER}, "browser-s", created)
+            refused = False
+        except ApiError as exc:
+            refused = exc.code == "session-too-new"
+        assert allowed is not refused
+
+
+def test_claim_fails_the_job_when_no_tab_is_older(bridge):
+    bridge.sessions = lambda: []
+    job = bridge.create(plan_body())
+    assert bridge.wait(A, 0)["job"]["id"] == job["id"]
+    with pytest.raises(ApiError) as exc:
+        bridge.claim(job["id"], A)
+    assert (exc.value.status, exc.value.code) == (409, "no-older-tab")
+    record = bridge.jobs[job["id"]]
+    assert record["state"] == "failed" and record["reason"] == "no-older-tab"
+
+
+def test_claim_goes_on_with_an_older_tab(bridge):
+    job = bridge.create(plan_body())
+    cutoff = bridge.jobs[job["id"]]["created_ts"]
+    bridge.sessions = lambda: [cutoff - 1, cutoff + 1]
+    bridge.wait(A, 0)
+    assert bridge.claim(job["id"], A) == {"ok": True}
+    assert bridge.jobs[job["id"]]["state"] == "running"
+
+
+def test_a_held_ask_fails_with_no_older_tab(bridge):
+    job = plan_with_run(bridge)
+    cutoff = bridge.jobs[job]["created_ts"]
+    bridge.sessions = lambda: [cutoff + 5]  # only a tab opened after the job was queued
+    with pytest.raises(ApiError) as exc:
+        bridge.ask(job, A, review_ask(), 0)
+    assert exc.value.code == "no-older-tab"
+    assert bridge.jobs[job]["state"] == "failed" and bridge.jobs[job]["reason"] == "no-older-tab"
+
+
+def test_can_answer_is_computed_for_the_requesting_tab(bridge):
+    job = plan_with_run(bridge)
+    bridge.ask(job, A, review_ask(), 0)
+    cutoff = bridge.jobs[job]["created_ts"]
+    assert bridge.get(job, session_created=cutoff - 1)["can_answer"] is True
+    assert bridge.get(job, session_created=cutoff + 1)["can_answer"] is False
+    assert bridge.get(job, session_created=cutoff)["can_answer"] is False
+
+
+def test_the_agent_marks_a_requeue_after_no_older_tab(bridge):
+    job = bridge.agent_create({**plan_body(), "queued_after": "no-older-tab"})
+    assert job["queued_after"] == "no-older-tab" and job["queued_by"] == "agent"
+    assert bridge.create({**plan_body(), "queued_after": "no-older-tab"})["queued_after"] is None
+    with pytest.raises(ApiError) as exc:
+        bridge.agent_create({**plan_body(), "queued_after": "anything"})
+    assert exc.value.code == "bad-request"
+
+
+# review answers that confirmation would drop -----------------------------------------------------------
+def mixed_ask():
+    lines = review_ask()["lines"] + [
+        {"row": "r08", "content": "menu", "class": "sure", "runner": "tester", "scenario": "member",
+         "viewport": "mobile", "mobile_method": "device", "screen": "/menu", "confidence": "low"}]
+    return review_ask(lines=lines)
+
+
+@pytest.mark.parametrize("rows", [
+    {"r01": {"class": "not-web"}},  # the agent's runner is inherited, not edited
+    {"r01": {"class": "not-web", "runner": "none"}},
+    {"r08": {"viewport": "pc"}},  # the agent's device method is inherited
+    {"r08": {"mobile_method": "emulation", "runner": "agent"}},
+])
+def test_review_answer_accepts_what_the_tester_can_see(bridge, rows):
+    job = plan_with_run(bridge)
+    bridge.ask(job, A, mixed_ask(), 0)
+    bridge.answer(job, {"ask_id": f"review-{RUN}", "answer": {**ANSWER, "rows": rows}}, "browser-s")
+    assert bridge.jobs[job]["confirmed_review"]["answer"]["rows"] == rows
+
+
+@pytest.mark.parametrize("rows, code", [
+    ({"r01": {"class": "not-web", "runner": "agent"}}, "not-web-runner"),
+    ({"r05": {"class": "not-web", "runner": "tester"}}, "not-web-runner"),
+    ({"r01": {"mobile_method": "emulation"}}, "pc-method"),
+    ({"r08": {"viewport": "pc", "mobile_method": "device"}}, "pc-method"),
+])
+def test_review_answer_refuses_an_edit_confirmation_would_drop(bridge, rows, code):
+    job = plan_with_run(bridge)
+    bridge.ask(job, A, mixed_ask(), 0)
+    with pytest.raises(ApiError) as exc:
+        bridge.answer(job, {"ask_id": f"review-{RUN}", "answer": {**ANSWER, "rows": rows}}, "browser-s")
+    assert exc.value.code == code
+
+
+def test_a_requeue_with_no_tab_at_all_is_refused(bridge):
+    bridge.sessions = lambda: []
+    with pytest.raises(ApiError) as exc:
+        bridge.agent_create({**plan_body(), "queued_after": "no-older-tab"})
+    assert exc.value.code == "no-tab" and not bridge.jobs
+    bridge.sessions = lambda: [time.time()]
+    assert bridge.agent_create({**plan_body(), "queued_after": "no-older-tab"})["queued_after"] == "no-older-tab"
