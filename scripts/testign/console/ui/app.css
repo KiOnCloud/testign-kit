@@ -57,7 +57,16 @@ html, body { min-height: 100%; background: var(--surface-0); color: var(--text-1
 @media (min-width: 800px) {
   .side { position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow-y: auto; max-width: var(--sidebar-width); }
 }
-.ws-sub { font-weight: var(--fw-regular); }
+/* Wordmark: each letter of the name takes the next Kestrel status colour; both themes define them. */
+.k-sidebar__ws { cursor: default; }
+.k-sidebar__ws:hover { background: none; }
+.wordmark { font-size: var(--fs-title-1); font-weight: var(--fw-semibold); letter-spacing: var(--ls-title); line-height: 1; }
+.wordmark > span:nth-child(5n+1) { color: var(--accent-text); }
+.wordmark > span:nth-child(5n+2) { color: var(--info); }
+.wordmark > span:nth-child(5n+3) { color: var(--success); }
+.wordmark > span:nth-child(5n+4) { color: var(--warning); }
+.wordmark > span:nth-child(5n+5) { color: var(--danger); }
+.ws-sub { font-size: var(--fs-title-1); font-weight: var(--fw-regular); color: var(--text-2); text-transform: capitalize; line-height: 1; }
 .side-search { justify-content: flex-start; width: 100%; margin-bottom: var(--space-8); }
 .side-search__label { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; }
 .nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
