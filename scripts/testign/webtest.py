@@ -505,6 +505,10 @@ def _image_ext(data: bytes) -> str | None:
     return None
 
 
+def _staged_capture(folder: Path, row: str) -> Path | None:
+    return next((p for p in (folder / "source" / f"{row}{ext}" for ext in (".png", ".jpg")) if p.exists()), None)
+
+
 def stage(folder: Path, case_data: Any, capture: Path | None = None) -> dict:
     run = load(folder)
     if run["import"]["complete"]:
@@ -513,15 +517,27 @@ def stage(folder: Path, case_data: Any, capture: Path | None = None) -> dict:
     row = case["row"]
     target = folder / "source" / f"{row}.json"
     text = json.dumps(case, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
-    if target.exists():
-        if target.read_text(encoding="utf-8") != text:
-            raise WebtestError(f"{row} is already staged with other content")
-        return {"row": row, "staged": len(run["import"]["staged"]), "again": True}
+    data = ext = None
     if capture is not None:
         data = Path(capture).read_bytes()
         ext = _image_ext(data)
         if ext is None or len(data) > IMAGE_CAP:
             raise WebtestError("the capture must be a PNG or JPEG under 20 MB")
+    if target.exists():
+        if target.read_text(encoding="utf-8") != text:
+            raise WebtestError(f"{row} is already staged with other content")
+        again = {"row": row, "staged": len(run["import"]["staged"]), "again": True}
+        if data is None:
+            return again
+        stored = _staged_capture(folder, row)
+        if stored is None:
+            # A row first staged without its capture takes the capture now instead of dropping it.
+            fsutil.atomic_write_bytes(folder / "source" / f"{row}{ext}", data)
+            return {**again, "capture_added": True}
+        if stored.read_bytes() != data:
+            raise WebtestError(f"{row} is already staged with another capture")
+        return again
+    if data is not None:
         fsutil.atomic_write_bytes(folder / "source" / f"{row}{ext}", data)
     fsutil.atomic_write_bytes(target, text.encode("utf-8"))
     run["import"]["staged"] = sorted(set(run["import"]["staged"]) | {row}, key=lambda r: int(r[1:]))
@@ -539,8 +555,8 @@ def import_staged(folder: Path) -> dict:
         case = check_staged(data)
         if case["row"] != row:
             raise WebtestError(f"source/{row}.json names another row")
-        capture = next((f"source/{row}{ext}" for ext in (".png", ".jpg") if (folder / "source" / f"{row}{ext}").exists()),
-                       None)
+        stored = _staged_capture(folder, row)
+        capture = f"source/{stored.name}" if stored else None
         cases.append({**case, "capture": capture, "screen": None, "viewport": "pc", "kind": None, "class": None,
                       "reason": "", "scenario": None, "runner": None, "preconditions": "", "steps": "",
                       "expected": "", "state": "draft", "attempt": 0, "owner_job": None, "question": None,

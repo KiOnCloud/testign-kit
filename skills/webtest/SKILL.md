@@ -99,7 +99,9 @@ optional `ticket`.
     "type": "Modified", "content": "<the row's text>", "creator": "<Creator>"}
    ```
 
-   `<run> webtest-stage --run <r> --row <row> --case <file> --capture <image>`. Keep under the
+   `<run> webtest-stage --run <r> --row <row> --case <file> --capture <image>`. Stage a row only
+   once its capture downloaded as a PNG or JPEG; a row staged without one takes it when staged
+   again with the same case (`capture_added: true`), before `webtest-import`. Keep under the
    per-minute limit (10 read calls a minute; 15 on Organization, 20 on Enterprise when `whoami`
    says so). Send a progress line ("12/45 rows read") at least every two minutes. On a rate-limit
    error stop reading and fail the job with the count staged: the next plan job for the same link

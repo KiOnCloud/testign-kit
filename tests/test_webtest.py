@@ -85,6 +85,31 @@ def test_new_run_needs_an_open_plan_job_of_this_session(root, server):
         webtest.new_run(root, server, "j-plan", S, None)
 
 
+def test_staging_a_row_again_keeps_its_capture(root, server, tmp_path):
+    server.add_job("j-plan", "webtest-plan", **plan_params())
+    folder = folder_of(root, webtest.new_run(root, server, "j-plan", S, None)["run"])
+    png, jpg = tmp_path / "cap.png", tmp_path / "cap.jpg"
+    png.write_bytes(PNG)
+    jpg.write_bytes(JPG)
+    webtest.stage(folder, STAGED[0])
+    # First staged without a capture: the second call adds it instead of dropping it.
+    assert webtest.stage(folder, STAGED[0], png) == {"row": STAGED[0]["row"], "staged": 1, "again": True,
+                                                      "capture_added": True}
+    assert (folder / "source" / f"{STAGED[0]['row']}.png").read_bytes() == PNG
+    assert "capture_added" not in webtest.stage(folder, STAGED[0], png)
+    with pytest.raises(WebtestError, match="another capture"):
+        webtest.stage(folder, STAGED[0], jpg)
+    with pytest.raises(WebtestError, match="PNG or JPEG"):
+        bad = tmp_path / "bad.png"
+        bad.write_bytes(b"")
+        webtest.stage(folder, STAGED[0], bad)
+    for case in STAGED[1:]:
+        webtest.stage(folder, case)
+    webtest.import_staged(folder)
+    cases = webtest.load(folder)["cases"]
+    assert webtest.case_of({"cases": cases}, STAGED[0]["row"])["capture"] == f"source/{STAGED[0]['row']}.png"
+
+
 def test_workbook_source_is_accepted_by_stage(root, server):
     server.add_job("j-plan", "webtest-plan", **plan_params())
     made = webtest.new_run(root, server, "j-plan", S, None)
