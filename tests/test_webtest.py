@@ -158,6 +158,49 @@ def test_agent_rows_without_a_scenario_or_screen_become_not_run(root, server):
     assert state(root, run_id, "r04")["not_run_reason"] == "no-scenario"
 
 
+def test_triage_gives_phone_rows_the_real_device_method(root, server):
+    run = webtest.load(folder_of(root, build(root, server, confirm=False)))
+    by_row = {c["row"]: c for c in run["cases"]}
+    assert by_row["r08"]["mobile_method"] == "device"
+    assert by_row["r02"].get("mobile_method") is None  # pc rows carry no method
+
+
+def test_triage_refuses_an_unknown_mobile_method(root, server):
+    folder = folder_of(root, build(root, server, confirm=False))
+    with pytest.raises(WebtestError, match="mobile_method must be one of"):
+        webtest.triage(folder, {"r08": {"mobile_method": "simulator"}})
+
+
+def test_plan_refuses_a_real_device_row_for_the_agent(root, server):
+    with pytest.raises(WebtestError, match="real device go to the tester"):
+        build(root, server, rows_answer={"r08": {"runner": "agent"}})
+
+
+def test_plan_queues_an_emulated_phone_row_for_the_agent(root, server):
+    run_id = build(root, server, rows_answer={"r08": {"runner": "agent", "mobile_method": "emulation"}})
+    case = state(root, run_id, "r08")
+    assert case["state"] == "queued" and case["mobile_method"] == "emulation"
+    view = webtest.worker_view(webtest.load(folder_of(root, run_id)), case)
+    assert view["viewport"] == "mobile" and view["mobile_method"] == "emulation"
+
+
+def test_plan_drops_the_method_when_a_row_becomes_pc(root, server):
+    run_id = build(root, server, rows_answer={"r08": {"viewport": "pc", "runner": "agent"}})
+    case = state(root, run_id, "r08")
+    assert case["viewport"] == "pc" and case["mobile_method"] is None and case["state"] == "queued"
+
+
+def test_a_run_written_before_mobile_methods_still_loads(root, server):
+    folder = folder_of(root, build(root, server))
+    raw = json.loads((folder / "run.json").read_text(encoding="utf-8"))
+    for case in raw["cases"]:
+        case.pop("mobile_method", None)
+    (folder / "run.json").write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+    run = webtest.load(folder)
+    case = next(c for c in run["cases"] if c["row"] == "r08")
+    assert webtest.worker_view(run, case)["mobile_method"] == "device"
+
+
 def test_next_only_returns_agent_rows_of_the_signed_in_scenario(root, server):
     run_id = build(root, server)
     job = run_job(server, run_id)
@@ -439,3 +482,19 @@ def test_cli_reports_an_unreadable_file_without_its_path(tmp_path, server):
                          capture_output=True, text=True, encoding="utf-8", env=env, timeout=60)
     assert out.returncode == 2, out.stderr
     assert "FileNotFoundError" in out.stderr and "secret-folder" not in out.stderr and "Traceback" not in out.stderr
+
+
+def test_triage_leaves_emulation_to_the_tester(root, server):
+    folder = folder_of(root, build(root, server, confirm=False))
+    with pytest.raises(WebtestError, match="only the tester switches"):
+        webtest.triage(folder, {"r08": {"mobile_method": "emulation"}})
+
+
+def test_a_hand_edited_real_device_row_for_the_agent_does_not_load(root, server):
+    folder = folder_of(root, build(root, server))
+    raw = json.loads((folder / "run.json").read_text(encoding="utf-8"))
+    case = next(c for c in raw["cases"] if c["row"] == "r08")
+    case.update({"runner": "agent", "state": "queued"})
+    (folder / "run.json").write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(WebtestError, match="real device go to the tester"):
+        webtest.load(folder)

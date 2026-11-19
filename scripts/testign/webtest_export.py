@@ -18,8 +18,8 @@ from typing import Any
 from . import templates, webtest, xlsx
 from .webtest import WebtestError
 
-CASE_FIELDS = ("no", "type", "content", "creator", "screen", "viewport", "kind", "class", "reason", "scenario",
-               "runner", "preconditions", "steps", "expected", "target_node")
+CASE_FIELDS = ("no", "type", "content", "creator", "screen", "viewport", "mobile_method", "kind", "class", "reason",
+               "scenario", "runner", "preconditions", "steps", "expected", "target_node")
 RESULT_FIELDS = ("verdict", "actual", "evidence", "executed_at", "by")
 FIELDS = CASE_FIELDS + RESULT_FIELDS
 ROLE_FIELD = {"no": "no", "item": "content", "steps": "steps", "expected": "expected", "evidence": "evidence"}
@@ -36,17 +36,18 @@ HEADERS = {
     "en": {"verdict": "Result", "actual": "Actual", "executed_at": "Executed", "evidence": "Evidence",
            "screen": "Screen", "scenario": "Scenario", "by": "By", "reason": "Reason", "steps": "Steps",
            "expected": "Expected", "preconditions": "Preconditions", "kind": "Kind", "class": "Class",
-           "runner": "Runner", "viewport": "Viewport", "type": "Type", "creator": "Creator",
+           "runner": "Runner", "viewport": "Viewport", "mobile_method": "Phone check", "type": "Type", "creator": "Creator",
            "target_node": "Figma node", "no": "No", "content": "Content"},
     "ja": {"verdict": "結果", "actual": "実際の結果", "executed_at": "実施日", "evidence": "エビデンス",
            "screen": "画面", "scenario": "ログインシナリオ", "by": "実施者", "reason": "理由", "steps": "手順",
            "expected": "期待結果", "preconditions": "前提条件", "kind": "種類", "class": "分類",
-           "runner": "実施", "viewport": "表示幅", "type": "種別", "creator": "作成者",
+           "runner": "実施", "viewport": "表示幅", "mobile_method": "スマホ確認方法", "type": "種別", "creator": "作成者",
            "target_node": "Figmaノード", "no": "No", "content": "内容"},
     "vi": {"verdict": "Kết quả", "actual": "Thực tế", "executed_at": "Ngày chạy", "evidence": "Bằng chứng",
            "screen": "Màn hình", "scenario": "Kịch bản đăng nhập", "by": "Người chạy", "reason": "Lý do",
            "steps": "Các bước", "expected": "Kết quả mong đợi", "preconditions": "Tiền điều kiện",
            "kind": "Loại", "class": "Phân loại", "runner": "Người chạy", "viewport": "Khổ màn hình",
+           "mobile_method": "Cách kiểm tra mobile",
            "type": "Kiểu", "creator": "Người tạo", "target_node": "Node Figma", "no": "No", "content": "Nội dung"},
 }
 
@@ -111,8 +112,8 @@ def default_labels(options: list[str]) -> dict[str, str]:
     return {"pass": "Pass", "fail": "Fail"}
 
 
-def first_guess(entry: dict, facts: dict, lang: str = "en") -> dict:
-    """The column plan before the tester edits it."""
+def first_guess(entry: dict, facts: dict, lang: str = "en", phone_rows: bool = False) -> dict:
+    """The column plan before the tester edits it; a run with phone-width rows also gets a method column."""
     columns: list[dict] = []
     used_letters: set[str] = set()
     for role, letter in entry["columns"].items():
@@ -129,7 +130,7 @@ def first_guess(entry: dict, facts: dict, lang: str = "en") -> dict:
             have.add(field)
     next_col = facts["last"] + 1
     names = HEADERS.get(lang, HEADERS["en"])
-    for field in PROPOSED_NEW:
+    for field in (*PROPOSED_NEW, "mobile_method") if phone_rows else PROPOSED_NEW:
         if field not in have:
             columns.append({"field": field, "letter": _letter(next_col), "header": names[field], "new": True})
             next_col += 1
@@ -211,6 +212,34 @@ def confirmed_plan(run: dict, answer: dict) -> dict:
 
 
 # values ---------------------------------------------------------------------------------------
+MOBILE_TEXT = {
+    "en": {"device": "Real device", "emulation-agent": "Emulation (agent, 390 px frame)",
+           "self-run": "Tester (real phone or device mode)", "emulation-planned": "Emulation (planned)"},
+    "ja": {"device": "実機", "emulation-agent": "エミュレーション（エージェント、390 px フレーム）",
+           "self-run": "テスター（実機またはデバイスモード）", "emulation-planned": "エミュレーション（予定）"},
+    "vi": {"device": "Điện thoại thật", "emulation-agent": "Giả lập (agent, khung 390 px)",
+           "self-run": "Tester (điện thoại thật hoặc device mode)", "emulation-planned": "Giả lập (dự kiến)"},
+}
+
+
+def mobile_text(case: dict, lang: str) -> str:
+    """How a phone-width row was checked, for the workbook and the report.
+
+    Empty on pc rows and on rows of runs written before the method existed. An emulation row names
+    the agent only for the agent's own verdict; a tester result says the tester checked it, since the
+    run screen does not record whether that was a phone or Chrome's device mode.
+    """
+    method = case.get("mobile_method")
+    if case.get("viewport") != "mobile" or method not in webtest.MOBILE_METHODS:
+        return ""
+    text = MOBILE_TEXT.get(lang, MOBILE_TEXT["en"])
+    if method == "device":
+        return text["device"]
+    if case["state"] in ("pass", "fail") and (case.get("result") or {}).get("by") == "agent":
+        return text["emulation-agent"]
+    return text["self-run" if case["state"] == "self-run" else "emulation-planned"]
+
+
 def verdict_text(case: dict, labels: dict[str, str]) -> str:
     state = case["state"]
     if state in ("pass", "fail"):
@@ -226,8 +255,10 @@ def verdict_text(case: dict, labels: dict[str, str]) -> str:
     return ""
 
 
-def value_for(case: dict, field: str, labels: dict[str, str]) -> Any:
+def value_for(case: dict, field: str, labels: dict[str, str], lang: str = "en") -> Any:
     result = case.get("result") or {}
+    if field == "mobile_method":
+        return mobile_text(case, lang)
     if field == "no":
         return (case.get("source") or {}).get("no") or case["row"]
     if field == "screen":
@@ -254,9 +285,9 @@ def value_for(case: dict, field: str, labels: dict[str, str]) -> Any:
     return "" if value is None else value
 
 
-def rows_for(cases: list[dict], plan: dict) -> list[dict[str, Any]]:
+def rows_for(cases: list[dict], plan: dict, lang: str = "en") -> list[dict[str, Any]]:
     labels = plan["verdict_labels"]
-    return [{c["field"]: value_for(case, c["field"], labels) for c in plan["columns"]} for case in cases]
+    return [{c["field"]: value_for(case, c["field"], labels, lang) for c in plan["columns"]} for case in cases]
 
 
 def samples(run: dict, plan: dict) -> list[dict]:
@@ -265,7 +296,7 @@ def samples(run: dict, plan: dict) -> list[dict]:
     for cls in ("sure", "choice", "not-web"):
         case = next((c for c in run["cases"] if c.get("class") == cls), None)
         if case is not None:
-            values = rows_for([case], plan)[0]
+            values = rows_for([case], plan, run.get("report_lang") or "en")[0]
             picked.append({"row": case["row"], "class": cls,
                            "cells": {c["letter"]: str(values[c["field"]]) for c in plan["columns"]}})
     return picked
@@ -277,6 +308,7 @@ def review_lines(run: dict) -> list[dict]:
              "confidence": (c.get("screen") or {}).get("confidence") or "none", "class": c.get("class"),
              "kind": c.get("kind"), "reason": c.get("reason") or "", "runner": c.get("runner") or "none",
              "scenario": c.get("scenario"), "viewport": c.get("viewport") or "pc",
+             "mobile_method": webtest.mobile_method(c.get("viewport") or "pc", c.get("mobile_method")),
              "preconditions": c.get("preconditions") or "", "steps": c.get("steps") or "",
              "expected": c.get("expected") or "", "capture": c.get("capture")}
             for c in run["cases"]]
@@ -287,7 +319,8 @@ def columns_view(folder: Path, run: dict, template: str | None = None, *, ask: b
         raise WebtestError("import the run first")
     entry = _entry(template or run.get("template"))
     facts = sheet_facts(entry)
-    plan = first_guess(entry, facts, run.get("report_lang") or "en")
+    plan = first_guess(entry, facts, run.get("report_lang") or "en",
+                       phone_rows=any(c.get("viewport") == "mobile" for c in run["cases"]))
     view = {"plan": plan, "headers": facts["headers"], "last_column": _letter(max(facts["last"], 1)),
             "samples": samples(run, plan)}
     if not ask:
@@ -388,9 +421,11 @@ def report_markdown(run: dict, workbook_name: str) -> str:
     visual = [c["row"] for c in cases if c.get("kind") == "visual" and c["state"] in ("pass", "fail")]
     lines += ["", f"## {t['visual']}", "", (f"{', '.join(visual)}: {t['visual_note']}" if visual else t["none"])]
     lines += ["", f"## {t['all']}", ""]
-    lines += _table(["Row", "No", t["state"], t["class"], t["scenario"], t["screen"]],
+    lang = run.get("report_lang") or "en"
+    phone = HEADERS.get(lang, HEADERS["en"])["mobile_method"]
+    lines += _table(["Row", "No", t["state"], t["class"], t["scenario"], t["screen"], phone],
                     [[c["row"], value_for(c, "no", {}), c["state"], c.get("class"), c.get("scenario"),
-                      value_for(c, "screen", {})] for c in cases])
+                      value_for(c, "screen", {}), mobile_text(c, lang)] for c in cases])
     return "\n".join(lines) + "\n"
 
 
@@ -406,7 +441,7 @@ def export(folder: Path, run: dict) -> dict:
     new_headers = {c["letter"]: c["header"] for c in plan["columns"] if c.get("new")}
     written = xlsx.fill_columns(Path(entry["path"]), plan.get("sheet") or entry["sheet"],
                                 int(plan.get("header_row") or entry["header_row"]), columns,
-                                rows_for(run["cases"], plan), folder / f"{run['id']}.xlsx", new_headers)
+                                rows_for(run["cases"], plan, run.get("report_lang") or "en"), folder / f"{run['id']}.xlsx", new_headers)
     workbook = Path(written["path"])
     report_path = xlsx._unique(folder / f"{run['id']}-report.md")
     report_path.write_text(report_markdown(run, workbook.name), encoding="utf-8")

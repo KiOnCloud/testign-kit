@@ -120,7 +120,7 @@ def write_json(path: Path, data) -> Path:
 
 def review_lines(run: dict) -> list[dict]:
     return [{"row": c["row"], "class": c.get("class"), "runner": c.get("runner") or "none",
-             "scenario": c.get("scenario"), "viewport": c.get("viewport"),
+             "scenario": c.get("scenario"), "viewport": c.get("viewport"), "mobile_method": c.get("mobile_method"),
              "screen": (c.get("screen") or {}).get("url") or "", "preconditions": c.get("preconditions") or ""}
             for c in run["cases"]]
 

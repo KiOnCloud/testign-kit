@@ -203,7 +203,11 @@ def test_review_table_checks_columns_against_the_template_not_the_ask(bridge):
 
 @pytest.mark.parametrize("line,message", [
     ({"class": "choice", "runner": "agent", "preconditions": "x"}, "only the tester delegates"),
-    ({"viewport": "mobile"}, "phone-width"),
+    ({"viewport": "mobile"}, "real device"),
+    ({"viewport": "mobile", "mobile_method": "device"}, "real device"),
+    ({"viewport": "mobile", "mobile_method": "simulator"}, "mobile_method must be one of"),
+    ({"viewport": "mobile", "mobile_method": "emulation"}, "only the tester switches"),
+    ({"viewport": "mobile", "mobile_method": "emulation", "runner": "tester"}, "only the tester switches"),
 ])
 def test_review_table_refuses_lines_only_the_tester_may_set(bridge, line, message):
     job = plan_with_run(bridge)
@@ -213,10 +217,35 @@ def test_review_table_refuses_lines_only_the_tester_may_set(bridge, line, messag
         bridge.ask(job, A, ask, 0)
 
 
+def test_review_table_offers_a_phone_row_to_the_tester_on_a_real_device(bridge):
+    job = plan_with_run(bridge)
+    ask = review_ask()
+    ask["lines"] = [{**ask["lines"][0], "viewport": "mobile", "runner": "tester"}, ask["lines"][1]]
+    assert bridge.ask(job, A, ask, 0) == {"answers": None}
+    bridge.answer(job, {"ask_id": ask["id"], "answer": ANSWER}, "browser-s")
+    assert bridge.review(job, A)["review"]["lines"][0]["mobile_method"] == "device"
+
+
+def test_review_answer_sets_the_mobile_method(bridge):
+    job = plan_with_run(bridge)
+    bridge.ask(job, A, review_ask(), 0)
+    with pytest.raises(ApiError, match="mobile_method must be one of"):
+        bridge.answer(job, {"ask_id": review_ask()["id"],
+                            "answer": {**ANSWER, "rows": {"r01": {"viewport": "mobile", "mobile_method": "x"}}}},
+                      "browser-s")
+    rows = {"r01": {"viewport": "mobile", "mobile_method": "emulation"}}
+    assert bridge.answer(job, {"ask_id": review_ask()["id"], "answer": {**ANSWER, "rows": rows}},
+                         "browser-s")["state"] == "running"
+
+
 def test_review_answer_refuses_a_phone_row_for_the_agent(bridge):
     job = plan_with_run(bridge)
     bridge.ask(job, A, review_ask(), 0)
-    with pytest.raises(ApiError, match="phone-width"):
+    with pytest.raises(ApiError, match="real device"):
+        bridge.answer(job, {"ask_id": review_ask()["id"],
+                            "answer": {**ANSWER, "rows": {"r01": {"viewport": "mobile", "mobile_method": "device"}}}},
+                      "browser-s")
+    with pytest.raises(ApiError, match="real device"):
         bridge.answer(job, {"ask_id": review_ask()["id"], "answer": {**ANSWER, "rows": {"r01": {"viewport": "mobile"}}}},
                       "browser-s")
     with pytest.raises(ApiError, match="scenario must be"):

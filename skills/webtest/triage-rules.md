@@ -25,9 +25,12 @@ runner, preconditions}}`; leave out a field you have no value for.
 
 ## Viewport
 
-`viewport` is `pc` or `mobile`. The Chrome window cannot be set to a phone width, so a row that is
-about the phone layout gets `viewport: mobile` and `runner: tester`: the tester runs it and enters
-the result on the run screen. Keep its kind and class.
+`viewport` is `pc` or `mobile`. A row about the phone layout (a Mobile frame in the page index, or
+a row marked for phones) gets `viewport: mobile`, `mobile_method: device` and `runner: tester`:
+the tester checks it on a real phone and enters the result on the run screen. Keep its kind and
+class. The tester may switch the row to `mobile_method: emulation` in the review table and give it
+to the agent, which then checks it in a 390 px phone frame of the tester's Chrome (see the worker
+brief). Never propose `runner: agent` for a `device` row; the review table refuses it.
 
 ## Steps and expected
 

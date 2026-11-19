@@ -232,8 +232,9 @@ def validate_ask(ask: Any) -> dict:
 
 
 REVIEW_LINE_KEYS = ("row", "no", "content", "screen", "screen_name", "confidence", "class", "kind", "reason",
-                    "runner", "scenario", "viewport", "preconditions", "steps", "expected", "capture")
-REVIEW_EDIT_KEYS = ("screen", "class", "runner", "scenario", "preconditions", "viewport")
+                    "runner", "scenario", "viewport", "mobile_method", "preconditions", "steps", "expected", "capture")
+REVIEW_EDIT_KEYS = ("screen", "class", "runner", "scenario", "preconditions", "viewport", "mobile_method")
+MOBILE_DEVICE_AGENT = "phone-width rows on a real device go to the tester"
 
 
 def _review_table_ask(ask: dict, ask_id: str) -> dict:
@@ -258,8 +259,13 @@ def _review_table_ask(ask: dict, ask_id: str) -> dict:
                 raise bad(f"{line['row']}: {key} must be one of {', '.join(allowed)}")
         if item["class"] == "choice" and item["runner"] == "agent":
             raise bad(f"{line['row']}: only the tester delegates a choice row; offer it with runner tester")
+        if item["mobile_method"] is not None and item["mobile_method"] not in webtest.MOBILE_METHODS:
+            raise bad(f"{line['row']}: mobile_method must be one of {', '.join(webtest.MOBILE_METHODS)}")
+        if item["mobile_method"] == "emulation":
+            raise bad(f"{line['row']}: {webtest.EMULATION_IS_THE_TESTERS}; offer it as device")
+        item["mobile_method"] = webtest.mobile_method(item["viewport"], item["mobile_method"])
         if item["runner"] == "agent" and item["viewport"] == "mobile":
-            raise bad(f"{line['row']}: phone-width rows go to the tester")
+            raise bad(f"{line['row']}: {MOBILE_DEVICE_AGENT}; offer it with runner tester")
         item["scenario"] = item["scenario"] or None
         clean_lines.append(item)
     headers = ask.get("headers")
@@ -315,7 +321,8 @@ def _review_answer(ask: dict, answer: Any) -> dict:
         if not isinstance(edit, dict) or set(edit) - set(REVIEW_EDIT_KEYS):
             raise bad(f"{row}: only {', '.join(REVIEW_EDIT_KEYS)} can be edited")
         clean: dict[str, Any] = {}
-        for key, allowed in (("class", webtest.CLASSES), ("runner", webtest.RUNNERS), ("viewport", webtest.VIEWPORTS)):
+        for key, allowed in (("class", webtest.CLASSES), ("runner", webtest.RUNNERS), ("viewport", webtest.VIEWPORTS),
+                             ("mobile_method", webtest.MOBILE_METHODS)):
             if key in edit:
                 if edit[key] not in allowed:
                     raise bad(f"{row}: {key} must be one of {', '.join(allowed)}")
@@ -335,8 +342,9 @@ def _review_answer(ask: dict, answer: Any) -> dict:
         final = {**line, **clean}
         if final.get("class") == "choice" and final.get("runner") == "agent" and not (final.get("preconditions") or "").strip():
             raise bad(f"{row}: a delegated choice row needs preconditions", "preconditions-required")
-        if final.get("runner") == "agent" and final.get("viewport") == "mobile":
-            raise bad(f"{row}: phone-width rows go to the tester", "mobile-agent")
+        final["mobile_method"] = webtest.mobile_method(final.get("viewport"), final.get("mobile_method"))
+        if final.get("runner") == "agent" and not webtest.agent_may_run(final.get("viewport"), final["mobile_method"]):
+            raise bad(f"{row}: {MOBILE_DEVICE_AGENT}", "mobile-agent")
         if final.get("runner") == "agent" and final.get("scenario") and final["scenario"] not in scenarios:
             raise bad(f"{row}: no such login scenario", "unknown-scenario")
         if not webtest.screen_url_ok(final.get("screen") or "", hosts):

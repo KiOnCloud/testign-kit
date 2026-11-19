@@ -94,9 +94,10 @@ Never write this by hand. Run `<run> webtest-columns --run <r> --ask > <file>` a
 line per case; the server adds the run's hosts and the project's login scenarios itself, so values
 for those in the file are ignored. It belongs to the `webtest-plan` job whose run it names.
 
-Answer: `{columns, verdict_labels, rows: {"<row>": {screen?, class?, runner?, scenario?, preconditions?, viewport?}}, confirm}`.
-The server enforces the row rules (a `choice` row run by the agent needs `preconditions`, scenarios
-exist, every screen is on a run host). `confirm: false` fails the job as `not-confirmed`. After the
+Answer: `{columns, verdict_labels, rows: {"<row>": {screen?, class?, runner?, scenario?, preconditions?, viewport?, mobile_method?}}, confirm}`.
+The server enforces the row rules (a `choice` row run by the agent needs `preconditions`, a
+phone-width row run by the agent needs `mobile_method: emulation`, scenarios exist, every screen is
+on a run host). `confirm: false` fails the job as `not-confirmed`. After the
 answer, run `<run> webtest-plan --run <r> --job <j> --session <s>`: it reads the confirmed answer
 from the server (`GET /agent/jobs/:id/review`) and refuses when there is none.
 
@@ -175,5 +176,5 @@ call while this question is open.
 | `scenario-not-approved` | The sign-in question names a scenario the tester has not approved | Ask the tester to approve it on the Login screen, or skip its rows |
 | `unknown-project`, `off-host`, `bad-source`, `plan-not-confirmed`, `unknown-run` | A web job's parameters are not valid | Fix the job file (the message says what) and queue again |
 | `preconditions-required`, `unknown-scenario`, `bad-columns`, `mobile-agent`, `too-long` | A tester answer (review table or parked row) broke a rule | Only the console sends answers; the tester sees the message there |
-| `bad-request` on a `review-table` ask naming a choice row with `runner: agent`, or an agent row with `viewport: mobile` | Only the tester delegates a choice row; phone-width rows go to the tester | Offer those rows with `runner: tester` and ask again |
+| `bad-request` on a `review-table` ask naming a choice row with `runner: agent`, an agent row with `viewport: mobile`, or a line with `mobile_method: emulation` | Only the tester delegates a choice row or switches a phone-width row to emulation | Offer those rows with `runner: tester` (and `mobile_method: device`) and ask again |
 | `unknown-template` on a `review-table` ask | The ask names another template than the job's, or the template file cannot be read | Use the job's template; the server reads its headers itself |

@@ -235,7 +235,12 @@ Limits:
   job. That keeps a tab opened during a job from acting on it, but not a tab opened before the job:
   an agent misled into minting itself a console link before the job started would pass this check.
   The new-tab notice above still shows such a tab.
-- Rows at phone width are left to you: the agent cannot resize your Chrome window.
+- Rows at phone width are checked on a real phone by you unless you switch a row to emulation in
+  the review table; the agent then checks it in a 390 px phone frame inside your Chrome (same
+  sign-in, desktop user agent, no touch). For those rows only, a separate worker agent runs two
+  fixed page scripts in your signed-in tab: one that draws the frame and one that reads the
+  frame's text. The rule that it runs nothing else is written in its instructions, not enforced by
+  a tool, so give the agent emulation rows only on sites you would let it script.
 
 ## Repository layout
 

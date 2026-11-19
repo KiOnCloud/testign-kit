@@ -94,6 +94,7 @@ def test_first_guess_on_the_shipped_sample(sample):
     entry = templates.resolve("sample")
     plan = webtest_export.first_guess(entry, webtest_export.sheet_facts(entry), "ja")
     fields = {c["field"]: c for c in plan["columns"]}
+    assert "mobile_method" not in fields  # proposed only for a run with phone-width rows
     assert fields["content"]["letter"] == "B" and fields["verdict"]["letter"] == "F"
     assert fields["executed_at"]["letter"] == "G" and fields["evidence"]["letter"] == "E"
     assert fields["actual"].get("new") and fields["actual"]["letter"] == "I"
@@ -107,6 +108,8 @@ def test_columns_view_has_three_samples(root, sample):
     folder = webtest.find_run(root, run_id)
     view = webtest_export.columns_view(folder, webtest.load(folder), "sample")
     assert [s["class"] for s in view["samples"]] == ["sure", "choice", "not-web"]
+    phone = next(c for c in view["plan"]["columns"] if c["field"] == "mobile_method")  # r08 is a phone row
+    assert phone.get("new") and phone["header"] == "Phone check"
     ask = webtest_export.columns_view(folder, webtest.load(folder), "sample", ask=True)
     assert ask["type"] == "review-table" and len(ask["lines"]) == 8 and ask["digest"]
 
@@ -182,6 +185,32 @@ def test_export_writes_a_new_workbook_and_report(root, sample):
     second = webtest_export.export(folder, webtest.load(folder))
     assert second["workbook"] != out["workbook"] and Path(out["workbook"]).exists()
     assert second["report"] != out["report"]
+
+
+def test_the_report_says_how_each_phone_row_was_checked(root, sample):
+    folder = finished_run(root, FakeConsole())
+    report = Path(webtest_export.export(folder, webtest.load(folder))["report"]).read_text(encoding="utf-8")
+    every_row = report.split("## All rows")[1].splitlines()
+    assert "Phone check" in every_row[2]
+    r08 = next(line for line in every_row if line.startswith("| r08 |"))
+    assert r08.endswith("| Real device |")  # r08 is the fixture's phone-width row
+    assert next(line for line in every_row if line.startswith("| r02 |")).endswith("|  |")
+
+
+@pytest.mark.parametrize("case,lang,text", [
+    ({"viewport": "pc", "state": "pass"}, "en", ""),
+    ({"viewport": "mobile", "state": "self-run"}, "en", ""),  # a run written before the method existed
+    ({"viewport": "mobile", "mobile_method": "device", "state": "self-run"}, "vi", "Điện thoại thật"),
+    ({"viewport": "mobile", "mobile_method": "emulation", "state": "pass", "result": {"by": "agent"}}, "ja",
+     "エミュレーション（エージェント、390 px フレーム）"),
+    ({"viewport": "mobile", "mobile_method": "emulation", "state": "self-run", "result": {"by": "tester:A"}}, "en",
+     "Tester (real phone or device mode)"),
+    ({"viewport": "mobile", "mobile_method": "emulation", "state": "not-run", "not_run_reason": "skipped"}, "en",
+     "Emulation (planned)"),
+    ({"viewport": "mobile", "mobile_method": "emulation", "state": "parked"}, "en", "Emulation (planned)"),
+])
+def test_phone_check_text(case, lang, text):
+    assert webtest_export.mobile_text(case, lang) == text
 
 
 def test_export_refuses_an_open_row(root, sample):
