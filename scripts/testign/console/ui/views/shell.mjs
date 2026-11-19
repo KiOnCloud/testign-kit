@@ -11,6 +11,11 @@ export const LANG_NAMES = { vi: 'Tiếng Việt', en: 'English', ja: '日本語'
 // Esc closes the topmost thing that registered itself: a dialog, then a split panel.
 const escapeStack = [];
 
+/** The product name as a wordmark: one span per letter, coloured in turn from the Kestrel status palette. */
+export function wordmark(name) {
+  return h('span.wordmark', [...name].map((ch) => h('span', ch)));
+}
+
 export function pushEscape(fn) {
   escapeStack.push(fn);
   return () => {
@@ -69,7 +74,7 @@ export function renderShell({ t, lang, section, counts, onLang, onPalette }) {
     h('span.k-nav-item__count', { dataset: { count: key } }, counts[key] === undefined ? '' : String(counts[key]))]);
   const mod = isMac() ? '⌘' : 'Ctrl';
   const sidebar = h('nav.k-sidebar.side', { 'aria-label': t('nav_main') }, [
-    h('div.k-sidebar__ws', [h('span.k-avatar', 'T'), 'testign', h('span.k-muted.ws-sub', t('nav_console'))]),
+    h('div.k-sidebar__ws', [h('span.k-avatar', 'T'), wordmark('Testign'), h('span.ws-sub', t('nav_console'))]),
     h('button.k-btn.k-btn--secondary.k-btn--sm.side-search', {
       type: 'button', 'aria-keyshortcuts': 'Control+K Meta+K', on: { click: onPalette },
     }, [icon('search'), h('span.side-search__label', t('nav_search')),
