@@ -3,6 +3,7 @@
 
 import { h, icon, mount } from '../dom.mjs';
 import { NONE } from '../format.mjs';
+import { askBody } from '../markdown.mjs';
 import { href } from '../router.mjs';
 import { confirmAnswer, pasteAnswer, reviewAnswer, splitAnchors } from './ask-form.mjs';
 import { jobErrorText, jobTitle, revOf, shortId } from './job-actions.mjs';
@@ -191,7 +192,7 @@ function reviewRows(ctx, job, ask, send) {
   });
   drawRows();
   return [
-    ask.body ? h('p.ask-body', ask.body) : null,
+    ask.body ? askBody(ask.body) : null,
     h('div.k-table-wrap', h('div.scroll-x', h('table.k-table.review-table', [
       h('thead', h('tr', [
         h('th.col-q', 'Q'), h('th', t('review_th_class')), h('th', t('review_th_decision')), h('th', t('review_th_quote')),
@@ -245,7 +246,7 @@ function confirmDiff(ctx, ask, send) {
   write.addEventListener('click', () => { write.disabled = true; back.disabled = true; send(confirmAnswer(true)); });
   back.addEventListener('click', () => { write.disabled = true; back.disabled = true; send(confirmAnswer(false)); });
   return [
-    ask.body ? h('p.ask-body', ask.body) : null,
+    ask.body ? askBody(ask.body) : null,
     h('section.summary-strip', { 'aria-label': t('review_lists') }, lists),
     h('div.stack-12', pages.length ? pages : [h('p.k-note', t('review_no_pages'))]),
     footer(t, [back, write], t('review_diff_note')),

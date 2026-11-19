@@ -114,13 +114,14 @@ html, body { min-height: 100%; background: var(--surface-0); color: var(--text-1
 .rev-picker { width: 240px; }
 .k-select-wrap .k-icon.chevron-down { transform: translateY(-50%) rotate(90deg); }
 .scroll-x { overflow-x: auto; max-width: 100%; }
-.tbl-wide { min-width: 960px; }
+.tbl-tickets { min-width: 720px; }
 .tbl-mid { min-width: 760px; }
 .tbl-narrow { min-width: 640px; }
 .k-table { font-variant-numeric: tabular-nums; }
 .col-id { width: 84px; }
 .col-key { width: 260px; }
-.title-cell { max-width: 32rem; overflow: hidden; text-overflow: ellipsis; }
+/* The title column takes the width the other columns leave and ends in an ellipsis. */
+.title-cell { width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .note-inline { font-weight: var(--fw-regular); font-size: var(--fs-mini); }
 .k-table tbody tr[tabindex] { cursor: pointer; }
 .k-table tbody tr:focus-visible { outline: var(--hairline-2) solid var(--focus-ring); outline-offset: calc(-1 * var(--hairline-2)); }
@@ -229,7 +230,8 @@ html, body { min-height: 100%; background: var(--surface-0); color: var(--text-1
 .agent-text { margin: 0; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .panel-foot { padding: 0 var(--space-12) var(--space-12); margin: 0; }
 .ask-form { display: flex; flex-direction: column; gap: var(--space-12); padding: var(--space-12); border: var(--hairline) solid var(--border-2); border-radius: var(--radius-8); background: var(--surface-raised); min-width: 0; }
-.ask-body { margin: 0; color: var(--text-1); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ask-body { display: flex; flex-direction: column; gap: var(--space-8); min-width: 0; color: var(--text-1); overflow-wrap: anywhere; }
+.ask-body .table-box { margin-top: 0; }
 .ask-group { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-8); min-width: 0; }
 .ask-question { padding: 0; margin-bottom: var(--space-4); color: var(--text-1); font-weight: var(--fw-medium); overflow-wrap: anywhere; }
 .ask-option { align-items: flex-start; }

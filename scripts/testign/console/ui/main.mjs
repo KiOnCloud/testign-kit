@@ -6,7 +6,7 @@ import { createTranslator, loadDictionaries } from './i18n.mjs';
 import { closePalette, isPaletteKey, openPalette, paletteOpen, singleKeyAllowed } from './palette.mjs';
 import * as prefs from './prefs.mjs';
 import { href, parseRoute, sectionOf } from './router.mjs';
-import { createStore } from './store.mjs';
+import { createStore, openJobClosed } from './store.mjs';
 import {
   clearEscapes, renderReopen, renderShell, runEscape, setNavCount, showSessionNotice, toast, updateAgentStatus,
 } from './views/shell.mjs';
@@ -81,6 +81,13 @@ function memo(key, fn) {
 function setCount(key, value) {
   app.counts[key] = value;
   setNavCount(key, value);
+}
+
+/** Counts again after a job closed: it may have added a ticket, a revision or a cache entry. */
+function reloadCounts() {
+  for (const key of [...app.memo.keys()]) if (key.startsWith('count:')) app.memo.delete(key);
+  app.ticketList = null;
+  loadCounts();
 }
 
 function loadCounts() {
@@ -243,7 +250,10 @@ function wireStore() {
       store.pollNow();
     }, () => toast(app.t('err_generic', { code: 'release' }), 'danger'));
   }));
+  let openId = null;
   store.onChange((st) => {
+    if (openJobClosed(openId, st) && !app.forbidden) reloadCounts();
+    openId = st && st.open ? st.open.id : null;
     if (app.storeHandler && !app.forbidden) app.storeHandler(st);
   });
 }

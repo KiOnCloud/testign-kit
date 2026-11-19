@@ -1,6 +1,7 @@
 // Manual mode of Close: the pages to paste into the wiki by hand. testign wrote nothing.
 
 import { h, icon } from '../dom.mjs';
+import { askBody } from '../markdown.mjs';
 import { banner } from './shell.mjs';
 
 export function copyToClipboard(ctx, text) {
@@ -17,7 +18,7 @@ export function renderPastePages(ctx, ask) {
   const { t } = ctx;
   return h('div.stack-16', [
     banner('info', t('paste_title'), t('paste_body')),
-    ask.body ? h('p.ask-body', ask.body) : null,
+    ask.body ? askBody(ask.body) : null,
     ...(ask.pages || []).map((page, i) => h('section.diff-box', { 'aria-label': page.name }, [
       h('div.diff-head', [
         icon('file', 'k-icon--sm'), h('code.k-mono.text-1.break', page.name),
