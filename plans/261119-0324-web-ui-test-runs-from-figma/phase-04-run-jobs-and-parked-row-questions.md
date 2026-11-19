@@ -28,7 +28,7 @@ while the orchestrator keeps the queue moving.
 
 ## Kinds
 
-| Kind | Parameters (checked when queued) | Route in phase 7 |
+| Kind | Parameters (checked when queued) | Route in phase 6 |
 |---|---|---|
 | `webtest-plan` | `name` (1 to 80 characters); `source` (`figma` with a Figma design URL that has a `node-id`); `base_url` (http or https, absolute); `project` from the project list, whose hosts must include the base URL's host; `template` from the template list (optional when one is registered); `ticket` optional, matching `ticket_id_regex`; `report_lang` in vi, ja, en | import, triage, review table |
 | `webtest-run` | `run` an existing run id whose plan is confirmed; `tester` (as for `close`) | recovery, queue execution, export |
@@ -90,12 +90,12 @@ job that asked.
 ## Login question
 
 A `questions` ask with the scenario's label in the body and the options "Signed in" and "Skip this
-scenario", on both the runner route and the manual route. The server never answers it. After the
+scenario". The tester signs in by hand in their own Chrome; the server never answers the question. After the
 answer, `webtest-signed-in` reads it from the server and sets `signed_in` in `run.json` (phase 2).
 
 ## Stopping and silence
 
-- `console progress` is called as a heartbeat while a worker runs (phase 7), so a long row does not make the job silent (`console/jobs.py:48`, `628-635`).
+- `console progress` is called as a heartbeat while a worker runs (phase 6), so a long row does not make the job silent (`console/jobs.py:48`, `628-635`).
 - "Mark failed" on a web job works while the agent sits in a held call: the silence clock for these kinds counts from the last progress line, not from the last call.
 - When the last progress line of a web job is older than two minutes, `/api/state` flags it and the console says the agent may be waiting for a browser permission in the terminal.
 
@@ -117,8 +117,8 @@ separator or a Windows reserved name (`console/templates_api.py:31`) are not fou
 |---|---|---|
 | `KINDS` | `tests/test_console_jobs.py:123` pins the kind set | Add the two kinds to the assertion |
 | Job kinds in the UI | `ui/views/job-actions.mjs:162-175` builds a survey request for unknown kinds on "Queue again" | Add the two kinds; `webtest-run` re-queues with the same run |
-| Fail reasons | `FAIL_REASONS` (`console/jobs.py:44`); reason labels built at `ui/views/jobs.mjs:211` | Add `not-confirmed`; keys in vi, en, ja (phase 8) |
-| Ask types | `ui/views/jobs.mjs:16`, `220`; `ui/views/review.mjs:13`; `ui/main.mjs:22` | Route `review-table` to its own view (phase 8) |
+| Fail reasons | `FAIL_REASONS` (`console/jobs.py:44`); reason labels built at `ui/views/jobs.mjs:211` | Add `not-confirmed`; keys in vi, en, ja (phase 7) |
+| Ask types | `ui/views/jobs.mjs:16`, `220`; `ui/views/review.mjs:13`; `ui/main.mjs:22` | Route `review-table` to its own view (phase 7) |
 | `validate_ask` / `validate_answer` | `console/jobs.py:116-281` | Add `review-table` |
 | `needs_input` | `console/jobs.py:546`; `ui/views/shell.mjs:143-147` | Count run questions and tester rows |
 | Job language | `report_lang` (`skills/console/SKILL.md:66`) | Reused; no `run_lang` |

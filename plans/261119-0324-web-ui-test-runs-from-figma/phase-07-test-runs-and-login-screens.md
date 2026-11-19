@@ -1,13 +1,13 @@
 ---
-phase: 8
+phase: 7
 title: "Test runs and login screens"
 status: pending
 priority: P1
-effort: "4.5d"
-dependencies: [4, 5, 6]
+effort: "4d"
+dependencies: [4, 5]
 ---
 
-# Phase 8: Test runs and login screens
+# Phase 7: Test runs and login screens
 
 ## Goal
 
@@ -28,17 +28,19 @@ run themselves and signs in, in vi, en and ja.
 
 ## Screens
 
+<!-- Updated: Spike 2026-11-19 - tester's own Chrome profile; no debug connection, no runner; evidence saved by the Chrome tool -->
+
 | Screen | Route | Shows | Actions |
 |---|---|---|---|
 | Test runs | `#/runs` | Runs with name, source, counts by state, last activity | "New run" form (Figma URL, base URL, name, project, template, ticket) → queues `webtest-plan` |
 | Run | `#/runs/<run>` | Header with project, hosts and counts; row list with state, class, runner, scenario, screen; row detail with capture beside evidence, expected, actual | "Run" → queues `webtest-run`; answer a parked row; enter a result with an image for a row awaiting the tester (with or without an open job); "Finish with open rows"; "Export" when no job is open; open the workbook and report paths |
 | Review table | `#/jobs/<job>/review-table` | Run hosts (read-only); column plan with three sample rows as a grid; verdict labels; one line per case with editable screen, class, runner, scenario, viewport, preconditions; bulk edit for selected rows | Add, remove and reorder columns; confirm or reject |
-| Login scenarios | `#/login` | Projects with hosts and sign-in hosts; scenarios with label, steps, approval state, `filled`; the test Chrome's state | Create a project and edit its hosts; approve or reject a draft (with a note); credentials form; remove a scenario; "Start test Chrome"; "Sign in" with runner progress, "Continue" on a manual step and "Stop"; the manual checklist |
+| Login scenarios | `#/login` | Projects with hosts and sign-in hosts; scenarios with label, checklist, account hint and approval state | Create a project and edit its hosts; approve or reject a draft (with a note); remove a scenario. During a run: the checklist, "Sign out first" when switching, "Signed in" and "Skip this scenario" |
 
 - The nav gains two items; `sectionOf` maps `runs/<run>` to Test runs and the review table to Jobs.
 - A waiting `review-table` ask shows an "Open review table" button on the Jobs screen and the Run screen.
 - A job queued from the chat is labelled so until the tester opens it.
-- The credentials form posts once and clears its fields; a filled scenario shows field names and "filled", never values, and offers "Replace".
+- No screen takes or shows an account value; the tester signs in on the site itself.
 - A parked row shows its question in the row detail with the three fixed choices; `delegate` requires the preconditions field.
 - Steps are shown read-only. There is no step editor (user, 2026-11-19).
 - While a run job is open, the row list refreshes from `/api/state` changes, as the Jobs screen does. A notice appears when the job's last progress line is older than two minutes: the agent may be waiting for a browser permission in the terminal.
@@ -62,7 +64,7 @@ run themselves and signs in, in vi, en and ja.
 2. Add routes, the view map, nav items and API calls; write the Test runs list and the new-run form.
 3. Write the review table: column plan grid with add, remove, reorder; verdict labels; case lines with single and bulk edit; the answer object of phase 4.
 4. Write the Run screen: row list, row detail, parked answers, tester results with image upload, finish, export.
-5. Write the Login screen: projects and hosts, scenario approval, credentials form, test Chrome control, runner progress and the manual checklist.
+5. Write the Login screen: projects and hosts, scenario approval and the sign-in checklist.
 6. Update the Jobs screen, "Queue again" and the Templates screen.
 7. Add every string in vi, en and ja.
 8. Write the unit tests and the e2e smoke.
@@ -74,7 +76,7 @@ run themselves and signs in, in vi, en and ja.
 - [ ] Test runs list and new-run form
 - [ ] Review table with its own route and the Jobs screen button
 - [ ] Run screen with parked answers, tester results and export
-- [ ] Login screen: hosts, approval, credentials, test Chrome, sign-in
+- [ ] Login screen: hosts, approval, sign-in checklist
 - [ ] Jobs screen, "Queue again", Templates purpose
 - [ ] i18n in three languages
 - [ ] Unit tests and e2e smoke
@@ -84,7 +86,7 @@ run themselves and signs in, in vi, en and ja.
 - `node --test "scripts/testign/console/ui/tests/*.test.mjs"`
 - `python -m pytest tests/test_console_ui_assets.py -v` (key parity across vi, en and ja)
 - `TESTIGN_E2E=1 python -m pytest tests/e2e/test_console_webtest_smoke.py -v` (macOS e2e job, as today)
-- Tests cover: the review table refuses to confirm while a delegated `choice` row has no preconditions; removing a column removes it from the answer and from the sample grid; the credentials form holds no value after submit and the page's DOM has none; a parked row's answer reaches the run; a tester result with an image is stored with no job open; "Queue again" on a failed `webtest-run` job queues the same run; the `not-confirmed` reason has a label in three languages; a run with 45 rows renders and scrolls without layout shift.
+- Tests cover: the review table refuses to confirm while a delegated `choice` row has no preconditions; removing a column removes it from the answer and from the sample grid; a parked row's answer reaches the run; a tester result with an image is stored with no job open; "Queue again" on a failed `webtest-run` job queues the same run; the `not-confirmed` reason has a label in three languages; a run with 45 rows renders and scrolls without layout shift.
 - e2e: with a fake agent (as `tests/e2e/test_console_jobs_smoke.py` does) a plan job shows the "Open review table" button and the table, a run job shows rows changing state, a parked row is answered, and finish ends the run.
 
 ## Risks

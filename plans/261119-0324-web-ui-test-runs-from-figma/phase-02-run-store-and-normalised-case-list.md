@@ -26,11 +26,13 @@ next row and record a result.
 
 ## Run folder
 
+<!-- Updated: Spike 2026-11-19 - tester's own Chrome profile; no debug connection, no runner; evidence saved by the Chrome tool -->
+
 ```text
 <output_dir>/webtest/<run-id>/
   run.json            the run: source, project, hosts, column plan, cases, states, questions, results
   source/             the import as received, one file per row plus captures; never re-fetched
-  evidence/           <row>-a<attempt>-<n>.png, moved here by the evidence command
+  evidence/           <row>-a<attempt>-<n>.png or .jpg, copied here by the evidence command
   <run-id>.xlsx       written by export (phase 3)
   <run-id>-report.md  written by export (phase 3)
 ```
@@ -105,6 +107,7 @@ raises `attempt`. Any other transition is refused. `parked` and `awaiting-tester
 | `webtest-recover --run <id> --job <j> --session <s>` | At the start of a run job: puts `running` rows whose `owner_job` has finished back to `queued`, and clears `signed_in`. | A `running` row owned by a job that is still open. |
 | `webtest-next --run <id> --job <j> --session <s>` | Returns the next `queued` row whose runner is `agent`, in queue order, marks it `running` with `owner_job` and raises `attempt`; keeps the job and session ids in the run so the skill can read them back. Returns `{row: null, need: "<scenario>"}` when the remaining rows need a scenario other than `signed_in`. | A run that already has a `running` row. |
 | `webtest-row --run <id> --row <r> --result <file>` | Records `pass` or `fail` with `actual`, `url` and the evidence of the current attempt. | A row that is not `running`; a `url` outside the run's hosts (the row becomes `not-run: off-site`); `pass` or `fail` with no evidence recorded for the current attempt. |
+| `webtest-evidence --run <id> --row <r> (--file <path> \| --from-image <image-id>)` | Copies an image into `evidence/` as `<row>-a<attempt>-<n>` and records it against the row's current attempt. `--file` takes the path the Chrome tool reported when it saved a screenshot; `--from-image` takes an image the tester uploaded (phase 4). | A file that is not a PNG or JPEG; a row that is neither `running` nor `awaiting-tester`. |
 | `webtest-requeue --run <id> --row <r> --reason <text>` | The `blocked-env` outcome: back to `queued`, class unchanged. Three in a row across rows set `halted` on the run. | A row that is not `running`. |
 | `webtest-park --run <id> --row <r> --question <file>` | Moves a `running` row to `parked`, its class to `choice`, and stores the question with its id. | A row that is not `running`. |
 | `webtest-resolve --run <id> --job <j> --session <s> [--wait]` | Fetches the answers and self-run results the tester gave for this run from the server and applies each question id once: `delegate` to `queued` with preconditions and `decided_by`, `self-run` to `awaiting-tester`, `skip` to `not-run`, a tester result to `self-run`. Applying an id twice is a no-op. Reports `finish` when the tester ended the run. With `--wait` it holds until something new arrives. | — |
@@ -117,8 +120,7 @@ accepted and the id is never joined into a path unchecked.
 
 The `url` in a result is what the worker reports. The check on it is a consistency check: it
 catches a row that ended on the wrong site, it does not stop a page from loading. What limits
-navigation is the site permission the tester grants Claude in Chrome (phase 7) and the real URL
-the capture records (phase 6).
+navigation is the site permission the tester grants Claude in Chrome (phase 6).
 
 ## Files to Create / Modify
 

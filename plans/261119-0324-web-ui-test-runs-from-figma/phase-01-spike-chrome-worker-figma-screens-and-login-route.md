@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Spike: Chrome worker, Figma screens and login route"
-status: pending
+status: in-progress
 priority: P1
 effort: "2.5d"
 dependencies: []
@@ -24,7 +24,19 @@ site, and write down which route phases 6 and 7 take.
 
 <!-- Updated: Red Team Session 1 - items F, G, H added; D1 removed; item C on random rows; item E on fifteen rows -->
 
-## Spike items
+## Results so far
+
+See `reports/spike-macos-2026-11-19.md`. On macOS: A passes for a general subagent; B passes
+without a debug connection (the Chrome tool saves screenshots to a file); C works for instance
+layers only; F passes; G fails (the window would not take a phone width); one real row ran end to
+end with evidence. The user then chose the tester's own Chrome profile with sign-in by hand, so
+items D and H as written (runner, dedicated profile) are dropped; H becomes a manual check in the
+phase 8 round. `spike/webtest_spike.py` was written for item D and is kept unrun as a record.
+
+Still open: item A with a plugin agent definition and item E on fifteen rows (both in the phase 6
+dry run), and Windows.
+
+## Spike items (as planned)
 
 | Item | Question | How | Pass | Fallback when it fails |
 |---|---|---|---|---|
@@ -64,14 +76,14 @@ No file under `scripts/`, `skills/` or `commands/` changes in this phase.
 
 ## Todo
 
-- [ ] Base URL, project name and account roles received
+- [x] Base URL, project name and account roles received
 - [ ] Item A result recorded with a plugin agent definition
 - [ ] Item B result recorded on macOS and Windows
-- [ ] Item C method and counts recorded for ten random rows
+- [x] Item C method and counts recorded for ten random rows
 - [ ] Item D result recorded on macOS and Windows, pipe and port
 - [ ] Item E numbers recorded for fifteen rows on each route
-- [ ] Items F, G and H recorded
-- [ ] Phases 6 and 7 updated with the chosen routes
+- [x] Items F and G recorded (H dropped with the runner)
+- [x] Later phases updated with the chosen routes
 
 ## Verification
 

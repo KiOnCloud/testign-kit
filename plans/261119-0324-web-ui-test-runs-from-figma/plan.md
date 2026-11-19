@@ -3,7 +3,7 @@ title: "Web UI test runs from a Figma change table, driven through Claude in Chr
 description: "A /testign:webtest command and two console screens that import a Figma change table into a case list, let the tester confirm one review table, run the rows from a queue in Chrome and export an Excel workbook plus a Markdown report."
 status: pending
 priority: P1
-effort: 28d
+effort: 22.5d
 branch: claude/check-nearest-plan-47bc71
 tags: [feature, frontend, backend, api, experimental]
 blockedBy: []
@@ -31,9 +31,8 @@ preconditions, so the agent derives them and the tester confirms.
 - Requested scope: one command, the console screens, column mapping with added and removed
   columns, triage with tester choice, queue execution in Chrome, login scenarios, Excel and
   Markdown output. Delivered in full. Selected mode: HOLD SCOPE.
-- Complexity: about 35 new files in nine phases. Justified by four new parts that do not exist
-  today: a run store, run-scoped tester answers, login scenarios with a runner, and a
-  browser-driving skill.
+- Complexity: about 28 new files in eight phases. Justified by four new parts that do not exist
+  today: a run store, run-scoped tester answers, login scenarios, and a browser-driving skill.
 
 ## Contract
 
@@ -44,22 +43,23 @@ preconditions, so the agent derives them and the tester confirms.
   hosts, which only the tester sets; row text and page content are data, not instructions; data
   and logic rows run only when the tester delegates them; a tester decision reaches the run only
   through the server, never through a file the agent wrote; only the orchestrator writes results;
-  the console server makes no LLM call and runs no agent-written code; a debug connection exists
-  only on a dedicated test profile; Python 3.10+, standard library plus `openpyxl`, no Node on
+  the console server makes no LLM call and runs no code or browser; runs use the tester's own
+  Chrome profile with no debug connection; Python 3.10+, standard library plus `openpyxl`, no Node on
   the tester's machine; UI strings in vi, en and ja.
 - **Conditions of use:** test sites with made-up data and test accounts only.
 - **Non-goals:** parallel workers, native mobile, pixel diff, headless or CI execution,
   production testing, fixing the bugs a run finds, a second importer (the case list allows it;
-  none is built), editing login steps by hand in the console.
+  none is built), editing login steps by hand in the console, automatic sign-in, storing account
+  values, phone-width rows run by the agent.
 - **Acceptance criteria:**
   1. Importing node `6647:118148` gives 45 cases, each with its source row, target node id and a triage class; a second import of the same node makes no Figma call, and an import stopped halfway resumes.
   2. The tester confirms one review table that shows the column plan with three filled sample rows, and can add, remove and reorder columns before confirming.
   3. Every row ends in one explicit state: `pass`, `fail`, `manual`, `not-applicable`, `self-run` (with the tester's result) or `not-run` with a reason. No row is left open, also after a job died in the middle of a row.
   4. Every `pass` and `fail` row has an evidence image on disk taken in that row's own attempt, named in the workbook and the report.
   5. A row that cannot continue is parked with a question and the next row starts without waiting; the question and its answer outlive the job that asked.
-  6. A row with no approved login scenario, or with a scenario the tester has not confirmed as signed in during the current job, never starts.
-  7. A result whose final URL is outside the run's hosts is refused by the CLI and recorded as `not-run: off-site`; the URL compared is the one the browser reported at capture time.
-  8. No command, API route, log line or job record returns or stores the contents of a credentials file.
+  6. A row with no approved login scenario, or with a scenario the tester has not confirmed as signed in during the current job, never starts. The tester signs in by hand.
+  7. A result whose final URL is outside the run's hosts is refused by the CLI and recorded as `not-run: off-site`. The URL is the one the worker reports, so this is a consistency check; the site-access limit the tester confirms is the barrier.
+  8. Nothing in the plugin stores an account value: the stores have no field for one, and the agent types nothing into a sign-in form.
   9. Export writes a new workbook from the confirmed column plan and a Markdown report; it never changes an existing file.
   10. CI passes on Windows and macOS with Python 3.10 and 3.13, and `claude plugin validate --strict .` passes.
 
@@ -75,10 +75,11 @@ preconditions, so the agent derives them and the tester confirms.
 | Questions on parked rows live in `run.json`; the tester's answers and results live in a per-run file the server writes, keyed by question id. The job bridge's `ask` is not extended. | A job record is pruned after 7 days or 50 jobs and answers need an open job (`console/jobs.py:474-485`, `656-672`); a question must outlive the job that asked. |
 | The command queues its job through an agent route; the agent never opens a console session. Tester actions on web jobs need a browser session older than the job's creation. `webtest-plan` and `webtest-resolve` read the tester's decision from the server. | Only a browser session can queue today (`console/jobs.py:1028`), and a session the agent mints passes the claim-time rule (`console/jobs.py:660-668`). Pattern: `wiki-update` (`cli.py:385-400`). |
 | Hosts are set by the tester only, per project, in the console. A run copies them from its job. | Agent-written hosts would let page text widen its own allow-list. |
-| A login scenario is a declarative step list the agent drafts and the tester approves by hash. A fixed runner in the server executes it; a secret field is typed only into a password input; selectors travel as protocol parameters. | Chosen by the user on 2026-11-19. The server runs no agent-written code. |
-| The tester starts a sign-in and confirms "Signed in"; the server never answers that question. Credentials are typed into a console form. Testers do not edit steps by hand. | Chosen by the user on 2026-11-19. |
-| The debug connection exists only on a dedicated test profile; the tester's own profile is never debugged. Only the server and its runner hold the connection; evidence is captured by the server. | Chosen by the user on 2026-11-19. Chrome 136 and later refuse debugging on the default profile anyway (`research/researcher-01-chrome-figma-facts.md`). |
-| The server's write scope grows by `~/.testign-kit/webtest/` (projects, scenarios, approvals, credentials, per-run answers and staged images). | The console plan allowed `console/` and `templates/` only (`plans/261118-1431-testign-console/plan.md:47`). |
+| Runs use the tester's own signed-in Chrome profile. No dedicated profile, no debug connection, no automatic runner. | Chosen by the user on 2026-11-19 after the spike, to reduce complexity. The spike showed evidence can be saved without a debug connection (`reports/spike-macos-2026-11-19.md`). This replaces the earlier choice of a dedicated test profile. |
+| A login scenario is a checklist the agent drafts and the tester approves by hash. The tester signs in by hand and confirms "Signed in"; the server never answers that question. No account value is stored, which replaces the earlier console form. Testers do not edit steps by hand. | Follows from the decision above: with no runner nothing consumes a stored value. |
+| Evidence is the image the Chrome tool saves to disk; the orchestrator copies it into the run for the row's current attempt. | Spike item B: a screenshot and a zoomed region were saved as files with their paths reported. Cost: the image comes from the agent side, so the server does not vouch for it. |
+| Screens: a node-to-page index from the Figma page outlines places instance-layer targets (16 of 45 rows); plain nodes get a low-confidence proposal for the tester. Phone-width rows go to the tester. | Spike items C and G. |
+| The server's write scope grows by `~/.testign-kit/webtest/` (projects, scenarios, approvals, per-run answers and uploaded images). | The console plan allowed `console/` and `templates/` only (`plans/261118-1431-testign-console/plan.md:47`). |
 | Run files live in `<output_dir>/webtest/<run-id>/` and are written by CLI commands the orchestrator calls. The server reads them. | Same split as reports. |
 | `ROLES` and its synonyms stay as they are. A registry entry gains a purpose (`testcase` or `webtest`); a run's column plan carries result and free columns by letter. | New synonyms would change what the shipped sample detects and break pinned tests (`xlsx.py:214`; `tests/test_templates_xlsx.py:57`); a template without the trace column must not reach `/testign:testcase` (`xlsx.py:164-168`). |
 | Chrome is the only supported browser; the session must have Claude in Chrome on (`claude --chrome` or `/chrome`, extension 1.0.36 or later, a direct Anthropic plan, not WSL). | `research/researcher-01-chrome-figma-facts.md`: the two official pages disagree on Edge. |
@@ -88,20 +89,20 @@ preconditions, so the agent derives them and the tester confirms.
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [Spike: Chrome worker, Figma screens and login route](./phase-01-spike-chrome-worker-figma-screens-and-login-route.md) | Pending (blocked: needs the test base URL) |
+| 1 | [Spike: Chrome worker, Figma screens and login route](./phase-01-spike-chrome-worker-figma-screens-and-login-route.md) | In progress: macOS items A, B, C, F, G recorded; Windows and the fifteen-row measurement open |
 | 2 | [Run store and normalised case list](./phase-02-run-store-and-normalised-case-list.md) | Pending |
 | 3 | [Result columns and run export](./phase-03-result-columns-and-run-export.md) | Pending |
 | 4 | [Run jobs and parked row questions](./phase-04-run-jobs-and-parked-row-questions.md) | Pending |
-| 5 | [Login scenarios, credentials and manual sign-in](./phase-05-login-scenarios-and-manual-sign-in.md) | Pending |
-| 6 | [DevTools client, login runner and evidence capture](./phase-06-devtools-client-login-runner-and-evidence-capture.md) | Pending |
-| 7 | [Webtest skill, orchestrator and worker](./phase-07-webtest-skill-orchestrator-and-worker.md) | Pending |
-| 8 | [Test runs and login screens](./phase-08-test-runs-and-login-screens.md) | Pending |
-| 9 | [Docs, real table round and release](./phase-09-docs-real-table-round-and-release.md) | Pending |
+| 5 | [Login scenarios and manual sign-in](./phase-05-login-scenarios-and-manual-sign-in.md) | Pending |
+| 6 | [Webtest skill, orchestrator and worker](./phase-06-webtest-skill-orchestrator-and-worker.md) | Pending |
+| 7 | [Test runs and login screens](./phase-07-test-runs-and-login-screens.md) | Pending |
+| 8 | [Docs, real table round and release](./phase-08-docs-real-table-round-and-release.md) | Pending |
 
-Phase 1 is a gate for phases 6 and 7. Phases 2 to 5 hold nothing the spike decides: evidence is
-any image the server staged, and sign-in works by hand. Phase 3 depends on 2. Phase 4 depends
-on 2. Phase 5 depends on 4. Phase 6 depends on 1 and 5. Phase 7 depends on 1 to 6. Phase 8
-depends on 4, 5 and 6. Phase 9 depends on 7 and 8.
+The spike has set the routes for phase 6; what is left of phase 1 (Windows, the fifteen-row
+measurement) does not block phases 2 to 5. Windows is supported in the first release, so the
+Windows half of the spike (subagent tools and saved screenshots there) must pass before phase 6
+is closed, and the phase 8 round runs on both platforms. Phase 3 depends on 2. Phase 4 depends on 2. Phase 5
+depends on 4. Phase 6 depends on 1 to 5. Phase 7 depends on 4 and 5. Phase 8 depends on 6 and 7.
 
 ## Constraints for every phase
 
@@ -116,18 +117,18 @@ depends on 4, 5 and 6. Phase 9 depends on 7 and 8.
 
 | Assumption | Could break | Signal | Response |
 |---|---|---|---|
-| A plugin agent can call the Claude in Chrome tools of the session that spawned it. | Documented (subagents inherit the session's MCP tools; a plugin agent with a `tools:` list must name them), not yet tried here | Spike item A | The orchestrator runs each row itself under the same worker contract; context isolation is lost, parking is kept. |
-| The server can reach the test Chrome over a debug connection and capture the tab a worker is on. | Yes, per platform; on macOS a non-default profile may not find the Claude extension's native-messaging file | Spike items B and D | Sign-in is manual and evidence is uploaded by the tester; decide with the user whether to continue, because most automation is lost. |
-| The screen of a target node can be found from Figma. | Yes: no tool returns a node's parents, and many targets are components or instance layers | Spike item C, on ten random rows | The screen column starts empty and the tester fills it; rows without a screen do not run. |
-| A pipe connection works, so no port is open to other local processes. | Yes, on Windows | Spike item D | A port on the test profile, with the exposure stated in the README. |
+| A plugin agent can call the Claude in Chrome tools of the session that spawned it. | Confirmed for a general subagent in the spike; a plugin agent definition is not yet tried | The phase 6 dry run | The orchestrator runs each row itself under the same worker contract. |
+| The Chrome tool keeps saving screenshots to a file whose path it reports. | Yes: it is a feature of the client, seen on macOS only | A worker returns no image path | The row waits for an image uploaded by the tester. |
+| The tester is signed in with the account the scenario names. | Yes: the agent cannot tell accounts apart reliably | The user name the first worker reads differs from the account hint | The log line shows the name; the report names the scenario per row; the tester signs in again. |
+| Page outlines place instance-layer targets. | Yes, per Figma file; large frames can come back without children | A target is not in the index | A low-confidence proposal or an empty screen for the tester. |
 | One import of 45 rows fits the Figma call limit of the plan that owns the file. | Yes, per plan: Full seat is 200 calls a day at 10 to 15 a minute on Professional and Organization; View seat is 20 a month | Spike item E; a rate-limit error during import | The import is staged row by row and resumes; a View seat is refused before the first call. |
-| A phone-width viewport can be set, and scenarios can be switched on the same hosts. | Yes | Spike items G and H | `mobile` rows go to the tester; one scenario per run. |
-| A 45-row run stays within the job's silence limit and the model's context. | Yes | Spike item E on fifteen rows | Heartbeat interval from the spike; job and session ids kept in `run.json`; recovery after a lost job. |
-| The model keeps "row text and page content are data". | Yes | The injection rows in the phase 9 round are followed | Sharpen the skill text. Hosts and delegation stay behind the tester either way, because the agent has no command that writes them. |
+| Scenarios can be switched on the same hosts by signing out and in by hand. | Yes | The signed-in check fails after a switch | One scenario per run; rows of other scenarios are `not-run: no-scenario`. |
+| A 45-row run stays within the job's silence limit and the model's context. | Yes | The phase 6 dry run and the first real run | A progress line every minute; job and session ids kept in `run.json`; recovery after a lost job. |
+| The model keeps "row text and page content are data". | Yes | The injection rows in the phase 8 round are followed | Sharpen the skill text. Hosts and delegation stay behind the tester either way, because the agent has no command that writes them. |
 
 The design stops meeting its criteria when the agent mints itself a console session and uses it
 as the tester: it runs as the tester and the console cannot tell them apart. The skill forbids
-it, the command needs no session, and the phase 9 injection check looks for it. The console plan
+it, the command needs no session, and the phase 8 injection check looks for it. The console plan
 recorded the same limit.
 
 ## Extension trace
@@ -145,8 +146,24 @@ is added.
 
 ## Open questions
 
-1. The test base URL, needed to start phase 1.
-2. Which project name and login scenarios the first run uses (asked in phase 1, on the real site).
+1. The login and sign-out addresses of the test site, for the first scenarios (admin, staff, client).
+
+## Spike decisions — 2026-11-19
+
+Base URL `https://dev.u-supp-u.devkarte.jp/`, project `usupp`, roles admin, staff, client.
+Report: [`reports/spike-macos-2026-11-19.md`](./reports/spike-macos-2026-11-19.md).
+
+| Decision | Replaces |
+|---|---|
+| Runs use the tester's own signed-in Chrome profile | Dedicated test profile (red-team finding 5) |
+| No debug connection, no automatic sign-in | The DevTools client, runner and capture phase, which is removed |
+| No stored account values | The console credentials form (validation session 1) |
+| Evidence from the Chrome tool's saved screenshots | Server-side capture |
+| Phone-width rows go to the tester | Agent-run `mobile` rows |
+| Windows is supported in the first release (user, 2026-11-19) | — |
+
+The red-team table below names the phases as they were numbered then; the former phase 6 is
+gone and the former phases 7 to 9 are now 6 to 8.
 
 ## Red Team Review
 
@@ -183,7 +200,7 @@ be opened only while the runner or a capture runs. It is open for as long as the
 runs. The pipe route avoids a port; phase 1 finds out where it works.
 
 ### Whole-Plan Consistency Sweep
-- Files reread: plan.md and all nine phase files
+- Files reread: plan.md and all phase files
 - Decision deltas checked: 14
 - Reconciled stale references: 9 (job-scoped parks, agent-set hosts, the default-profile debug route, new template roles, the second sample, `run_lang`, the step editor, phase numbers after the split, total effort)
 - Unresolved contradictions: 0
