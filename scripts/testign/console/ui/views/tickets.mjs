@@ -139,7 +139,7 @@ function draw(ctx, body, data) {
     return h('tr', { dataset: { ticket: tk.id } }, [
       h('td.k-id', tk.id),
       h('td.k-cell-title.title-cell', { lang: tk.error ? undefined : (tk.lang || undefined) }, [
-        h('a.text-1', { href: href(['tickets', tk.id]) }, title),
+        h('a.text-1', { href: href(['tickets', tk.id]), title }, title),
         tk.inconsistent && tk.inconsistent.length
           ? h('span.k-muted.note-inline', { title: tk.inconsistent.join(', ') }, ` · ${t('tickets_ignored', { n: tk.inconsistent.length })}`)
           : null,
@@ -182,7 +182,7 @@ function draw(ctx, body, data) {
         h('div.k-toolbar__spacer'),
         countNote,
       ]),
-      h('div.scroll-x', h('table.k-table.tbl-wide', [
+      h('div.scroll-x', h('table.k-table.tbl-tickets', [
         h('thead', h('tr', [
           h('th.col-id', t('tickets_th_ticket')), h('th', t('tickets_th_name')), h('th', t('tickets_th_conclusion')),
           h('th.k-td-num', t('tickets_th_rev')), h('th', t('tickets_th_questions')), h('th', t('tickets_th_cases')),

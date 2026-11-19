@@ -21,6 +21,12 @@ export function statusKey(state) {
     open ? open.state : null, state.needs_input || 0, (state.queue || []).length, state.browser_sessions || []]);
 }
 
+/** True when the job open in `prevOpenId` is no longer the open job in `state` (it closed). */
+export function openJobClosed(prevOpenId, state) {
+  if (!prevOpenId || !state) return false;
+  return !state.open || state.open.id !== prevOpenId;
+}
+
 /** Sessions in `next` that were not in `known`; the first state seen only fills `known`. */
 export function newSessions(known, next) {
   const added = [];

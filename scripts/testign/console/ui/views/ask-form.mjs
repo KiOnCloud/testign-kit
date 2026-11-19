@@ -2,6 +2,7 @@
 // renderQuestions draws a `questions` ask as radio or checkbox groups with an optional "Other".
 
 import { h, icon, mount } from '../dom.mjs';
+import { askBody } from '../markdown.mjs';
 
 const ROW_ACTIONS = ['write', 'skip', 'edit'];
 
@@ -121,7 +122,7 @@ export function renderQuestions({ t, ask, lang, onSubmit, onCancel }) {
   const send = h('button.k-btn.k-btn--primary', { type: 'submit' }, [t('ask_send'),
     h('span.k-kbd-group', [h('kbd.k-kbd.k-kbd--on-accent', 'Ctrl'), h('kbd.k-kbd.k-kbd--on-accent', '↵')])]);
   const form = h('form.ask-form', { 'aria-label': t('ask_title') }, [
-    h('div.stack-4', [h('span.k-section-label', t('ask_title')), ask.body ? h('p.ask-body', { lang }, ask.body) : null]),
+    h('div.stack-4', [h('span.k-section-label', t('ask_title')), ask.body ? askBody(ask.body, lang) : null]),
     ...groups,
     errorBox,
     h('div.ask-actions', [

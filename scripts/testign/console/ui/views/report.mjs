@@ -3,6 +3,7 @@
 
 import { h, icon, inline, mount } from '../dom.mjs';
 import { isoDate, NONE, shortSha } from '../format.mjs';
+import { markdownTable, prose } from '../markdown.mjs';
 import { href } from '../router.mjs';
 import { askTesterName, chooseTemplate, queueJob } from './job-actions.mjs';
 import {
@@ -22,31 +23,6 @@ const uiState = new Map();
 function stateFor(key) {
   if (!uiState.has(key)) uiState.set(key, { section: null, row: null });
   return uiState.get(key);
-}
-
-/** Paragraphs, headings and lists from report lines; table lines are skipped (tables render apart). */
-function prose(lines, lang) {
-  const out = [];
-  let list = null;
-  let listTag = null;
-  const flush = () => { if (list) { out.push(h(listTag, { class: 'prose-list', lang }, list)); list = null; listTag = null; } };
-  for (const raw of lines) {
-    const line = raw.trimEnd();
-    if (!line.trim() || line.trim() === '---' || line.trim().startsWith('|')) { flush(); continue; }
-    const bullet = BULLET.exec(line);
-    const numbered = NUMBERED.exec(line);
-    if (bullet || numbered) {
-      const tag = bullet ? 'ul' : 'ol';
-      if (listTag !== tag) { flush(); list = []; listTag = tag; }
-      list.push(h('li', inline((bullet || numbered)[1])));
-      continue;
-    }
-    flush();
-    if (/^#{3,6}\s/.test(line)) out.push(h('h3.prose-heading', { lang }, inline(line.replace(/^#+\s*/, ''))));
-    else out.push(h('p.prose-p', { lang }, inline(line)));
-  }
-  flush();
-  return out;
 }
 
 function qIds(cells) {
@@ -288,7 +264,7 @@ function draw(ctx, body, ticket, view, latestName, crumbs) {
     const tables = section.tables || [];
     const selectable = tables.find((tb) => tb.rows.some((r) => ROW_ID.test(r[0] || '')));
     const proseNodes = prose(section.lines || [], lang);
-    const tableNodes = tables.filter((tb) => tb !== selectable).map((tb) => reportTable(tb, lang));
+    const tableNodes = tables.filter((tb) => tb !== selectable).map((tb) => markdownTable(tb, lang));
     if (!selectable) {
       mount(panelBox, h('div.section-body', [...proseNodes, ...tableNodes]));
       if (!proseNodes.length && !tableNodes.length) mount(panelBox, h('p.k-note', t('report_section_empty')));
@@ -381,13 +357,6 @@ function draw(ctx, body, ticket, view, latestName, crumbs) {
     drawPanel();
   }
   ctx.ready();
-}
-
-function reportTable(table, lang) {
-  return h('div.k-table-wrap.table-box', h('div.scroll-x', h('table.k-table.report-table', [
-    h('thead', h('tr', table.header.map((x) => h('th', { lang }, x)))),
-    h('tbody', table.rows.map((cells) => h('tr', cells.map((c) => h('td', { lang }, inline(c)))))),
-  ])));
 }
 
 async function closeQa(ctx, id) {

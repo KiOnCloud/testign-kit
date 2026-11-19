@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { createStore, newSessions, statusKey, viewKey } from '../store.mjs';
+import { createStore, newSessions, openJobClosed, statusKey, viewKey } from '../store.mjs';
 
 const base = (over = {}) => ({
   agent: { attached: false, waiting: false, last_contact: null, silent_seconds: null },
@@ -141,4 +141,13 @@ test('known sessions survive a reload, so a new one is still announced and old o
   reloaded.onSessions((s) => notices.push(s));
   reloaded.apply(base({ browser_sessions: ['2026-11-19T09:00:00+07:00', '2026-11-19T11:00:00+07:00'] }));
   assert.deepEqual(notices, [['2026-11-19T11:00:00+07:00']]);
+});
+
+test('openJobClosed: true only when the job that was open is no longer the open one', () => {
+  const open = (id) => base({ open: { id, state: 'running' } });
+  assert.equal(openJobClosed(null, open('j1')), false);
+  assert.equal(openJobClosed('j1', open('j1')), false);
+  assert.equal(openJobClosed('j1', base()), true);
+  assert.equal(openJobClosed('j1', open('j2')), true);
+  assert.equal(openJobClosed('j1', null), false);
 });

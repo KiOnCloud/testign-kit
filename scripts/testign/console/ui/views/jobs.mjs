@@ -4,6 +4,7 @@
 
 import { h, icon, mount } from '../dom.mjs';
 import { dateTime, NONE, timeOrDay } from '../format.mjs';
+import { askBody } from '../markdown.mjs';
 import { href } from '../router.mjs';
 import { renderQuestions } from './ask-form.mjs';
 import {
@@ -236,7 +237,7 @@ function jobPanel(ctx, job, attached) {
       parts.push(h('div.ask-form', [
         h('span.k-section-label', t('ask_title')),
         h('p.panel-text', t(`jobs_ask_${job.ask.type.replace('-', '_')}`)),
-        job.ask.body ? h('p.ask-body', job.ask.body) : null,
+        job.ask.body ? askBody(job.ask.body, job.ui_lang) : null,
         h('div.row-8', h('a.k-btn.k-btn--secondary', { href: href(['jobs', job.id, 'review']), dataset: { openReview: '1' } },
           t('jobs_open_review'))),
       ]));
