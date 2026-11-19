@@ -1,7 +1,7 @@
 // Test runs: every web test run with its source and counts by state, the plan jobs still importing,
-// and the new-run form. Also the labels the Run screen shares: row states, classes, count badges.
+// and the new-run form. Also the labels the Run screen shares: row states, classes, the count strip.
 
-import { h, mount } from '../dom.mjs';
+import { h, icon, mount } from '../dom.mjs';
 import { NONE, timeOrDay } from '../format.mjs';
 import { href } from '../router.mjs';
 import { renderRunForm } from './run-form.mjs';
@@ -46,18 +46,26 @@ export function countGroups(counts, cases) {
     }
   }
   return [
-    { key: 'pass', n: pass, kind: 'success' },
-    { key: 'fail', n: fail, kind: 'danger' },
-    { key: 'tester', n: tester, kind: 'outline' },
-    { key: 'manual', n: (c.manual || 0) + (c['not-applicable'] || 0), kind: 'outline' },
-    { key: 'needs_you', n: (c.parked || 0) + (c['awaiting-tester'] || 0), kind: 'warning' },
-    { key: 'queued', n: (c.queued || 0) + (c.running || 0) + (c.draft || 0), kind: 'outline' },
-    { key: 'not_run', n: c['not-run'] || 0, kind: 'outline' },
+    { key: 'pass', n: pass, kind: 'success', icon: 'check' },
+    { key: 'fail', n: fail, kind: 'danger', icon: 'close' },
+    { key: 'tester', n: tester, kind: 'outline', icon: 'user' },
+    { key: 'manual', n: (c.manual || 0) + (c['not-applicable'] || 0), kind: 'outline', icon: 'eye' },
+    { key: 'needs_you', n: (c.parked || 0) + (c['awaiting-tester'] || 0), kind: 'warning', icon: 'warning' },
+    { key: 'queued', n: (c.queued || 0) + (c.running || 0) + (c.draft || 0), kind: 'outline', icon: 'clock' },
+    { key: 'not_run', n: c['not-run'] || 0, kind: 'outline', icon: 'dash' },
   ].filter((g) => g.n > 0);
 }
 
-export function countBadges(t, counts, cases) {
-  return countGroups(counts, cases).map((g) => badge(`${t(`wt_count_${g.key}`)} ${g.n}`, g.kind));
+/**
+ * Counts by state on one line: an icon and a number per state. The state name is the tooltip and
+ * screen-reader text, so the strip stays short enough to sit in a table cell without wrapping.
+ */
+export function countStrip(t, counts, cases) {
+  return h('span.count-strip', countGroups(counts, cases).map((g) => {
+    const label = t(`wt_count_${g.key}`);
+    return h('span.k-badge.count-item', { class: `k-badge--${g.kind}`, title: `${label} ${g.n}`, dataset: { count: g.key } },
+      [icon(g.icon, 'k-icon--sm'), h('span.sr-only', label), String(g.n)]);
+  }));
 }
 
 /** The run's job that is queued or open, if any. */
@@ -164,7 +172,7 @@ function draw(ctx, body, head, runs, jobs, projects, templates) {
       ]),
       h('td.wrap-cell', [h('span', sourceLabel(run.source)),
         h('span.k-note.block', `${t('runs_rows', { n: total })} · ${run.project || NONE}`)]),
-      h('td.wrap-cell', h('div.row-4', run.confirmed ? countBadges(t, run.counts) : h('span.k-muted', NONE))),
+      h('td', run.confirmed ? countStrip(t, run.counts) : h('span.k-muted', NONE)),
       h('td', review
         ? h('a.k-btn.k-btn--secondary.k-btn--sm', { href: href(['jobs', review.id, 'review-table']), dataset: { openReviewTable: review.id } }, t('runs_open_review'))
         : h('span.num', String(run.open || 0))),

@@ -80,6 +80,16 @@ def go(page, name, hash_):
     page.wait_for_function("([n]) => document.getElementById('main') && document.getElementById('main').dataset.ready === n", arg=[name])
 
 
+class BridgeReader:
+    """The job view the run commands read, straight from the in-process bridge (what /agent/jobs/:id/info returns)."""
+
+    def __init__(self, bridge):
+        self.bridge = bridge
+
+    def job(self, job, session):
+        return self.bridge.info(job, session)
+
+
 def agent_take(bridge, session=AGENT):
     got = bridge.wait(session, 0)
     assert got["job"], "no job offered"
@@ -172,13 +182,14 @@ def test_run_screen_answers_a_parked_row(page, console):
     jid = bridge.create({"kind": "webtest-run", "ui_lang": "en", "run": run_id, "tester": "Tester A"})["id"]
     assert agent_take(bridge) == jid
     folder = webtest.find_run(home / "Downloads" / "webtest", run_id)
-    assert webtest.next_row(folder, jid, AGENT)["row"] == "r02"
+    assert webtest.next_row(folder, BridgeReader(bridge), jid, AGENT)["row"] == "r02"
     webtest.park(folder, "r02", {"body": "Which footer?"})
 
     go(page, "run", f"#/runs/{run_id}")
     page.click("tr[data-row='r02']")
-    page.wait_for_selector("#park-r02-0")
-    page.check("#park-r02-0")
+    # Kestrel radios hide the native input behind a drawn dot: wait for it in the DOM, check it by its label.
+    page.wait_for_selector("#park-r02-0", state="attached")
+    page.check("label[for='park-r02-0']")
     page.click(".ask-form .k-btn--primary")
     page.wait_for_selector(".ask-form .k-field__error")
     page.fill("#park-r02-pre", "the footer of the member page")

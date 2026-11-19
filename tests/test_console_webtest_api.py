@@ -42,7 +42,13 @@ def run_id(home):
 @pytest.fixture
 def console(home, run_id):
     server = InProcessServer(make_state(home))
-    server.headers = {srv.SESSION_HEADER: server.session()}
+    token = server.session()
+    # Run actions need a tab older than the run's job. Windows' wall clock can tick in ~16 ms steps, so a job
+    # queued right after the tab could share its timestamp: let the clock move past the tab first.
+    created = server.state.session_created(token)
+    while time.time() <= created:
+        time.sleep(0.001)
+    server.headers = {srv.SESSION_HEADER: token}
     yield server
     server.close()
 

@@ -120,6 +120,9 @@ const ICONS = {
   up: [['path', { d: 'm4 10 4-4 4 4' }]],
   down: [['path', { d: 'm4 6 4 4 4-4' }]],
   external: [['path', { d: 'M9 3h4v4M13 3 7.5 8.5' }], ['path', { d: 'M11 9.5V13H3V5h3.5' }]],
+  user: [['circle', { cx: 8, cy: 5.5, r: 2.5 }], ['path', { d: 'M3 13.5a5 5 0 0 1 10 0' }]],
+  eye: [['path', { d: 'M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z' }], ['circle', { cx: 8, cy: 8, r: 2 }]],
+  clock: [['circle', { cx: 8, cy: 8, r: 5.5 }], ['path', { d: 'M8 5v3l2 1.5' }]],
 };
 
 /** An inline SVG icon built with createElementNS; `extra` adds classes such as 'k-icon--sm'. */
