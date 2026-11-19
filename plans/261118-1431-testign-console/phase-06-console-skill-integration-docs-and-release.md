@@ -80,6 +80,11 @@ for a job; the README documents the console; the plugin is released as 0.3.0.
 - `claude plugin validate --strict .` passes.
 - Manual round checklist recorded in `plans/261118-1431-testign-console/reports/` with each step marked passed, failed or skipped with the reason.
 
+## Progress
+
+- macOS, 2026-11-19: tasks 4 and 5 passed (`reports/manual-round-macos-2026-11-19.md`). The round ran in manual wiki mode (no Backlog test space; API-mode diff confirmation is covered by the e2e suite, which passes on macOS). Three minor UI issues were recorded there and fixed the same day.
+- Windows: the manual round and injection check are still to run.
+
 ## Success Criteria
 
 Acceptance criteria 8 and 9 pass with a real agent; the README describes the console as shipped.
