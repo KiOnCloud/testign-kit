@@ -1,5 +1,6 @@
 // A minimal document for testing DOM builders under node: elements, text nodes, attributes,
-// listeners and textContent. Nothing here parses markup.
+// listeners, textContent, a body for dialogs and a class list. Nothing here parses markup or
+// matches selectors: querySelector finds nothing, so callers fall back to the element they pass.
 
 class FakeText {
   constructor() {
@@ -43,6 +44,32 @@ class FakeElement {
 
   addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); }
 
+  removeEventListener(type, fn) { this.listeners[type] = (this.listeners[type] || []).filter((f) => f !== fn); }
+
+  remove() { if (this.parentElement) this.parentElement.removeChild(this); this.parentElement = undefined; }
+
+  focus() { if (globalThis.document) globalThis.document.activeElement = this; }
+
+  querySelector() { return null; }
+
+  querySelectorAll() { return []; }
+
+  get classList() {
+    const el = this;
+    const read = () => (el.getAttribute('class') || '').split(/\s+/).filter(Boolean);
+    const write = (list) => el.setAttribute('class', list.join(' '));
+    return {
+      contains: (c) => read().includes(c),
+      add: (...cs) => write([...new Set([...read(), ...cs])]),
+      remove: (...cs) => write(read().filter((x) => !cs.includes(x))),
+      toggle: (c, force) => {
+        const on = force === undefined ? !read().includes(c) : Boolean(force);
+        write(on ? [...new Set([...read(), c])] : read().filter((x) => x !== c));
+        return on;
+      },
+    };
+  }
+
   set textContent(value) {
     this.childNodes = [];
     this.ownText = String(value);
@@ -53,6 +80,8 @@ class FakeElement {
 
 export function installFakeDocument() {
   const document = {
+    body: new FakeElement('body'),
+    activeElement: null,
     createElement: (tag) => new FakeElement(tag),
     createElementNS: (ns, tag) => new FakeElement(tag, ns),
     createTextNode: (text) => {

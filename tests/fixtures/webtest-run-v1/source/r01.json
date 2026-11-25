@@ -1,0 +1,14 @@
+{
+  "content": "予約確認 → 予約履歴 on the header link",
+  "creator": "designer_a",
+  "row": "r01",
+  "source": {
+    "file": "FILEKEY",
+    "kind": "figma",
+    "no": "1",
+    "row_node": "1:2",
+    "table_node": "1:1",
+    "target_node": "I10:1;2:3"
+  },
+  "type": "Modified"
+}

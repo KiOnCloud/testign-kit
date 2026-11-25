@@ -1,8 +1,9 @@
 # Triage rules
 
-How the `webtest` skill drafts each case before the review table. Write the result with
-`webtest-triage` as `{"<row>": {kind, class, reason, viewport, steps, expected, screen, scenario,
-runner, preconditions}}`; leave out a field you have no value for.
+How the `webtest` skill drafts each case of a suite in a generate job, before the tester reviews
+the suite on its Cases tab. Stage the result with `suite-stage` items that name `case`, with the
+fields `kind`, `class`, `reason`, `viewport`, `steps`, `expected`, `screen`, `scenario`, `runner`;
+leave out a field you have no value for.
 
 ## Kind, class and runner
 
@@ -18,7 +19,7 @@ runner, preconditions}}`; leave out a field you have no value for.
 
 - When two kinds fit, the one lower in the table wins.
 - `reason` is one line the tester can check ("text change on a visible link").
-- A `choice` row runs only when the tester delegates it in the review table, with preconditions.
+- A `choice` case runs only when the tester delegates it on the Cases tab, with preconditions.
   Leave `runner` out: the tester picks the agent (delegate), themselves, or nobody. Never write
   `preconditions` for the tester.
 - At confirmation a `not-web` row becomes `manual` (`motion`) or `not-applicable` (`design-only`).
@@ -28,13 +29,13 @@ runner, preconditions}}`; leave out a field you have no value for.
 `viewport` is `pc` or `mobile`. A row about the phone layout (a Mobile frame in the page index, or
 a row marked for phones) gets `viewport: mobile`, `mobile_method: device` and `runner: tester`:
 the tester checks it on a real phone and enters the result on the run screen. Keep its kind and
-class. The tester may switch the row to `mobile_method: emulation` in the review table and give it
+class. The tester may switch the case to `mobile_method: emulation` on the Cases tab and give it
 to the agent, which then checks it in a 390 px phone frame of the tester's Chrome (see the worker
-brief). Never propose `runner: agent` for a `device` row; the review table refuses it.
+brief). Never propose `runner: agent` for a `device` case; the suite refuses it.
 
 ## Steps and expected
 
-Write both in the run's report language; keep Japanese UI labels verbatim (「予約履歴」).
+Write both in the suite's case language; keep Japanese UI labels verbatim (「予約履歴」).
 
 - `steps`: numbered lines that start from the screen ("1. Open My Page"). Name every click. A step
   that writes data appears only on a `choice` row.
@@ -44,8 +45,8 @@ Write both in the run's report language; keep Japanese UI labels verbatim (「�
 
 ## Screen and scenario
 
-- `screen`: `{url, name, confidence}`. `url` is a path on the base URL (`/news`) or an absolute URL
-  on a run host. `confidence` is `high` for a target placed through the page index, `low` for a
+- `screen`: `{url, name, confidence}`. `url` is a path that a run joins to its base URL (`/news`). `confidence` is `high` for a target placed through the page index, `low` for a
   proposal from the row's text and capture, `none` with an empty `url` when no screen was found.
 - `scenario`: `none` for public pages; else a scenario name that `login-scenario-list` shows for the
-  project (a draft counts). The review table refuses any other name.
+  project (a draft counts). The tester checks it on the Cases tab, and a suite is not confirmed while
+  a case the agent runs has no screen or scenario.

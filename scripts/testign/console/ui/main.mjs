@@ -5,25 +5,29 @@ import { h, mount } from './dom.mjs';
 import { createTranslator, loadDictionaries } from './i18n.mjs';
 import { closePalette, isPaletteKey, openPalette, paletteOpen, singleKeyAllowed } from './palette.mjs';
 import * as prefs from './prefs.mjs';
-import { href, parseRoute, sectionOf } from './router.mjs';
+import { HOME, href, legacyReviewTarget, parseRoute, redirectOf, sectionOf } from './router.mjs';
 import { createStore, openJobClosed } from './store.mjs';
 import {
-  clearEscapes, renderReopen, renderShell, runEscape, setNavCount, showSessionNotice, toast, updateAgentStatus,
+  clearEscapes, LANG_SELECT_ID, renderReopen, renderShell, runEscape, setNavCount, showSessionNotice, toast, updateAgentStatus,
 } from './views/shell.mjs';
-import * as tickets from './views/tickets.mjs';
+import * as suites from './views/suites.mjs';
+import * as suiteNew from './views/suite-new.mjs';
+import * as suite from './views/suite.mjs';
+import * as survey from './views/survey.mjs';
 import * as report from './views/report.mjs';
 import * as trace from './views/trace.mjs';
+import * as runs from './views/runs.mjs';
+import * as run from './views/run.mjs';
+import * as agent from './views/jobs.mjs';
+import * as projects from './views/projects.mjs';
+import * as scenarios from './views/scenarios.mjs';
 import * as templates from './views/templates.mjs';
 import * as cache from './views/cache.mjs';
 import * as settings from './views/settings.mjs';
-import * as jobs from './views/jobs.mjs';
-import * as review from './views/review.mjs';
-import * as runs from './views/runs.mjs';
-import * as run from './views/run.mjs';
-import * as reviewTable from './views/review-table.mjs';
-import * as login from './views/login.mjs';
 
-const VIEWS = { tickets, report, trace, templates, cache, settings, jobs, review, runs, run, reviewTable, login };
+const VIEWS = {
+  suites, suiteNew, suite, survey, report, trace, runs, run, agent, projects, scenarios, templates, cache, settings,
+};
 const SESSIONS_KEY = 'testign.knownSessions';
 const store = createStore({
   fetchState: () => api.state(),
@@ -35,7 +39,7 @@ const store = createStore({
 
 const app = {
   dicts: {},
-  lang: 'vi',
+  lang: prefs.DEFAULT_LANG,
   t: (key) => key,
   routeKey: null,
   memo: new Map(),
@@ -95,28 +99,32 @@ function reloadCounts() {
 }
 
 function loadCounts() {
+  memo('count:suites', () => api.suites()).then((d) => setCount('suites', d.suites.length), () => {});
   memo('count:tickets', () => api.tickets()).then((d) => {
     app.ticketList = d.tickets;
-    setCount('tickets', d.tickets.length);
+    setCount('survey', d.tickets.length);
+  }, () => {});
+  memo('count:runs', () => api.runs()).then((d) => setCount('runs', d.runs.length), () => {});
+  memo('count:projects', () => api.projects()).then((d) => {
+    setCount('projects', d.projects.length);
+    setCount('scenarios', d.projects.reduce((n, p) => n + (Number(p.scenarios) || 0), 0));
   }, () => {});
   memo('count:templates', () => api.templates()).then((d) => setCount('templates', d.templates.length), () => {});
   memo('count:cache', () => api.cache()).then((d) => setCount('cache', d.entries.length), () => {});
-  memo('count:runs', () => api.runs()).then((d) => setCount('runs', d.runs.length), () => {});
-  memo('count:login', () => api.projects()).then((d) => setCount('login', d.projects.length), () => {});
 }
 
 function paletteItems() {
   const t = app.t;
   const go = (hash) => () => { location.hash = hash; };
   const screens = [
-    ['tickets', 'file', 'nav_tickets'], ['runs', 'play', 'nav_runs'], ['jobs', 'refresh', 'nav_jobs'],
-    ['templates', 'layers', 'nav_templates'], ['login', 'key', 'nav_login'], ['cache', 'folder', 'nav_cache'],
-    ['settings', 'settings', 'nav_settings'],
-  ].map(([name, ic, key]) => ({ group: t('palette_screens'), label: t(key), icon: ic, run: go(href([name])) }));
+    ['suites', 'suite'], ['survey', 'search'], ['runs', 'refresh'], ['agent', 'agent'], ['projects', 'folder'],
+    ['scenarios', 'key'], ['templates', 'layers'], ['cache', 'database'], ['settings', 'sliders'],
+  ].map(([name, ic]) => ({ group: t('palette_screens'), label: t(`nav_${name}`), icon: ic, run: go(href([name])) }));
+  screens.splice(1, 0, { group: t('palette_screens'), label: t('new_suite'), icon: 'plus', run: go(href(['suites', 'new'])) });
   const ticketItems = (list) => list.flatMap((tk) => [
-    { group: t('palette_tickets'), label: tk.id, hint: tk.title || '', icon: 'file', run: go(href(['tickets', tk.id])) },
+    { group: t('palette_tickets'), label: tk.id, hint: tk.title || '', icon: 'file', run: go(href(['survey', tk.id])) },
     ...(tk.workbooks && tk.workbooks.length
-      ? [{ group: t('palette_tickets'), label: `${tk.id} · ${t('trace_crumb')}`, icon: 'layers', run: go(href(['tickets', tk.id, 'trace'])) }]
+      ? [{ group: t('palette_tickets'), label: `${tk.id} · ${t('trace_crumb')}`, icon: 'layers', run: go(href(['survey', tk.id, 'trace'])) }]
       : []),
   ]);
   if (app.ticketList) return { items: screens.concat(ticketItems(app.ticketList)) };
@@ -147,14 +155,32 @@ function onTheme(theme) {
   render({ keepFocus: true });
 }
 
+/** An old review link opens the run its job worked on, or the job itself when it had no run. */
+function followLegacyReview(id) {
+  const generation = ++app.generation;
+  api.job(id).then((job) => legacyReviewTarget(job, id), () => legacyReviewTarget(null, id)).then((target) => {
+    if (generation === app.generation && !app.forbidden) location.replace(target);
+  });
+}
+
 /** Render the shell and the current route. Data loaded for the same route is reused. */
 function render({ keepFocus } = {}) {
   if (app.forbidden) return;
   const focusGroup = keepFocus && document.activeElement && document.activeElement.dataset
     ? document.activeElement.dataset.radio : null;
+  const focusLang = Boolean(keepFocus && document.activeElement && document.activeElement.id === LANG_SELECT_ID);
+  const moved = redirectOf(location.hash);
+  if (moved && moved.to) {
+    location.replace(moved.to);
+    return;
+  }
+  if (moved && moved.job) {
+    followLegacyReview(moved.job);
+    return;
+  }
   const route = parseRoute(location.hash);
   if (route.name === 'notfound') {
-    location.replace(href(['tickets']));
+    location.replace(href([HOME]));
     return;
   }
   const routeKey = `${route.name}|${JSON.stringify(route.params)}|${JSON.stringify(route.query)}`;
@@ -169,7 +195,7 @@ function render({ keepFocus } = {}) {
   app.storeHandler = null;
   const generation = ++app.generation;
   const shell = renderShell({
-    t: app.t, lang: app.lang, section: sectionOf(route), counts: app.counts, onLang, onPalette: showPalette,
+    t: app.t, lang: app.lang, section: sectionOf(route), counts: app.counts, onLang, onPalette: showPalette, prefs,
   });
   mount(document.getElementById('app'), ...shell.root);
   updateAgentStatus(app.t, store.get(), store.error());
@@ -191,7 +217,7 @@ function render({ keepFocus } = {}) {
     },
     invalidate: (key) => app.memo.delete(key),
     setCount,
-    setTickets: (list) => { app.ticketList = list; setCount('tickets', list.length); },
+    setTickets: (list) => { app.ticketList = list; setCount('survey', list.length); },
     onKey: (fn) => { app.keyHandler = fn; },
     store,
     pollNow: () => store.pollNow(),
@@ -203,6 +229,10 @@ function render({ keepFocus } = {}) {
   VIEWS[route.name].render(ctx);
   if (focusGroup) {
     const el = document.querySelector(`[data-radio="${focusGroup}"][aria-checked="true"]`);
+    if (el) el.focus();
+  }
+  if (focusLang) {
+    const el = document.getElementById(LANG_SELECT_ID);
     if (el) el.focus();
   }
 }
@@ -240,7 +270,7 @@ async function exchange() {
   }
   app.forbidden = false;
   store.start();
-  if (!location.hash || location.hash === '#') history.replaceState(null, '', `${location.pathname}${href(['tickets'])}`);
+  if (!location.hash || location.hash === '#') history.replaceState(null, '', `${location.pathname}${href([HOME])}`);
   render();
   loadCounts();
 }

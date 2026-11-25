@@ -1,9 +1,11 @@
-"""Browser test of the Jobs and Close review screens (Playwright, Chromium). Runs only with TESTIGN_E2E=1.
+"""Browser test of the Agent & jobs screen, the job page's Close review and the Ticket survey triggers
+(Playwright, Chromium). Runs only with TESTIGN_E2E=1.
 
-The agent side is played in-process on the server's bridge: a close job queued from the ja UI with
-an empty tester name (prompted), one row edited, a diff with a new page and a superseded entry
-confirmed, the manual pages pasted, a survey waiting with no agent, a silent agent released, and
-the triggers disabled on an older revision.
+The agent side is played in-process on the server's bridge: a survey queued from the Ticket survey
+screen waiting with no agent, a close job queued from the ja report with an empty tester name
+(prompted), one row edited and a diff with a new page and a superseded entry confirmed on the job
+page, the manual pages pasted (a tab opened after the job started cannot answer), a silent agent
+released, and the triggers disabled on an older revision.
 """
 
 from __future__ import annotations
@@ -27,6 +29,8 @@ from testign.console import client, lifecycle  # noqa: E402
 from testign.console import server as srv  # noqa: E402
 
 AGENT = "s-e2eagent00000001"
+HOME_READY = "#main[data-ready='suites']"
+REVIEW_SEND = "[data-close-review] .review-footer .yh-btn--primary"
 ROWS_ASK = {"type": "review-rows", "id": "rows-1", "body": "レビューしてください", "rows": [
     {"row": "q1-a", "q": "Q1", "class": "decided", "feature": "注文確定", "page": "QA/Decisions/order",
      "anchors": ["確定"], "decision": "割引は請求書にも適用", "quote": "請求書にも適用します", "quote_lang": "ja",
@@ -79,7 +83,7 @@ def page(browser, console):
     pg.on("console", lambda m: pg.problems.append(f"{m.type}: {m.text}")
           if m.type in ("error", "warning") and "status of 409" not in m.text else None)
     pg.goto(f"http://127.0.0.1:{console.port}/#c={console.state.mint_launch_code()}")
-    pg.wait_for_selector("#main[data-ready='tickets']")
+    pg.wait_for_selector(HOME_READY)
     yield pg
     context.close()
 
@@ -94,7 +98,7 @@ def go(page, name, hash_):
 
 
 def job_id(page) -> str:
-    page.wait_for_function("() => location.hash.startsWith('#/jobs/')")
+    page.wait_for_function("() => location.hash.startsWith('#/agent/')")
     return page.evaluate("location.hash").split("/")[2]
 
 
@@ -115,16 +119,17 @@ def test_survey_waits_with_no_agent(page, console):
     bridge = console.state.bridge
     assert bridge.attached is None
     page.wait_for_function("() => document.getElementById('agent-status').textContent.includes('/testign:console')")
+    go(page, "survey", "#/survey")
     page.click("[data-trigger=survey]")
     page.fill("#survey-ticket", "DEMO-1")
     page.fill("#survey-repo", str(next((console.state.home.parent / "repo").iterdir())))
     page.click(".k-dialog__footer .k-btn--primary")
     jid = job_id(page)
-    page.wait_for_selector(".k-split__panel")
+    page.wait_for_selector("[data-job-action=cancel]")
     assert bridge.get(jid)["state"] == "queued" and bridge.get(jid)["ui_lang"] == "ja"
-    assert "/testign:console" in page.text_content(".k-banner--warning")
-    assert page.locator("#view .k-spinner").count() == 0
-    page.click(".k-split__panel-head .k-btn--ghost")
+    # The queued notice of a job with no agent attached (agent_none_queued in ja.json).
+    assert "Claude Code セッションが接続すると開始します" in page.text_content("#view .yh-alert")
+    page.click("[data-job-action=cancel]")
     for _ in range(50):
         if bridge.get(jid)["state"] == "cancelled":
             break
@@ -137,7 +142,7 @@ def test_close_round_with_prompt_edit_and_diff(page, console):
     bridge = console.state.bridge
     out: dict = {}
     page.evaluate("localStorage.removeItem('testign.testerName')")
-    go(page, "report", "#/tickets/DEMO-1")
+    go(page, "report", "#/survey/DEMO-1")
     page.click("[data-trigger=close]")
     page.wait_for_selector("#tester-prompt")
     page.fill("#tester-prompt", "テスター A")
@@ -148,9 +153,8 @@ def test_close_round_with_prompt_edit_and_diff(page, console):
     assert agent_take(bridge) == jid
     t = ask_async(bridge, jid, ROWS_ASK, out, "rows")
     page.wait_for_function("() => document.title.startsWith('(1)')")
-    page.click("[data-open-review]")
-    page.wait_for_selector(".review-table")
-    send = ".review-footer .k-btn--primary"
+    page.wait_for_selector("[data-close-review='review-rows']")
+    send = REVIEW_SEND
     assert page.is_disabled(send)
     assert page.get_attribute("tr[data-review-row='q1-a'] .quote", "lang") == "ja"
     page.click("[data-row='q1-a'][data-action='write']")
@@ -164,11 +168,10 @@ def test_close_round_with_prompt_edit_and_diff(page, console):
         "q1-a": {"action": "write"}, "q1-b": {"action": "edit", "decision": "切り捨て (請求書も同じ)"}}
 
     t = ask_async(bridge, jid, client.ask_from_preview(PREVIEW), out, "diff")
-    page.click("[data-open-review]")
-    page.wait_for_selector(".diff-box")
+    page.wait_for_selector("[data-close-review='confirm-diff'] .diff-box")
     assert "新規ページ" in page.text_content(".diff-head")
     assert "D-DEMO-1-001" in page.text_content(".summary-strip")
-    page.click(".review-footer .k-btn--primary")
+    page.click(REVIEW_SEND)
     t.join(10)
     assert out["diff"]["answers"] == {"confirm": True}
     assert bridge.get(jid)["confirmed_approval"] == PREVIEW["approval"]
@@ -187,19 +190,20 @@ def test_manual_mode_shows_pages_to_paste(page, console):
     late = page.context.browser.new_context()
     other = late.new_page()
     other.goto(f"http://127.0.0.1:{console.port}/#c={console.state.mint_launch_code()}")
-    other.wait_for_selector("#main[data-ready='tickets']")
-    go(other, "review", f"#/jobs/{jid}/review")
-    other.click(".review-footer .k-btn--primary")
-    other.wait_for_selector(".k-toast--danger")
+    other.wait_for_selector(HOME_READY)
+    # This tab opened after the job started: it sees the question but cannot answer it.
+    go(other, "agent", f"#/agent/{jid}")
+    other.wait_for_selector("[data-too-new]")
+    assert other.locator(".review-footer").count() == 0
     assert other.locator("[data-reopen]").count() == 0
     assert bridge.get(jid)["state"] == "needs-input"
     late.close()
     page.wait_for_selector("[data-session-notice].k-banner--warning [data-notice-release]")
-    go(page, "review", f"#/jobs/{jid}/review")
-    page.wait_for_selector(".page-content")
+    go(page, "agent", f"#/agent/{jid}")
+    page.wait_for_selector("[data-close-review='paste-pages'] .page-content")
     assert page.text_content(".page-content") == "## DEMO-1\n| Q1 | 割引 |"
     assert page.locator("[data-copy-page]").count() == 1
-    page.click(".review-footer .k-btn--primary")
+    page.click(REVIEW_SEND)
     t.join(10)
     assert out["paste"]["answers"] == {"done": True}
     bridge.done(jid, AGENT, "done", "貼り付け済み")
@@ -211,19 +215,19 @@ def test_silent_agent_can_be_released(page, console):
     jid = bridge.create({"kind": "close", "ticket": "DEMO-1", "tester": "テスター A", "ui_lang": "ja"})["id"]
     assert agent_take(bridge) == jid
     console.offset[0] += 16 * 60
-    go(page, "jobs", f"#/jobs/{jid}")
-    page.wait_for_selector(".k-split__panel-head .k-btn--danger")
-    page.click(".k-split__panel-head .k-btn--secondary")
+    go(page, "agent", f"#/agent/{jid}")
+    page.wait_for_selector("[data-job-action=fail]")
+    page.click("[data-job-action=release]")
     page.wait_for_function("() => document.getElementById('agent-status').textContent.includes('/testign:console')")
     assert bridge.get(jid)["state"] == "failed" and bridge.get(jid)["reason"] == "session-lost"
-    page.wait_for_selector(".k-banner--danger")
+    page.wait_for_selector("#view .yh-alert--danger")
     assert not page.problems, page.problems
 
 
 def test_triggers_disabled_on_an_older_revision(page, console):
-    go(page, "report", "#/tickets/DEMO-1?rev=DEMO-1-survey-r1.md")
+    go(page, "report", "#/survey/DEMO-1?rev=DEMO-1-survey-r1.md")
     assert page.is_disabled("[data-trigger=close]") and page.is_disabled("[data-trigger=write]")
     assert page.locator("[data-older-note]").count() == 1
-    go(page, "report", "#/tickets/DEMO-1")
+    go(page, "report", "#/survey/DEMO-1")
     assert page.is_enabled("[data-trigger=close]")
     assert not page.problems, page.problems

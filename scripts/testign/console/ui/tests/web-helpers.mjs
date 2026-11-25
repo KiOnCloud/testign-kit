@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { createTranslator } from '../i18n.mjs';
 import { installFakeDocument } from './fake-dom.mjs';
 
-export const DICTS = Object.fromEntries(['vi', 'en', 'ja'].map((lang) =>
+export const DICTS = Object.fromEntries(['en', 'ja'].map((lang) =>
   [lang, JSON.parse(readFileSync(new URL(`../i18n/${lang}.json`, import.meta.url), 'utf-8'))]));
 
 export function translator(lang = 'en') {

@@ -372,13 +372,14 @@ def stop(home: Path | None = None, *, force: bool = False) -> dict:
 # the server process ---------------------------------------------------------------------------
 def install_routes(state: srv.ConsoleState) -> None:
     """Every route group beyond the base routes: read API, template management and the job bridge."""
-    from . import jobs, login_api, readapi, templates_api, webtest_api  # noqa: PLC0415 - they import this module
+    from . import jobs, login_api, readapi, suite_api, templates_api, webtest_api  # noqa: PLC0415 - they import this module
 
     readapi.install(state)
     templates_api.install(state)
     jobs.install(state)
     ensure_webtest_dirs(state.home)
     webtest_api.install(state)
+    suite_api.install(state)
     login_api.install(state)
 
 

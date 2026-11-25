@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="vi" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Webtest multi-source · mockup</title>
+<!-- Real console styles, so the mockup looks like the shipped console. -->
+<link rel="stylesheet" href="../../../scripts/testign/console/ui/vendor/kestrel/tokens.css">
+<link rel="stylesheet" href="../../../scripts/testign/console/ui/vendor/kestrel/bundle.css">
+<link rel="stylesheet" href="../../../scripts/testign/console/ui/app.css">
+<style>
+/* app.css loads fonts from /fonts (served by the console); point them at the files for a file:// preview. */
+@font-face { font-family: "Inter"; font-weight: 100 900; font-display: swap;
+  src: url("../../../scripts/testign/console/ui/fonts/inter-latin-wght-normal.woff2") format("woff2"); unicode-range: U+0000-00FF, U+2000-206F; }
+@font-face { font-family: "Inter"; font-weight: 100 900; font-display: swap;
+  src: url("../../../scripts/testign/console/ui/fonts/inter-vietnamese-wght-normal.woff2") format("woff2");
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB; }
+@font-face { font-family: "Inter"; font-weight: 100 900; font-display: swap;
+  src: url("../../../scripts/testign/console/ui/fonts/inter-latin-ext-wght-normal.woff2") format("woff2"); unicode-range: U+0100-02BA, U+1E00-1E9F, U+1EF2-1EFF; }
+
+/* ---------- mockup-only chrome (not part of the console) ---------- */
+.mock-bar { position: sticky; top: 0; z-index: 50; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-8);
+  padding: var(--space-8) var(--space-16); background: var(--text-1); color: var(--surface-0); font-size: var(--fs-small); }
+.mock-bar strong { letter-spacing: .04em; }
+.mock-bar button { font: inherit; color: inherit; background: transparent; border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: var(--radius-full, 999px); padding: 2px 12px; cursor: pointer; }
+.mock-bar button[aria-pressed="true"] { background: var(--surface-0); color: var(--text-1); }
+.mock-bar .mock-note { opacity: .7; margin-left: auto; }
+.mock-new { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #4f46e5) 55%, transparent); border-radius: var(--radius-md, 8px); position: relative; }
+.mock-new::after { content: "MỚI"; position: absolute; top: -9px; right: 8px; font-size: 10px; font-weight: 600; letter-spacing: .06em;
+  padding: 0 6px; border-radius: 999px; background: var(--accent, #4f46e5); color: #fff; }
+.screen[hidden] { display: none !important; }
+
+/* ---------- proposed pieces (would move into app.css) ---------- */
+.source-picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-8); border: 0; padding: 0; margin: 0; }
+.source-card { display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-10, 10px) var(--space-12);
+  border: var(--hairline) solid var(--border-1); border-radius: var(--radius-md, 8px); background: var(--surface-1); cursor: pointer; text-align: left; font: inherit; color: inherit; }
+.source-card:hover { border-color: var(--border-2, var(--text-3)); }
+.source-card[aria-checked="true"] { border-color: var(--accent, #4f46e5); box-shadow: inset 0 0 0 1px var(--accent, #4f46e5); background: var(--surface-0); }
+.source-card[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
+.source-card__head { display: flex; align-items: center; gap: var(--space-6); font-weight: var(--fw-semibold); }
+.source-card .k-note { line-height: 1.4; }
+.src-badge { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-caption, 11px); font-weight: var(--fw-semibold);
+  padding: 1px 6px; border-radius: 4px; border: var(--hairline) solid currentColor; white-space: nowrap; }
+.src-figma { color: #a259ff; }
+.src-backlog { color: #2c9a7a; }
+.src-workbook { color: var(--text-3); }
+.ticket-card { padding: var(--space-12); border: var(--hairline) solid var(--border-1); border-radius: var(--radius-md, 8px); background: var(--surface-1); }
+.rev-list { display: flex; flex-direction: column; gap: var(--space-6); border: 0; padding: 0; margin: 0; }
+.rev-item { display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-8); align-items: start; padding: var(--space-8) var(--space-10, 10px);
+  border: var(--hairline) solid var(--border-1); border-radius: var(--radius-sm, 6px); background: var(--surface-0); cursor: pointer; }
+.rev-item:has(input:checked) { border-color: var(--accent, #4f46e5); }
+.rev-item input { margin-top: 3px; }
+.trace-pick { max-height: 220px; overflow: auto; border: var(--hairline) solid var(--border-1); border-radius: var(--radius-sm, 6px); background: var(--surface-0); }
+.trace-pick label { display: grid; grid-template-columns: auto auto 1fr; gap: var(--space-8); align-items: start; padding: 6px var(--space-8);
+  border-bottom: var(--hairline) solid var(--border-1); }
+.trace-pick label:last-child { border-bottom: 0; }
+.trace-pick .grp { padding: 4px var(--space-8); background: var(--surface-1); font-size: var(--fs-caption, 11px); font-weight: var(--fw-semibold); color: var(--text-2);
+  position: sticky; top: 0; }
+.coverage { display: flex; flex-wrap: wrap; gap: var(--space-16); align-items: center; }
+.coverage .meter { width: 120px; }
+.tr-group td { background: var(--surface-1); font-weight: var(--fw-semibold); padding-block: 6px !important; }
+.tr-group .k-note { font-weight: var(--fw-regular); }
+.gen-badge { color: var(--warning-text, #9a6700); border-color: currentColor; }
+.src-quote { border-left: 3px solid var(--border-2, var(--border-1)); padding: var(--space-4) var(--space-10, 10px); margin: 0; background: var(--surface-1); border-radius: 0 6px 6px 0; }
+.run-panel-mock { max-width: 560px; border: var(--hairline) solid var(--border-1); border-radius: var(--radius-md, 8px); background: var(--surface-0); }
+.compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: var(--space-16); align-items: start; }
+.fake-shot { aspect-ratio: 16/10; border-radius: 6px; border: var(--hairline) solid var(--border-1);
+  background: repeating-linear-gradient(135deg, var(--surface-1) 0 8px, var(--surface-0) 8px 16px); display: grid; place-items: center; color: var(--text-3); font-size: var(--fs-caption, 11px); }
+.textarea-sm { min-height: 0; }
+.page-head.stack-4 { flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: var(--space-4); }
+.src-strip { display: flex !important; flex-direction: row !important; flex-wrap: wrap; align-items: center !important; justify-content: flex-start !important; text-align: left; gap: var(--space-8); }
+tr.mock-tint td { background: color-mix(in srgb, var(--accent, #4f46e5) 7%, transparent); }
+</style>
+</head>
+<body>
+
+<div class="mock-bar" role="toolbar" aria-label="Mockup screens">
+  <strong>MOCKUP</strong>
+  <button type="button" data-go="runs" aria-pressed="true">1 · Test runs + Lần chạy mới</button>
+  <button type="button" data-go="review" aria-pressed="false">2 · Bảng xác nhận (Backlog)</button>
+  <button type="button" data-go="row" aria-pressed="false">3 · Chi tiết row: Backlog vs Figma</button>
+  <span class="mock-note">Viền tím + nhãn MỚI = phần thay đổi · dữ liệu mẫu từ CKWEB-3366</span>
+</div>
+
+<div class="app">
+  <nav class="k-sidebar side" aria-label="Điều hướng chính">
+    <div class="k-sidebar__ws"><span class="k-avatar">T</span><span class="wordmark"><span>T</span><span>e</span><span>s</span><span>t</span><span>i</span><span>g</span><span>n</span></span><span class="ws-sub">console</span></div>
+    <div class="k-sidebar__section">Làm việc</div>
+    <a class="k-nav-item" href="#"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5h5l3 3v8H4v-11Z"/><path d="M9 2.5v3h3M6 8h4M6 10.5h4"/></svg><span class="nav-label">Tickets</span><span class="k-nav-item__count">4</span></a>
+    <a class="k-nav-item is-active" href="#" aria-current="page"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3.5v9l7-4.5-7-4.5Z"/></svg><span class="nav-label">Test runs</span><span class="k-nav-item__count">3</span></a>
+    <a class="k-nav-item" href="#"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 8A5 5 0 0 1 4.3 11.3M3 8a5 5 0 0 1 8.7-3.3"/><path d="M11.7 2.5v2.2h-2.2M4.3 13.5v-2.2h2.2"/></svg><span class="nav-label">Jobs</span></a>
+    <div class="k-sidebar__section">Thiết lập</div>
+    <a class="k-nav-item" href="#"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 2.5 5.5 3L8 8.5l-5.5-3Z"/><path d="m2.5 8.5 5.5 3 5.5-3"/><path d="m2.5 11 5.5 3 5.5-3"/></svg><span class="nav-label">Templates</span><span class="k-nav-item__count">2</span></a>
+    <a class="k-nav-item" href="#"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5.5" cy="10.5" r="2.5"/><path d="m7.3 8.7 5.2-5.2M10.5 5.5l1.5 1.5M11.8 4.2l1.2 1.2"/></svg><span class="nav-label">Kịch bản login</span><span class="k-nav-item__count">2</span></a>
+    <a class="k-nav-item" href="#"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-7.5Z"/></svg><span class="nav-label">Scout cache</span></a>
+    <a class="k-nav-item" href="#"><svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2"/><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.8 3.8l1 1M11.2 11.2l1 1M3.8 12.2l1-1M11.2 4.8l1-1"/></svg><span class="nav-label">Cấu hình</span></a>
+  </nav>
+
+  <main class="main" id="main">
+
+<!-- =================================================================== 1 · RUNS + NEW RUN FORM -->
+<section class="screen" data-screen="runs">
+  <header class="k-topbar topbar-wrap"><span class="k-topbar__title">Test runs</span><div class="k-topbar__spacer"></div><span class="k-note">Chạy theo hàng đợi · mỗi lúc một row</span></header>
+  <div class="view"><div class="page">
+    <div class="page-head stack-4">
+      <h1 class="page-title">Các lần chạy test web</h1>
+      <p class="k-note">Mỗi lần chạy lấy case từ <strong>một nguồn</strong> (bảng thay đổi Figma, hoặc ticket Backlog có survey report), chờ bạn xác nhận một bảng duy nhất, rồi agent chạy từng row trong Chrome của bạn.</p>
+    </div>
+
+    <div class="k-split split-flex">
+      <div class="k-split__main split-main stack-8">
+        <div class="row-8 mock-new" style="padding:6px;">
+          <span class="k-section-label">Nguồn</span>
+          <div class="k-tabs k-tabs--segmented" role="radiogroup" aria-label="Lọc theo nguồn" id="runs-filter">
+            <button class="k-tab is-active" role="radio" aria-checked="true" data-f="all">Tất cả <span class="k-note">3</span></button>
+            <button class="k-tab" role="radio" aria-checked="false" data-f="figma">Figma <span class="k-note">2</span></button>
+            <button class="k-tab" role="radio" aria-checked="false" data-f="backlog">Backlog <span class="k-note">1</span></button>
+          </div>
+        </div>
+        <div class="k-table-wrap"><div class="scroll-x"><table class="k-table tbl-runs">
+          <thead><tr><th>Lần chạy</th><th>Nguồn</th><th>Kết quả</th><th>Đang mở</th><th>Hoạt động</th></tr></thead>
+          <tbody>
+            <tr data-kind="backlog">
+              <td class="wrap-cell"><a class="text-1" href="#" data-go="review">小多機 チェックシート 共通</a><span class="k-note block"><code class="k-mono">wt-261125-1502-ckweb3366</code></span></td>
+              <td class="wrap-cell mock-new"><span class="row-4"><span class="src-badge src-backlog">Backlog</span><span>CKWEB-3366</span></span>
+                <span class="k-note block">survey r2 · 13 dòng B/R → 18 case · carekarte</span></td>
+              <td><span class="k-muted">—</span></td>
+              <td><a class="k-btn k-btn--secondary k-btn--sm" href="#" data-go="review">Mở bảng xác nhận</a></td>
+              <td class="wrap-cell"><span class="k-note num">15:04 · chờ xác nhận</span></td>
+            </tr>
+            <tr data-kind="figma">
+              <td class="wrap-cell"><a class="text-1" href="#">USUPP Update Summary</a><span class="k-note block"><code class="k-mono">wt-261120-0930-usupp</code></span></td>
+              <td class="wrap-cell"><span class="row-4"><span class="src-badge src-figma">Figma</span><span>6647:118148</span></span>
+                <span class="k-note block">45 row · usupp</span></td>
+              <td><span class="count-strip"><span class="k-badge k-badge--success count-item" title="Pass 31">✓ 31</span><span class="k-badge k-badge--danger count-item" title="Fail 3">✕ 3</span><span class="k-badge k-badge--outline count-item" title="Manual 9">◉ 9</span><span class="k-badge k-badge--outline count-item" title="Không chạy 2">– 2</span></span></td>
+              <td><span class="num">0</span></td>
+              <td class="wrap-cell"><span class="k-note num">20/11</span><span class="k-note block">usupp-webtest-r1.xlsx · usupp-webtest-r1.md</span></td>
+            </tr>
+            <tr data-kind="figma">
+              <td class="wrap-cell"><a class="text-1" href="#">Booking header fix</a><span class="k-note block"><code class="k-mono">wt-261119-1720-booking</code></span></td>
+              <td class="wrap-cell"><span class="row-4"><span class="src-badge src-figma">Figma</span><span>812:4401</span></span>
+                <span class="k-note block">12 row · usupp</span></td>
+              <td><span class="count-strip"><span class="k-badge k-badge--success count-item">✓ 10</span><span class="k-badge k-badge--warning count-item">⚠ 2</span></span></td>
+              <td><span class="num">2</span></td>
+              <td class="wrap-cell"><span class="k-note num">19/11</span></td>
+            </tr>
+          </tbody>
+        </table></div></div>
+      </div>
+
+      <!-- ---------------- New run form ---------------- -->
+      <aside class="k-split__panel split-panel" aria-labelledby="run-form-title">
+        <div class="stack-16 run-form">
+          <h2 class="panel-title flush" id="run-form-title">Lần chạy mới</h2>
+
+          <div class="k-field mock-new" style="padding:8px;">
+            <span class="k-field__label" id="src-label">Nguồn case</span>
+            <div class="source-picker" role="radiogroup" aria-labelledby="src-label" id="src-picker">
+              <button type="button" class="source-card" role="radio" aria-checked="false" data-src="figma">
+                <span class="source-card__head"><span class="src-badge src-figma">Figma</span>Bảng thay đổi</span>
+                <span class="k-note">Mỗi dòng trong bảng thay đổi design thành một case.</span>
+              </button>
+              <button type="button" class="source-card" role="radio" aria-checked="true" data-src="backlog">
+                <span class="source-card__head"><span class="src-badge src-backlog">Backlog</span>Ticket + survey</span>
+                <span class="k-note">Agent sinh case từ các dòng B*/R* trong survey report của ticket.</span>
+              </button>
+              <button type="button" class="source-card" role="radio" aria-checked="false" aria-disabled="true" data-src="workbook" tabindex="-1">
+                <span class="source-card__head"><span class="src-badge src-workbook">Excel</span>Test case có sẵn</span>
+                <span class="k-note">Sắp có.</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Figma fields -->
+          <div class="stack-16" data-fields="figma" hidden>
+            <div class="k-field"><label class="k-field__label" for="f-figma">Link Figma (có node-id)</label>
+              <input class="k-input" id="f-figma" type="text" placeholder="https://www.figma.com/design/…?node-id=…">
+              <span class="k-field__help">Bảng thay đổi design. Nhập một lần, lần sau không gọi lại Figma.</span></div>
+          </div>
+
+          <!-- Backlog fields -->
+          <div class="stack-16 mock-new" data-fields="backlog" style="padding:8px;">
+            <div class="k-field"><label class="k-field__label" for="f-ticket">Ticket Backlog</label>
+              <div class="row-4"><input class="k-input" id="f-ticket" type="text" value="CKWEB-3366" autocomplete="off" spellcheck="false" style="flex:1">
+                <button type="button" class="k-btn k-btn--secondary" id="f-ticket-go">Tìm</button></div>
+              <span class="k-field__help">Ticket phải có survey report. Case được sinh từ report, không đọc lại toàn bộ source.</span></div>
+
+            <div id="ticket-found" class="stack-12">
+              <div class="ticket-card stack-4">
+                <div class="row-6"><span class="k-badge k-badge--info">In Progress</span><span class="k-note">新規追加 · High · 2026/12/09_Ver1.19.0</span></div>
+                <strong lang="ja">【ケアモニ】小規模多機能用の申し送りチェックシートを作成する（共通部分）</strong>
+                <span class="k-note">11 ảnh đính kèm · Figma board trong mô tả (chỉ tham khảo, không phải bảng thay đổi)</span>
+              </div>
+
+              <div class="row-8"><span class="k-section-label">Trạng thái mockup</span>
+                <div class="k-tabs k-tabs--segmented" role="radiogroup" aria-label="Có report hay không" id="rep-state">
+                  <button class="k-tab is-active" role="radio" aria-checked="true" data-r="has">Đã có report</button>
+                  <button class="k-tab" role="radio" aria-checked="false" data-r="none">Chưa có report</button>
+                </div></div>
+
+              <!-- has report -->
+              <div class="stack-12" data-rep="has">
+                <div class="k-field"><span class="k-field__label" id="rev-label">Survey report</span>
+                  <div class="rev-list" role="radiogroup" aria-labelledby="rev-label">
+                    <label class="rev-item"><input type="radio" name="rev" checked>
+                      <span class="stack-2"><strong>r2 · mới nhất</strong><span class="k-note">24/11 · đã close 3 câu hỏi · 10 B · 3 R</span></span>
+                      <span class="inline-status text-success"><svg class="k-icon k-icon--sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"/></svg>Hash khớp</span></label>
+                    <label class="rev-item"><input type="radio" name="rev">
+                      <span class="stack-2"><strong>r1</strong><span class="k-note">21/11 · 9 B · 3 R</span></span>
+                      <span class="inline-status"><svg class="k-icon k-icon--sm icon-warn" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M7.1 3 2.2 11.5a1 1 0 0 0 .9 1.5h9.8a1 1 0 0 0 .9-1.5L8.9 3a1 1 0 0 0-1.8 0Z"/><path d="M8 6.5v3M8 11.5v.1"/></svg>develop đã đổi 4 file</span></label>
+                  </div></div>
+
+                <div class="k-field"><span class="k-field__label">Sinh case từ các dòng <span class="k-note">· 13/13 đã chọn</span></span>
+                  <div class="trace-pick" id="trace-pick"></div>
+                  <span class="k-field__help">Bỏ chọn dòng không cần test web. Agent vẫn phân loại lại từng case ở bước xác nhận.</span></div>
+
+                <label class="row-6"><input type="checkbox" checked> Dùng ảnh đính kèm ticket làm ảnh tham chiếu (capture) khi khớp màn hình</label>
+              </div>
+
+              <!-- no report -->
+              <div class="stack-8" data-rep="none" hidden>
+                <div class="k-banner k-banner--warning" role="note">
+                  <svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M7.1 3 2.2 11.5a1 1 0 0 0 .9 1.5h9.8a1 1 0 0 0 .9-1.5L8.9 3a1 1 0 0 0-1.8 0Z"/><path d="M8 6.5v3M8 11.5v.1"/></svg>
+                  <div class="k-banner__text"><strong>CKWEB-3366 chưa có survey report</strong><span>Case sinh từ report có nguồn rõ ràng (B*/R*) và trace được. Chạy survey trước, rồi quay lại đây.</span></div>
+                </div>
+                <div class="row-8"><button type="button" class="k-btn k-btn--secondary">Xếp job survey cho CKWEB-3366</button></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Common fields -->
+          <div class="stack-4">
+            <div class="k-field"><label class="k-field__label" for="f-project">Dự án</label>
+              <span class="k-select-wrap"><select class="k-select" id="f-project"><option>carekarte</option><option>usupp</option></select></span></div>
+            <p class="k-note break">Host được phép: <code class="k-mono">stg-console.carekarte.test, stg-caremoni.carekarte.test</code> · <a href="#">sửa</a></p>
+          </div>
+          <div class="k-field"><label class="k-field__label" for="f-base">URL môi trường test</label><input class="k-input" id="f-base" type="text" value="https://stg-console.carekarte.test/"></div>
+          <div class="k-field"><label class="k-field__label" for="f-name">Tên lần chạy</label><input class="k-input" id="f-name" type="text" maxlength="80" value="CKWEB-3366 · 小多機 チェックシート 共通"><span class="k-field__help" data-fields="backlog">Tự điền từ ticket, sửa được.</span></div>
+          <div class="k-field"><label class="k-field__label" for="f-tpl">Template Excel</label>
+            <span class="k-select-wrap"><select class="k-select" id="f-tpl"><option>carekarte-web · Web test</option><option>usupp-web · Web test</option></select></span></div>
+          <div class="k-field" data-fields="figma" hidden><label class="k-field__label" for="f-tk">Ticket Backlog <span class="k-note">(không bắt buộc)</span></label><input class="k-input" id="f-tk" type="text" placeholder="DEMO-1"></div>
+
+          <div class="k-banner k-banner--info" role="note">
+            <svg class="k-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="M8 7v4M8 5.2v.1"/></svg>
+            <div class="k-banner__text"><strong>Bước kế tiếp</strong>
+              <span data-fields="figma" hidden>Agent nhập và phân loại các row, rồi hỏi bạn một bảng xác nhận. Chưa có row nào chạy trước khi bạn xác nhận.</span>
+              <span data-fields="backlog">Agent sinh case từ các dòng đã chọn (một dòng có thể ra nhiều case), phân loại, rồi hỏi bạn một bảng xác nhận. Steps và mong đợi do agent viết được đánh dấu để bạn soát.</span></div>
+          </div>
+          <div class="row-8"><button type="button" class="k-btn k-btn--primary" id="f-submit">Xếp job sinh case và phân loại</button></div>
+        </div>
+      </aside>
+    </div>
+  </div></div>
+</section>
+
+<!-- =================================================================== 2 · REVIEW TABLE (BACKLOG) -->
+<section class="screen" data-screen="review" hidden>
+  <header class="k-topbar topbar-wrap"><nav class="k-breadcrumb crumbs"><a href="#" data-go="runs">Test runs</a> / <span>Bảng xác nhận</span></nav><div class="k-topbar__spacer"></div><span class="k-note">Job webtest-plan · đang chờ bạn</span></header>
+  <div class="view"><div class="page page-wide stack-16">
+    <div class="page-head stack-4">
+      <div class="row-8"><h1 class="page-title">Xác nhận lần chạy · CKWEB-3366 · 小多機 チェックシート 共通</h1></div>
+      <p class="k-note">Agent đã sinh 18 case từ 13 dòng của survey r2, rồi đoán màn hình, phân loại và kịch bản login. Sửa chỗ sai rồi xác nhận một lần.</p>
+    </div>
+
+    <section class="k-card src-strip mock-new">
+      <span class="k-section-label">Nguồn</span><span class="src-badge src-backlog">Backlog</span>
+      <span>CKWEB-3366 · <a href="#">survey r2</a></span><span class="k-note">develop @ <code class="k-mono">a91c3e2</code> · master merge-base @ <code class="k-mono">5d07b1f</code></span>
+      <span class="k-section-label push-right">Host</span><code class="k-mono break">stg-console.carekarte.test, stg-caremoni.carekarte.test</code>
+    </section>
+
+    <section class="k-card stack-8 mock-new" aria-labelledby="cov-title">
+      <h2 class="panel-title flush" id="cov-title">Độ phủ theo report</h2>
+      <div class="coverage">
+        <span class="stack-2"><span class="k-section-label">Hiện trạng B*</span><span class="row-6"><progress class="meter" value="10" max="10"></progress><span class="num">10/10 dòng có case</span></span></span>
+        <span class="stack-2"><span class="k-section-label">Regression R*</span><span class="row-6"><progress class="meter" value="3" max="3"></progress><span class="num">3/3</span></span></span>
+        <span class="stack-2"><span class="k-section-label">Case</span><span class="num">18 case · 14 agent chạy · 2 cần bạn chọn · 2 không chạy trên web</span></span>
+      </div>
+      <p class="k-note">Một dòng không còn case nào (bạn xoá hết) sẽ hiện ở đây là thiếu, giống kiểm tra gap/orphan của testcase.</p>
+    </section>
+
+    <section class="k-card stack-12" aria-labelledby="rt-cols-title">
+      <h2 class="panel-title flush" id="rt-cols-title">Cột trong file Excel</h2>
+      <div class="scroll-x"><table class="k-table tbl-rt-cols">
+        <thead><tr><th>Cột</th><th>Tiêu đề</th><th>Lấy từ</th><th>Mẫu r01 · Chắc chắn</th><th>Mẫu r07 · Cần bạn chọn</th></tr></thead>
+        <tbody>
+          <tr><td class="k-id">A</td><td>No</td><td>No</td><td>1</td><td>7</td></tr>
+          <tr class="mock-tint"><td class="k-id">B</td><td>Trace</td><td>Dòng report (B*/R*)</td><td><span class="k-id">B1</span></td><td><span class="k-id">B4</span></td></tr>
+          <tr><td class="k-id">C</td><td>確認項目</td><td>Nội dung</td><td lang="ja">サービス種別に「4:小多機系」が表示される</td><td lang="ja">一括登録で「小多機系」を保存できる</td></tr>
+          <tr><td class="k-id">D</td><td>手順</td><td>Các bước</td><td lang="ja">1. CCJコンソールにログイン 2. 事業所登録を開く 3. サービス種別を開く</td><td lang="ja">1. 一括登録CSVに種別4を指定 2. 取込</td></tr>
+          <tr><td class="k-id">E</td><td>期待結果</td><td>Mong đợi</td><td lang="ja">選択肢に「4:小多機系」がある</td><td lang="ja">取込後の一覧で「小多機系」と表示</td></tr>
+          <tr class="mock-tint"><td class="k-id">F</td><td>作成</td><td>Nguồn gốc case</td><td>Agent sinh</td><td>Agent sinh</td></tr>
+        </tbody>
+      </table></div>
+      <p class="k-note">Trường riêng của nguồn Backlog có thể thêm cột: <em>Trace</em>, <em>Ticket</em>, <em>Report</em>, <em>Nguồn gốc case</em>. Nguồn Figma có <em>Figma node</em> thay vào đó.</p>
+    </section>
+
+    <section class="stack-8" aria-labelledby="rt-rows-title">
+      <div class="row-8 wrap"><h2 class="panel-title flush" id="rt-rows-title">18 case</h2>
+        <div class="k-tabs k-tabs--segmented push-right mock-new" role="radiogroup" aria-label="Nhóm">
+          <button class="k-tab is-active" role="radio" aria-checked="true">Theo dòng report</button>
+          <button class="k-tab" role="radio" aria-checked="false">Danh sách phẳng</button>
+        </div></div>
+      <div class="k-table-wrap"><div class="scroll-x"><table class="k-table tbl-rt-rows">
+        <thead><tr><th><input type="checkbox" aria-label="Chọn tất cả"></th><th>Nội dung và lý do phân loại</th><th class="mock-new">Các bước · Mong đợi</th><th>Màn hình</th><th>Phân loại</th><th>Ai chạy</th><th>Kịch bản</th></tr></thead>
+        <tbody id="rt-body"></tbody>
+      </table></div></div>
+    </section>
+
+    <div class="rt-footer stack-8"><div class="row-8"><button class="k-btn k-btn--secondary" type="button">Không xác nhận</button><span class="push-right"></span><button class="k-btn k-btn--primary" type="button">Xác nhận và lưu kế hoạch</button></div></div>
+  </div></div>
+</section>
+
+<!-- =================================================================== 3 · ROW PANEL -->
+<section class="screen" data-screen="row" hidden>
+  <header class="k-topbar topbar-wrap"><nav class="k-breadcrumb crumbs"><a href="#" data-go="runs">Test runs</a> / <span>Chi tiết row</span></nav></header>
+  <div class="view"><div class="page page-wide stack-16">
+    <div class="page-head stack-4"><h1 class="page-title">Panel row trên màn Run</h1>
+      <p class="k-note">Cùng một panel; chỉ khối đầu (“Nguồn”) đổi theo loại nguồn. Phần màn hình, phân loại, mong đợi, evidence và kết quả giữ nguyên.</p></div>
+    <div class="compare">
+      <!-- Backlog -->
+      <div class="stack-8"><span class="row-6"><span class="src-badge src-backlog">Backlog</span><strong>r06 · B4</strong></span>
+        <div class="run-panel-mock panel-body stack-12">
+          <div class="stack-8 mock-new" style="padding:8px;">
+            <span class="k-section-label">Nguồn · survey r2 · <span class="k-id">B4</span></span>
+            <blockquote class="src-quote panel-text" lang="ja">事業所を1件ずつ変更する場合も、複数の事業所をまとめて登録・変更する場合も、「小多機系」を保存できる。</blockquote>
+            <div class="row-8 wrap"><span class="k-badge k-badge--outline">Spec (ticket)</span><span class="k-badge k-badge--outline">Code: master + develop</span><span class="k-badge k-badge--warning gen-badge">Agent sinh · 2 case từ dòng này</span></div>
+            <div class="row-8"><a href="#">Mở report r2 tại B4</a><span class="k-note">·</span><a href="#">Mở CKWEB-3366</a></div>
+          </div>
+          <div class="run-shots">
+            <figure class="stack-4"><figcaption class="k-section-label">Ảnh tham chiếu</figcaption><p class="k-note">Ticket không có ảnh cho màn này.</p></figure>
+            <figure class="stack-4"><figcaption class="k-section-label">Evidence</figcaption><div class="fake-shot">r06-a1-1.png</div></figure>
+          </div>
+          <dl class="k-props"><dt>Màn hình</dt><dd><code class="k-mono break">https://stg-console.carekarte.test/office/bulk</code></dd>
+            <dt>Phân loại</dt><dd><span class="k-badge k-badge--accent">Cần bạn chọn</span></dd><dt>Ai chạy</dt><dd>Agent</dd><dt>Kịch bản</dt><dd>ccj-admin</dd></dl>
+          <div class="stack-4"><span class="k-section-label">Mong đợi</span><p class="pre-wrap panel-text" lang="ja">取込後の事業所一覧で、対象事業所のサービス種別が「小多機系」と表示される。</p></div>
+          <div class="stack-4"><span class="k-section-label">Các bước</span><p class="pre-wrap panel-text" lang="ja">1. 事業所一括登録を開く
+2. サービス種別=4 の行を含むCSVを取込
+3. 事業所一覧を開く</p></div>
+        </div></div>
+      <!-- Figma -->
+      <div class="stack-8"><span class="row-6"><span class="src-badge src-figma">Figma</span><strong>r12 · No 12</strong></span>
+        <div class="run-panel-mock panel-body stack-12">
+          <div class="stack-8" style="padding:8px;">
+            <span class="k-section-label">Nguồn · Figma <code class="k-mono">6647:118148</code> · dòng 12</span>
+            <blockquote class="src-quote panel-text" lang="ja">予約一覧のヘッダーに「キャンセル待ち」バッジを追加</blockquote>
+            <div class="row-8 wrap"><span class="k-badge k-badge--outline">Modified</span><span class="k-note">Node I6650:2201 · Creator: Tanaka</span></div>
+          </div>
+          <div class="run-shots">
+            <figure class="stack-4"><figcaption class="k-section-label">Design</figcaption><div class="fake-shot">source/r12.png</div></figure>
+            <figure class="stack-4"><figcaption class="k-section-label">Evidence</figcaption><div class="fake-shot">r12-a1-1.png</div></figure>
+          </div>
+          <dl class="k-props"><dt>Màn hình</dt><dd><code class="k-mono break">https://stg.usupp.test/reservations</code></dd>
+            <dt>Phân loại</dt><dd><span class="k-badge k-badge--outline">Chắc chắn</span></dd><dt>Ai chạy</dt><dd>Agent</dd><dt>Kịch bản</dt><dd>client</dd></dl>
+          <div class="stack-4"><span class="k-section-label">Mong đợi</span><p class="pre-wrap panel-text" lang="ja">ヘッダーに「キャンセル待ち」バッジが表示される。</p></div>
+        </div></div>
+    </div>
+  </div></div>
+</section>
+
+  </main>
+</div>
+
+<script>
+// ---- sample data (illustrative, derived from CKWEB-3366's description) ----
+const TRACE = [
+  ['B', 'B1', 'サービス種別に「4:小多機系」を表示・選択できる'],
+  ['B', 'B2', '「4:小多機系」を保存すると内部値「5」で保存される'],
+  ['B', 'B3', '事業所管理の一覧で「小多機系」と表示される'],
+  ['B', 'B4', '1件変更・一括登録変更でも「小多機系」を保存できる'],
+  ['B', 'B5', 'タイトル連携設定で予定を「通い」「宿泊」「短期」に分けて設定できる'],
+  ['B', 'B6', '朝食・昼食・夕食の予定項目を設定できる'],
+  ['B', 'B7', '記録設定に体温・食事・入浴・服薬・排泄を表示し、連絡・口腔等は除外'],
+  ['B', 'B8', '「初期の設定を一括で読み込む」は空欄のみ補い設定済みを残す'],
+  ['B', 'B9', 'ケアモニに対象利用者・宿泊マーク・食事予定・記録を表示'],
+  ['B', 'B10', 'メニューに「チェックシート（通い）」「チェックシート（宿泊）」を配置'],
+  ['R', 'R1', '既存サービス種別（1〜3）の登録・一覧は変わらない'],
+  ['R', 'R2', '既存事業所のタイトル連携設定は変わらない'],
+  ['R', 'R3', 'CK／CK-SV2 で標準設定が切り替わる'],
+];
+// [trace, row, content, steps/expected, screen, class, runner, scenario, reason]
+const CASES = [
+  ['B1', 'r01', 'サービス種別のプルダウンに「4:小多機系」がある', '事業所登録 → サービス種別を開く / 「4:小多機系」が選べる', '/office/new', 'sure', 'agent', 'ccj-admin', 'Nhãn mới trên form, đọc được trên màn hình.'],
+  ['B1', 'r02', '事業所編集でも「4:小多機系」が選べる', '既存事業所を編集 → サービス種別 / 「4:小多機系」が選べる', '/office/edit', 'sure', 'agent', 'ccj-admin', ''],
+  ['B2', 'r03', '保存後に内部値「5」で保存される', '「4:小多機系」で保存 / 保存先の値が 5', '', 'not-web', 'none', '', 'Giá trị nội bộ không hiện trên UI: cần xem DB/API, ngoài phạm vi web.'],
+  ['B3', 'r04', '事業所一覧の種別列に「小多機系」と表示', '一覧を開く / 種別列が「小多機系」', '/office', 'sure', 'agent', 'ccj-admin', ''],
+  ['B4', 'r05', '1件変更で「小多機系」に変更し保存できる', '事業所編集 → 種別変更 → 保存 / 一覧に反映', '/office/edit', 'choice', 'agent', 'ccj-admin', 'Thay đổi dữ liệu: cần bạn cho phép và chọn văn phòng test.'],
+  ['B4', 'r06', '一括登録CSVで種別4を取込できる', 'CSV取込 / 一覧で「小多機系」', '/office/bulk', 'choice', 'agent', 'ccj-admin', 'Ghi dữ liệu hàng loạt: cần file CSV test.'],
+  ['B5', 'r07', '「通い」「宿泊」「短期」の予定欄が別々にある', 'タイトル連携設定（小多機系） / 3つの欄', '/title-link', 'sure', 'agent', 'facility-admin', ''],
+  ['B6', 'r08', '朝食・昼食・夕食の予定項目を選べる', 'タイトル連携設定 → 食事 / 3項目を選択できる', '/title-link', 'sure', 'agent', 'facility-admin', ''],
+  ['B7', 'r09', '記録設定に体温・食事・入浴・服薬・排泄が出る', '記録の設定を開く / 5項目が表示', '/title-link/records', 'sure', 'agent', 'facility-admin', ''],
+  ['B7', 'r10', '連絡・口腔・機能訓練・中止理由が出ない', '記録の設定を開く / 4項目が無い', '/title-link/records', 'sure', 'agent', 'facility-admin', ''],
+  ['B8', 'r11', '一括読込で空欄だけ補われる', '一部設定済みで一括読込 / 設定済みは残る', '/title-link', 'sure', 'agent', 'facility-admin', ''],
+  ['B9', 'r12', 'ケアモニにチェックシートが表示される', 'ケアモニ（タブレット）で確認', '', 'not-web', 'none', '', 'Hiển thị trên app ケアモニ, không phải web.'],
+  ['B10', 'r13', 'メニューに「チェックシート（通い）」アイコン', 'メニューを開く / アイコンが表示', '/menu', 'sure', 'agent', 'facility-admin', ''],
+  ['B10', 'r14', 'メニューに「チェックシート（宿泊）」アイコン', 'メニューを開く / アイコンが表示', '/menu', 'sure', 'agent', 'facility-admin', ''],
+  ['R1', 'r15', '種別1〜3の事業所登録が従来通り', '種別1で登録 / 従来通り保存', '/office/new', 'sure', 'agent', 'ccj-admin', ''],
+  ['R1', 'r16', '一覧で既存種別の表示が変わらない', '一覧を開く / 既存表示のまま', '/office', 'sure', 'agent', 'ccj-admin', ''],
+  ['R2', 'r17', '既存事業所のタイトル連携設定が変わらない', '既存事業所で開く / 設定値が同じ', '/title-link', 'sure', 'agent', 'facility-admin', ''],
+  ['R3', 'r18', 'CK-SV2 の事業所で標準設定が切り替わる', 'CK-SV2 事業所で一括読込 / SV2 用の値', '/title-link', 'sure', 'agent', 'facility-admin', ''],
+];
+const CLASS = { sure: 'Chắc chắn', choice: 'Cần bạn chọn', 'not-web': 'Không chạy trên web' };
+const RUNNER = { agent: 'Agent', tester: 'Tôi tự chạy', none: 'Manual' };
+const HOST = 'https://stg-console.carekarte.test';
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const opts = (map, v) => Object.entries(map).map(([k, l]) => `<option value="${k}"${k === v ? ' selected' : ''}>${l}</option>`).join('');
+
+// trace picker in the form
+document.getElementById('trace-pick').innerHTML =
+  `<div class="grp">Hiện trạng B* · 10</div>` +
+  TRACE.filter((t) => t[0] === 'B').map((t) => `<label><input type="checkbox" checked><span class="k-id">${t[1]}</span><span lang="ja">${esc(t[2])}</span></label>`).join('') +
+  `<div class="grp">Regression R* · 3</div>` +
+  TRACE.filter((t) => t[0] === 'R').map((t) => `<label><input type="checkbox" checked><span class="k-id">${t[1]}</span><span lang="ja">${esc(t[2])}</span></label>`).join('');
+
+// review rows grouped by trace line
+const body = document.getElementById('rt-body');
+let html = '';
+for (const [, id, text] of TRACE) {
+  const cs = CASES.filter((c) => c[0] === id);
+  html += `<tr class="tr-group"><td></td><td colspan="6"><span class="row-6"><span class="k-id">${id}</span><span lang="ja">${esc(text)}</span><span class="k-note">· ${cs.length} case</span><a href="#" class="k-note push-right">+ thêm case</a></span></td></tr>`;
+  for (const [, row, content, se, screen, cls, runner, scen, reason] of cs) {
+    const [steps, exp] = se.split(' / ');
+    html += `<tr data-rt-row="${row}">
+      <td><input type="checkbox" aria-label="Chọn ${row}"></td>
+      <td class="wrap-cell rt-content"><span class="row-4"><span class="k-id">${row}</span><span class="k-badge k-badge--warning gen-badge">Agent sinh</span></span>
+        <span class="block" lang="ja">${esc(content)}</span>${reason ? `<span class="k-note block">${esc(reason)}</span>` : ''}</td>
+      <td class="wrap-cell" style="min-width:220px"><textarea class="k-textarea textarea-sm" rows="2" lang="ja" aria-label="Các bước">${esc(steps || '')}</textarea>
+        <textarea class="k-textarea textarea-sm" rows="1" lang="ja" aria-label="Mong đợi" style="margin-top:4px">${esc(exp || '')}</textarea></td>
+      <td class="rt-screen"><input class="k-input k-input--sm k-mono" type="text" value="${screen ? HOST + screen : ''}" placeholder="URL màn hình" aria-label="Màn hình">
+        <span class="k-note block">${screen ? 'Đề xuất, tin cậy thấp' : 'Agent không đoán được'}</span></td>
+      <td><span class="k-select-wrap"><select class="k-select k-select--sm" aria-label="Phân loại">${opts(CLASS, cls)}</select></span></td>
+      <td><span class="k-select-wrap"><select class="k-select k-select--sm" aria-label="Ai chạy"${cls === 'not-web' ? ' disabled' : ''}>${opts(RUNNER, runner)}</select></span></td>
+      <td><span class="k-select-wrap"><select class="k-select k-select--sm" aria-label="Kịch bản"><option value="">—</option>${['ccj-admin', 'facility-admin'].map((s) => `<option${s === scen ? ' selected' : ''}>${s}</option>`).join('')}</select></span></td>
+    </tr>`;
+  }
+}
+body.innerHTML = html;
+
+// ---- mockup interactions ----
+const radio = (group, attr, on) => group.addEventListener('click', (e) => {
+  const b = e.target.closest(`[${attr}]`);
+  if (!b || b.getAttribute('aria-disabled') === 'true') return;
+  group.querySelectorAll(`[${attr}]`).forEach((x) => { const sel = x === b; x.setAttribute('aria-checked', String(sel)); x.classList.toggle('is-active', sel); });
+  on(b.getAttribute(attr));
+});
+radio(document.getElementById('src-picker'), 'data-src', (kind) => {
+  document.querySelectorAll('[data-fields]').forEach((el) => { el.hidden = el.dataset.fields !== kind; });
+  document.getElementById('f-submit').textContent = kind === 'backlog' ? 'Xếp job sinh case và phân loại' : 'Xếp job nhập và phân loại';
+  document.getElementById('f-name').value = kind === 'backlog' ? 'CKWEB-3366 · 小多機 チェックシート 共通' : '';
+});
+radio(document.getElementById('rep-state'), 'data-r', (r) => {
+  document.querySelectorAll('[data-rep]').forEach((el) => { el.hidden = el.dataset.rep !== r; });
+  document.getElementById('f-submit').disabled = r === 'none';
+});
+radio(document.getElementById('runs-filter'), 'data-f', (f) => {
+  document.querySelectorAll('.tbl-runs tbody tr').forEach((tr) => { tr.hidden = f !== 'all' && tr.dataset.kind !== f; });
+});
+const go = (name) => {
+  document.querySelectorAll('.screen').forEach((s) => { s.hidden = s.dataset.screen !== name; });
+  document.querySelectorAll('.mock-bar [data-go]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.go === name)));
+  window.scrollTo(0, 0);
+};
+document.addEventListener('click', (e) => { const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); go(g.dataset.go); } });
+</script>
+</body>
+</html>

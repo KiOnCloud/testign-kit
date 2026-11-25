@@ -7,7 +7,9 @@ Below, `<run>` means `<python> "${CLAUDE_PLUGIN_ROOT}/scripts/run.py"`.
 
 ## Job loop
 
-1. `<run> console start` → keep the `session` id it prints.
+1. `<run> console start` → keep the `session` id it prints. Then `<run> console capabilities
+   --session <s> [--has chrome] [--has figma] [--has backlog]` with the tools this session has; the
+   Agent & jobs screen shows them, and "not reported" until a session reports.
 2. `<run> console wait --session <s>` (a held call, see below) → `{session, job}` or `{session, job: null}`.
 3. `<run> console claim <job> --session <s>` → `{ok: true}`, or `{ok: false, reason: "revision-moved"}`
    (the job already failed; go back to 2). Exit 2 with `no-older-tab`: no console tab can answer
@@ -93,24 +95,6 @@ Never write these by hand. Save the `wiki-append-preview` output to a file and r
 Then write with `<run> wiki-update --rows <file> --approval <approval> --job <job> --session <s>`. It
 refuses unless the tester confirmed exactly that approval in the console.
 
-### `review-table` (web test plan)
-
-Never write this by hand. Run `<run> webtest-columns --run <r> --ask > <file>` and pass the file with
-`--question`. The ask carries the column plan with three sample rows, the template's headers and one
-line per case; the server adds the run's hosts and the project's login scenarios itself, so values
-for those in the file are ignored. It belongs to the `webtest-plan` job whose run it names.
-
-Answer: `{columns, verdict_labels, rows: {"<row>": {screen?, class?, runner?, scenario?, preconditions?, viewport?, mobile_method?}}, confirm}`.
-The server enforces the row rules (a `choice` row run by the agent needs `preconditions`, a
-phone-width row run by the agent needs `mobile_method: emulation`, scenarios exist, every screen is
-on a run host). An edit that confirmation would drop is refused: a `runner` other than `none` on a
-row whose final class is `not-web` (`not-web-runner`), a `mobile_method` on a row whose final
-viewport is `pc` (`pc-method`). Values inherited from the agent's line are normalized instead, so
-switching a row to `not-web` or to `pc` always confirms; `webtest-plan` applies the same rules, and
-`webtest-triage` refuses a `runner` on a `not-web` draft. `confirm: false` fails the job as `not-confirmed`. After the
-answer, run `<run> webtest-plan --run <r> --job <j> --session <s>`: it reads the confirmed answer
-from the server (`GET /agent/jobs/:id/review`) and refuses when there is none.
-
 ### `sign-in` (web test run)
 
 `{"type": "sign-in", "id": "signin-<scenario>-<n>", "scenario": "<name>", "switching_from"?: "<name>"}`.
@@ -121,16 +105,25 @@ or `{choice: "finish"}` when the tester ended the run from the run screen. Then 
 `<run> webtest-signed-in --run <r> --job <j> --session <s> --scenario <name>`. Make no Chrome tool
 call while this question is open.
 
-## Web test runs
+## Web test suites and runs
 
-- `<run> console queue --file <job.json>` queues a `webtest-plan` or `webtest-run` job from the chat
-  with the same checks as the console; the console shows it as "queued from the chat" until the
-  tester opens it. Never mint a browser session for yourself. A job queued again after
-  `no-older-tab` adds `"queued_after": "no-older-tab"` to the job file; the console shows it on the
-  job card.
-- `webtest-plan` parameters: `name`, `figma_url` (a Figma design URL with `node-id`), `base_url` on
-  one of the project's hosts, `project`, optional `template`, `ticket`, `report_lang`. The job's
-  `params.hosts` are the project's hosts when it was queued; only the tester edits hosts.
+- A test suite is a case list kept apart from runs, in `<output_dir>/webtest/suites/<S>/`. The
+  tester makes one on the Test suites screen from a Figma table, a Backlog survey report, an Excel
+  workbook or by hand, reviews and edits the cases on its Cases tab, and confirms it (`ready`). A
+  run copies a ready suite onto one environment (base URL on the project's hosts, template,
+  tester); the run is confirmed and has its columns when it is made.
+- `<run> console queue --file <job.json>` queues a `suite-generate` or `webtest-run` job from the
+  chat with the same checks as the console; the agent cannot queue any other kind. The console shows
+  it as "queued from the chat" until the tester opens it. Never mint a browser session for yourself.
+  A job queued again after `no-older-tab` adds `"queued_after": "no-older-tab"` to the job file;
+  the console shows it on the job card.
+- `suite-generate` parameters: `suite`, a suite in state `generating` from a Figma or Backlog source
+  that no other active job generates (`unknown-suite`, `suite-not-generating`, `suite-busy`,
+  `bad-source`). The job's `params.source` is the suite's source. Only the claimed job writes the
+  suite, through `POST /agent/suites/:suite/stage` (`<run> suite-stage`) and
+  `POST /agent/suites/:suite/generated` (`<run> suite-generated`); a call from any other job or
+  session is refused with `conflict`. When the job ends without `suite-generated`, the server keeps
+  what was staged and hands the suite to the tester (`review`).
 - `webtest-run` parameters: `run` (a run whose plan is confirmed), `tester`, `mode: run | export`.
 - The tester answers parked rows (`delegate` with preconditions, `self-run`, `skip`) and enters
   results for rows they run on the run screen. Those answers live on the server, keyed by
@@ -165,9 +158,8 @@ call while this question is open.
 | testcase: hash check stale | `questions` ask: "Continue on this revision" or "Stop"; Stop fails the job with reason `stale` (the console offers "Survey again"; a testcase job never runs spec-qa) |
 | testcase `mode: trace` | `trace --template <t> --xlsx <workbook> --write-revision` only; no case writing |
 | testcase `focus` | Write cases only for the listed rows, into `--into <workbook>` |
-| webtest: project or hosts missing | Never asked in the chat: the tester creates the project and its hosts on the Login screen, then queues again |
-| webtest plan: confirm columns, classes, screens, scenarios | One `review-table` ask from `webtest-columns --ask`; then `webtest-plan`. A changed table gets a new ask id, so ask again after the rows change |
-| webtest plan: a row needs a login scenario that does not exist | The agent drafts it with `login-scenario-save`; the tester approves it on the Login screen |
+| webtest: project or hosts missing | Never asked in the chat: the tester creates the project and its hosts on the Projects & hosts screen, then queues again |
+| suite generate: a case needs a login scenario that does not exist | The agent drafts it with `login-scenario-save`; the tester approves it on the Login scenarios screen |
 | webtest run: sign in or switch accounts | `sign-in` ask; then `webtest-signed-in`. No Chrome call while it is open |
 | webtest run: a parked row, a row the tester runs | Answered on the run screen; `webtest-resolve` applies them |
 | webtest run: the tester stops with rows open | "Finish with open rows" on the run screen; `webtest-resolve` reports it, then `webtest-close` and the export |
@@ -185,11 +177,9 @@ call while this question is open.
 | `transport` | The call was cut off | Call again once; if it repeats at a fixed interval, lower `--timeout` |
 | `bad-request` | The ask or parameters are not valid | Fix the file (the message says what) and call again |
 | `conflict`, `revision-moved` | The job is no longer open, or the report moved on | Leave the job; go back to `wait` |
-| `no-older-tab` | No console tab was opened before the job, so no one can answer it (a tab opened after the job was queued, or `console start` still opening its tab). The server has failed the job | Queue the same job again once with `"queued_after": "no-older-tab"` (for a plan job, add `--from-run <earlier run>` to `webtest-new` when the failed job already made a run), say so in one line in the chat, and go back to `wait`. When the job you queued again also fails with `no-older-tab`, do not queue it a third time: ask the tester in the chat to open the console themselves, and wait for their go |
+| `no-older-tab` | No console tab was opened before the job, so no one can answer it (a tab opened after the job was queued, or `console start` still opening its tab). The server has failed the job | Queue the same job again once with `"queued_after": "no-older-tab"`, say so in one line in the chat, and go back to `wait`. When the job you queued again also fails with `no-older-tab`, do not queue it a third time: ask the tester in the chat to open the console themselves, and wait for their go |
 | `no-tab` | `console queue` with `queued_after` while the console has no tab at all (it was restarted, or its tab never opened) | Ask the tester in the chat to open the console themselves; queue again once they say it is open. Never open a console tab of your own |
 | `open-rows` | `done` on a run job with open rows | Wait with `webtest-resolve --wait`, or close the run, then call `done` again |
-| `scenario-not-approved` | The sign-in question names a scenario the tester has not approved | Ask the tester to approve it on the Login screen, or skip its rows |
+| `scenario-not-approved` | The sign-in question names a scenario the tester has not approved | Ask the tester to approve it on the Login scenarios screen, or skip its rows |
 | `unknown-project`, `off-host`, `bad-source`, `plan-not-confirmed`, `unknown-run` | A web job's parameters are not valid | Fix the job file (the message says what) and queue again |
-| `preconditions-required`, `unknown-scenario`, `bad-columns`, `mobile-agent`, `not-web-runner`, `pc-method`, `too-long` | A tester answer (review table or parked row) broke a rule | Only the console sends answers; the tester sees the message there |
-| `bad-request` on a `review-table` ask naming a choice row with `runner: agent`, an agent row with `viewport: mobile`, or a line with `mobile_method: emulation` | Only the tester delegates a choice row or switches a phone-width row to emulation | Offer those rows with `runner: tester` (and `mobile_method: device`) and ask again |
-| `unknown-template` on a `review-table` ask | The ask names another template than the job's, or the template file cannot be read | Use the job's template; the server reads its headers itself |
+| `preconditions-required`, `unknown-scenario`, `bad-columns`, `mobile-agent`, `not-web-runner`, `pc-method`, `too-long` | A tester answer (a parked row or a column change) broke a rule | Only the console sends answers; the tester sees the message there |

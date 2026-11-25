@@ -3,13 +3,14 @@ import time
 
 import pytest
 
-from testign import webtest
 from testign.console import jobs
 from testign.console.server import ApiError
 
 A = "s-aaaaaaaaaaaaaaaa"
-FIGMA = "https://www.figma.com/design/AbCdEfGhIjKl/Shop?node-id=6647-118148&t=x"
 RUN = "W20261119-1000-header-update"
+SUITE = "S20261125-0900-header-update"
+SIGN_IN = {"type": "sign-in", "id": "signin-member", "scenario": "member"}
+SIGNED_IN = {"choice": "signed-in"}
 
 
 class Clock:
@@ -32,8 +33,9 @@ class World:
         self.runs = {RUN: {"id": RUN, "project": "demo", "confirmed": True, "ticket": None, "report_lang": "ja",
                            "open": 2}}
         self.finish = set()
-        self.facts = {"sample": {"headers": {"A": "No", "B": "確認内容", "F": "結果"}, "last": 8,
-                                 "merged": [("J4:L4", 10, 12)]}}
+        self.suites = {SUITE: {"id": SUITE, "state": "generating", "generate_job": None, "generate_job_active": False,
+                               "source": {"kind": "backlog", "ticket": "DEMO-1", "report": "DEMO-1-survey-r2.md",
+                                          "revision": 2}}}
 
     def context(self):
         return jobs.Context(
@@ -47,7 +49,8 @@ class World:
             scenario=lambda project, name: self.scenarios.get(name),
             scenarios=lambda project: list(self.scenarios.values()),
             run_finish=lambda run: run in self.finish,
-            template_facts=lambda name: self.facts.get(name),
+            suite_info=lambda suite: self.suites.get(suite),
+            attach_suite=lambda suite, job: self.suites[suite].update(generate_job=job),
         )
 
 
@@ -68,9 +71,8 @@ def bridge(world, clock):
     return b
 
 
-def plan_body(**extra):
-    return {"kind": "webtest-plan", "ui_lang": "en", "name": "Header update", "figma_url": FIGMA,
-            "base_url": "https://dev.example.test/", "project": "demo", **extra}
+def run_body(**extra):
+    return {"kind": "webtest-run", "ui_lang": "en", "run": RUN, "tester": "T", **extra}
 
 
 def start(bridge, body, session=A, *, created_before=1.0):
@@ -81,57 +83,52 @@ def start(bridge, body, session=A, *, created_before=1.0):
     return job["id"]
 
 
-def review_ask(run=RUN, **extra):
-    return {"type": "review-table", "id": f"review-{run}", "run": run, "template": "sample",
-            "headers": {"A": "No", "B": "確認内容", "F": "結果"}, "last_column": "H",
-            "columns": [{"field": "content", "letter": "B"}, {"field": "verdict", "letter": "F"}],
-            "verdict_labels": {"pass": "OK", "fail": "NG"},
-            "lines": [{"row": "r01", "content": "label", "class": "sure", "runner": "agent", "scenario": "member",
-                       "viewport": "pc", "screen": "/mypage", "confidence": "high"},
-                      {"row": "r05", "content": "rule", "class": "choice", "runner": "tester", "scenario": "member",
-                       "viewport": "pc", "screen": "/reservations", "confidence": "low"}],
-            "digest": "d1", **extra}
-
-
-ANSWER = {"columns": [{"field": "content", "letter": "B"}, {"field": "verdict", "letter": "F"}],
-          "verdict_labels": {"pass": "OK", "fail": "NG"}, "rows": {}, "confirm": True}
-
-
-def plan_with_run(bridge):
-    job = start(bridge, plan_body())
-    bridge.attach_run(job, A, RUN)
-    return job
-
-
-def ask_and_answer(bridge, job, ask, answer, session_created=None):
-    assert bridge.ask(job, A, ask, 0) == {"answers": None}
-    return bridge.answer(job, {"ask_id": ask["id"], "answer": answer}, "browser-s", session_created)
-
-
 # kinds ---------------------------------------------------------------------------------------------
-def test_plan_kind_checks_and_stores_server_facts(bridge):
-    job = bridge.create(plan_body(ticket="DEMO-1"))
+def test_suite_generate_carries_the_suites_source_and_attaches_itself(bridge, world):
+    job = bridge.create({"kind": "suite-generate", "ui_lang": "ja", "suite": SUITE})
     record = bridge.jobs[job["id"]]
-    assert record["params"]["source"] == {"kind": "figma", "url": FIGMA, "file": "AbCdEfGhIjKl", "node": "6647:118148"}
-    assert record["params"]["hosts"] == ["dev.example.test"] and record["params"]["template"] == "sample"
-    assert record["queued_by"] == "tester" and record["opened"] is True and record["report_lang"] == "vi"
-    assert job["run"] is None and job["queued_by"] == "tester"
+    assert record["suite"] == SUITE and record["params"] == {"suite": SUITE, "source": world.suites[SUITE]["source"]}
+    assert record["ticket"] == "DEMO-1" and record["base_revision"] is None  # a later survey must not stop the job
+    assert world.suites[SUITE]["generate_job"] == job["id"] and bridge.summary(record)["suite"] == SUITE
+    with pytest.raises(ApiError) as exc:
+        bridge.create({"kind": "suite-generate", "ui_lang": "en", "suite": SUITE})
+    assert exc.value.code == "suite-busy"
 
 
 @pytest.mark.parametrize("change,code", [
-    ({"project": "other"}, "unknown-project"),
-    ({"base_url": "https://evil.example/"}, "off-host"),
-    ({"base_url": "ftp://dev.example.test/"}, "bad-base-url"),
-    ({"figma_url": "https://www.figma.com/design/AbCdEfGhIjKl/Shop"}, "bad-source"),
-    ({"figma_url": "https://figma.example/design/AbCdEfGhIjKl/Shop?node-id=1-2"}, "bad-source"),
-    ({"template": "nope"}, "unknown-template"),
-    ({"name": ""}, "bad-request"),
-    ({"ticket": "not a ticket"}, "bad-request"),
+    ({"suite": "S20990101-0000-nope"}, "unknown-suite"),
+    ({"state": "review"}, "suite-not-generating"),
+    ({"generate_job_active": True}, "suite-busy"),
+    ({"source": {"kind": "excel", "file": "a.xlsx"}}, "bad-source"),
 ])
-def test_plan_kind_refusals(bridge, change, code):
+def test_suite_generate_refusals(bridge, world, change, code):
+    suite = change.pop("suite", SUITE)
+    world.suites[SUITE].update(change)
     with pytest.raises(ApiError) as exc:
-        bridge.create(plan_body(**change))
+        bridge.create({"kind": "suite-generate", "ui_lang": "en", "suite": suite})
     assert exc.value.code == code
+
+
+def test_the_plan_kind_is_retired(bridge, world, clock):
+    with pytest.raises(ApiError):
+        bridge.create({"kind": "webtest-plan", "ui_lang": "en", "name": "x", "base_url": "https://dev.example.test/",
+                       "project": "demo"})
+    store = jobs.MemoryStore()
+    store.save({"id": "j20261119-100000-aaaa", "kind": "webtest-plan", "state": "queued", "created_at": "2026-11-19T10:00:00+09:00",
+                "params": {}, "asked": []})
+    store.save({"id": "j20261119-100000-bbbb", "kind": "webtest-run", "state": "queued", "created_at": "2026-11-19T10:00:00+09:00",
+                "params": {}, "asked": []})
+    b = jobs.Bridge(store, world.context(), clock=clock)
+    b.startup()
+    assert b.jobs["j20261119-100000-aaaa"]["reason"] == "retired-kind"
+    assert b.jobs["j20261119-100000-bbbb"]["reason"] == "server-stopped"
+
+
+def test_info_gives_the_agent_its_run_job(bridge):
+    job = run_job(bridge)
+    assert bridge.info(job, A)["run"] == RUN
+    with pytest.raises(ApiError):
+        bridge.info(job, "s-otherotherother")
 
 
 def test_run_kind_needs_a_confirmed_run_and_a_tester(bridge, world):
@@ -153,174 +150,33 @@ def test_run_kind_needs_a_confirmed_run_and_a_tester(bridge, world):
 
 
 def test_agent_queue_takes_web_kinds_only_and_marks_them(bridge):
-    for kind in ("survey", "close", "testcase", None):
+    for kind in ("survey", "close", "testcase", "webtest-plan", None):
         with pytest.raises(ApiError):
             bridge.agent_create({"kind": kind, "ui_lang": "en", "ticket": "DEMO-1", "tester": "T"})
-    job = bridge.agent_create(plan_body())
+    job = bridge.agent_create(run_body())
     assert job["queued_by"] == "agent" and job["opened"] is False
     assert bridge.get(job["id"])["opened"] is False
     assert bridge.get(job["id"], opened=True)["opened"] is True
     assert bridge.summary(bridge.jobs[job["id"]])["opened"] is True
 
 
-def test_attach_run_once_and_info(bridge):
-    job = start(bridge, plan_body())
-    assert bridge.info(job, A)["run"] is None
-    with pytest.raises(ApiError):
-        bridge.attach_run(job, A, "../etc")
-    bridge.attach_run(job, A, RUN)
-    assert bridge.info(job, A)["run"] == RUN
-    with pytest.raises(ApiError, match="already"):
-        bridge.attach_run(job, A, RUN)
-    with pytest.raises(ApiError):
-        bridge.info(job, "s-otherotherother")
-
-
 # review table ----------------------------------------------------------------------------------------
-def test_review_table_carries_server_hosts_and_scenarios(bridge):
-    job = plan_with_run(bridge)
-    bridge.ask(job, A, {**review_ask(), "hosts": ["evil.example"]}, 0)
-    ask = bridge.jobs[job]["ask"]
-    assert ask["hosts"] == ["dev.example.test"]
-    assert {s["name"]: s["approved"] for s in ask["scenarios"]} == {"member": True, "admin": False}
-
-
-def test_review_table_checks_columns_against_the_template_not_the_ask(bridge):
-    job = plan_with_run(bridge)
-    sent = {**review_ask(), "headers": {"A": "No", "B": "確認内容", "C": "x", "F": "結果"}, "last_column": "C"}
-    bridge.ask(job, A, sent, 0)
-    ask = bridge.jobs[job]["ask"]
-    assert ask["headers"] == {"A": "No", "B": "確認内容", "F": "結果"} and ask["last_column"] == "H"
-    for col, message in (({"field": "screen", "letter": "C"}, "no header"),
-                         ({"field": "screen", "letter": "K", "header": "画面", "new": True}, "merged")):
-        with pytest.raises(ApiError, match=message):
-            bridge.answer(job, {"ask_id": ask["id"], "answer": {**ANSWER, "columns": [*ANSWER["columns"], col]}},
-                          "browser-s")
-    ok = {"field": "screen", "letter": "M", "header": "画面", "new": True}
-    assert bridge.answer(job, {"ask_id": ask["id"], "answer": {**ANSWER, "columns": [*ANSWER["columns"], ok]}},
-                         "browser-s")["state"] == "running"
-
-
-@pytest.mark.parametrize("line,message", [
-    ({"class": "choice", "runner": "agent", "preconditions": "x"}, "only the tester delegates"),
-    ({"viewport": "mobile"}, "real device"),
-    ({"viewport": "mobile", "mobile_method": "device"}, "real device"),
-    ({"viewport": "mobile", "mobile_method": "simulator"}, "mobile_method must be one of"),
-    ({"viewport": "mobile", "mobile_method": "emulation"}, "only the tester switches"),
-    ({"viewport": "mobile", "mobile_method": "emulation", "runner": "tester"}, "only the tester switches"),
-])
-def test_review_table_refuses_lines_only_the_tester_may_set(bridge, line, message):
-    job = plan_with_run(bridge)
-    ask = review_ask()
-    ask["lines"] = [{**ask["lines"][0], **line}, ask["lines"][1]]
-    with pytest.raises(ApiError, match=message):
-        bridge.ask(job, A, ask, 0)
-
-
-def test_review_table_offers_a_phone_row_to_the_tester_on_a_real_device(bridge):
-    job = plan_with_run(bridge)
-    ask = review_ask()
-    ask["lines"] = [{**ask["lines"][0], "viewport": "mobile", "runner": "tester"}, ask["lines"][1]]
-    assert bridge.ask(job, A, ask, 0) == {"answers": None}
-    bridge.answer(job, {"ask_id": ask["id"], "answer": ANSWER}, "browser-s")
-    assert bridge.review(job, A)["review"]["lines"][0]["mobile_method"] == "device"
-
-
-def test_review_answer_sets_the_mobile_method(bridge):
-    job = plan_with_run(bridge)
-    bridge.ask(job, A, review_ask(), 0)
-    with pytest.raises(ApiError, match="mobile_method must be one of"):
-        bridge.answer(job, {"ask_id": review_ask()["id"],
-                            "answer": {**ANSWER, "rows": {"r01": {"viewport": "mobile", "mobile_method": "x"}}}},
-                      "browser-s")
-    rows = {"r01": {"viewport": "mobile", "mobile_method": "emulation"}}
-    assert bridge.answer(job, {"ask_id": review_ask()["id"], "answer": {**ANSWER, "rows": rows}},
-                         "browser-s")["state"] == "running"
-
-
-def test_review_answer_refuses_a_phone_row_for_the_agent(bridge):
-    job = plan_with_run(bridge)
-    bridge.ask(job, A, review_ask(), 0)
-    with pytest.raises(ApiError, match="real device"):
-        bridge.answer(job, {"ask_id": review_ask()["id"],
-                            "answer": {**ANSWER, "rows": {"r01": {"viewport": "mobile", "mobile_method": "device"}}}},
-                      "browser-s")
-    with pytest.raises(ApiError, match="real device"):
-        bridge.answer(job, {"ask_id": review_ask()["id"], "answer": {**ANSWER, "rows": {"r01": {"viewport": "mobile"}}}},
-                      "browser-s")
-    with pytest.raises(ApiError, match="scenario must be"):
-        bridge.answer(job, {"ask_id": review_ask()["id"], "answer": {**ANSWER, "rows": {"r01": {"scenario": ["x"]}}}},
-                      "browser-s")
-
-
-def test_review_table_needs_the_runs_template(bridge, world):
-    job = plan_with_run(bridge)
-    with pytest.raises(ApiError, match="run's template"):
-        bridge.ask(job, A, {**review_ask(), "template": "other"}, 0)
-    world.facts.clear()
-    with pytest.raises(ApiError, match="cannot be read"):
-        bridge.ask(job, A, review_ask(), 0)
-
-
-def test_review_table_belongs_to_the_plan_job_of_its_run(bridge):
-    job = start(bridge, plan_body())
-    with pytest.raises(ApiError, match="belongs"):
-        bridge.ask(job, A, review_ask(), 0)  # no run attached yet
-    bridge.attach_run(job, A, RUN)
-    with pytest.raises(ApiError, match="belongs"):
-        bridge.ask(job, A, review_ask(run="W20261119-1000-other"), 0)
-
-
-def test_confirmed_review_keeps_the_decision_and_a_digest_of_what_was_shown(bridge):
-    job = plan_with_run(bridge)
-    assert bridge.review(job, A) == {"review": None}
-    ask_and_answer(bridge, job, review_ask(), {**ANSWER, "rows": {"r05": {"runner": "agent",
-                                                                          "preconditions": "a confirmed booking"}}})
-    review = bridge.review(job, A)["review"]
-    assert review["digest"] == webtest.cases_digest({"cases": review_ask()["lines"]})  # not the agent's "d1"
-    assert review["template"] == "sample" and review["lines"][0]["row"] == "r01"
-    assert set(review["lines"][0]) == set(webtest.PLAN_LINE_KEYS)  # no case text in the job record
-    assert review["answer"]["rows"] == {"r05": {"runner": "agent", "preconditions": "a confirmed booking"}}
-    assert review["answered_by"] == jobs.fingerprint("browser-s")
-    assert bridge.ask(job, A, review_ask(), 0)["answers"]["confirm"] is True  # same id hands the answer out again
-
-
-def test_not_confirmed_fails_the_plan_job(bridge):
-    job = plan_with_run(bridge)
-    ask_and_answer(bridge, job, review_ask(), {"confirm": False})
-    record = bridge.jobs[job]
-    assert record["state"] == "failed" and record["reason"] == "not-confirmed"
-    assert record["asked"][-1]["answer"] == {"confirm": False}
-
-
-@pytest.mark.parametrize("rows,code", [
-    ({"r05": {"runner": "agent"}}, "preconditions-required"),
-    ({"r01": {"screen": "https://evil.example/x"}}, "off-host"),
-    ({"r01": {"screen": "//evil.example/x"}}, "off-host"),
-    ({"r01": {"scenario": "ghost"}}, "unknown-scenario"),
-    ({"r99": {"runner": "agent"}}, "unknown-row"),
-    ({"r01": {"content": "rewritten"}}, "bad-request"),
-])
-def test_review_answer_rules(bridge, rows, code):
-    job = plan_with_run(bridge)
-    bridge.ask(job, A, review_ask(), 0)
-    with pytest.raises(ApiError) as exc:
-        bridge.answer(job, {"ask_id": f"review-{RUN}", "answer": {**ANSWER, "rows": rows}}, "browser-s")
-    assert exc.value.code == code
-    assert bridge.jobs[job]["state"] == "needs-input"
-
-
 def test_a_tab_newer_than_the_web_job_cannot_answer(bridge):
-    job = plan_with_run(bridge)
-    bridge.ask(job, A, review_ask(), 0)
+    job = run_job(bridge)
+    bridge.ask(job, A, SIGN_IN, 0)
     created = bridge.jobs[job]["created_ts"]
     with pytest.raises(ApiError) as exc:
-        bridge.answer(job, {"ask_id": f"review-{RUN}", "answer": ANSWER}, "browser-s", created + 1)
+        bridge.answer(job, {"ask_id": SIGN_IN["id"], "answer": SIGNED_IN}, "browser-s", created + 1)
     assert exc.value.code == "session-too-new"
-    bridge.answer(job, {"ask_id": f"review-{RUN}", "answer": ANSWER}, "browser-s", created - 1)
+    bridge.answer(job, {"ask_id": SIGN_IN["id"], "answer": SIGNED_IN}, "browser-s", created - 1)
 
 
 # sign-in -------------------------------------------------------------------------------------------------
+def ask_and_answer(bridge, job, ask, answer, session_created=None):
+    assert bridge.ask(job, A, ask, 0) == {"answers": None}
+    return bridge.answer(job, {"ask_id": ask["id"], "answer": answer}, "browser-s", session_created)
+
+
 def run_job(bridge):
     return start(bridge, {"kind": "webtest-run", "ui_lang": "en", "run": RUN, "tester": "T"})
 
@@ -405,13 +261,13 @@ def test_needs_input_counts_run_questions(bridge, world):
 # no older tab ----------------------------------------------------------------------------------------
 @pytest.mark.parametrize("gap", [0.0, 0.0004, 0.5])
 def test_tab_age_helper_matches_answer(bridge, gap):
-    job = plan_with_run(bridge)
-    bridge.ask(job, A, review_ask(), 0)
+    job = run_job(bridge)
+    bridge.ask(job, A, SIGN_IN, 0)
     cutoff = jobs.answer_cutoff(bridge.jobs[job])
     for created in (cutoff - gap, cutoff + gap):
         allowed = jobs.tab_can_answer(cutoff, created)
         try:
-            bridge.answer(job, {"ask_id": "nope", "answer": ANSWER}, "browser-s", created)
+            bridge.answer(job, {"ask_id": "nope", "answer": SIGNED_IN}, "browser-s", created)
             refused = False
         except ApiError as exc:
             refused = exc.code == "session-too-new"
@@ -420,7 +276,7 @@ def test_tab_age_helper_matches_answer(bridge, gap):
 
 def test_claim_fails_the_job_when_no_tab_is_older(bridge):
     bridge.sessions = lambda: []
-    job = bridge.create(plan_body())
+    job = bridge.create(run_body())
     assert bridge.wait(A, 0)["job"]["id"] == job["id"]
     with pytest.raises(ApiError) as exc:
         bridge.claim(job["id"], A)
@@ -430,7 +286,7 @@ def test_claim_fails_the_job_when_no_tab_is_older(bridge):
 
 
 def test_claim_goes_on_with_an_older_tab(bridge):
-    job = bridge.create(plan_body())
+    job = bridge.create(run_body())
     cutoff = bridge.jobs[job["id"]]["created_ts"]
     bridge.sessions = lambda: [cutoff - 1, cutoff + 1]
     bridge.wait(A, 0)
@@ -439,18 +295,18 @@ def test_claim_goes_on_with_an_older_tab(bridge):
 
 
 def test_a_held_ask_fails_with_no_older_tab(bridge):
-    job = plan_with_run(bridge)
+    job = run_job(bridge)
     cutoff = bridge.jobs[job]["created_ts"]
     bridge.sessions = lambda: [cutoff + 5]  # only a tab opened after the job was queued
     with pytest.raises(ApiError) as exc:
-        bridge.ask(job, A, review_ask(), 0)
+        bridge.ask(job, A, SIGN_IN, 0)
     assert exc.value.code == "no-older-tab"
     assert bridge.jobs[job]["state"] == "failed" and bridge.jobs[job]["reason"] == "no-older-tab"
 
 
 def test_can_answer_is_computed_for_the_requesting_tab(bridge):
-    job = plan_with_run(bridge)
-    bridge.ask(job, A, review_ask(), 0)
+    job = run_job(bridge)
+    bridge.ask(job, A, SIGN_IN, 0)
     cutoff = bridge.jobs[job]["created_ts"]
     assert bridge.get(job, session_created=cutoff - 1)["can_answer"] is True
     assert bridge.get(job, session_created=cutoff + 1)["can_answer"] is False
@@ -458,53 +314,31 @@ def test_can_answer_is_computed_for_the_requesting_tab(bridge):
 
 
 def test_the_agent_marks_a_requeue_after_no_older_tab(bridge):
-    job = bridge.agent_create({**plan_body(), "queued_after": "no-older-tab"})
+    job = bridge.agent_create({**run_body(), "queued_after": "no-older-tab"})
     assert job["queued_after"] == "no-older-tab" and job["queued_by"] == "agent"
-    assert bridge.create({**plan_body(), "queued_after": "no-older-tab"})["queued_after"] is None
+    assert bridge.create({**run_body(), "queued_after": "no-older-tab"})["queued_after"] is None
     with pytest.raises(ApiError) as exc:
-        bridge.agent_create({**plan_body(), "queued_after": "anything"})
+        bridge.agent_create({**run_body(), "queued_after": "anything"})
     assert exc.value.code == "bad-request"
 
 
 # review answers that confirmation would drop -----------------------------------------------------------
-def mixed_ask():
-    lines = review_ask()["lines"] + [
-        {"row": "r08", "content": "menu", "class": "sure", "runner": "tester", "scenario": "member",
-         "viewport": "mobile", "mobile_method": "device", "screen": "/menu", "confidence": "low"}]
-    return review_ask(lines=lines)
-
-
-@pytest.mark.parametrize("rows", [
-    {"r01": {"class": "not-web"}},  # the agent's runner is inherited, not edited
-    {"r01": {"class": "not-web", "runner": "none"}},
-    {"r08": {"viewport": "pc"}},  # the agent's device method is inherited
-    {"r08": {"mobile_method": "emulation", "runner": "agent"}},
-])
-def test_review_answer_accepts_what_the_tester_can_see(bridge, rows):
-    job = plan_with_run(bridge)
-    bridge.ask(job, A, mixed_ask(), 0)
-    bridge.answer(job, {"ask_id": f"review-{RUN}", "answer": {**ANSWER, "rows": rows}}, "browser-s")
-    assert bridge.jobs[job]["confirmed_review"]["answer"]["rows"] == rows
-
-
-@pytest.mark.parametrize("rows, code", [
-    ({"r01": {"class": "not-web", "runner": "agent"}}, "not-web-runner"),
-    ({"r05": {"class": "not-web", "runner": "tester"}}, "not-web-runner"),
-    ({"r01": {"mobile_method": "emulation"}}, "pc-method"),
-    ({"r08": {"viewport": "pc", "mobile_method": "device"}}, "pc-method"),
-])
-def test_review_answer_refuses_an_edit_confirmation_would_drop(bridge, rows, code):
-    job = plan_with_run(bridge)
-    bridge.ask(job, A, mixed_ask(), 0)
-    with pytest.raises(ApiError) as exc:
-        bridge.answer(job, {"ask_id": f"review-{RUN}", "answer": {**ANSWER, "rows": rows}}, "browser-s")
-    assert exc.value.code == code
-
-
 def test_a_requeue_with_no_tab_at_all_is_refused(bridge):
     bridge.sessions = lambda: []
     with pytest.raises(ApiError) as exc:
-        bridge.agent_create({**plan_body(), "queued_after": "no-older-tab"})
+        bridge.agent_create({**run_body(), "queued_after": "no-older-tab"})
     assert exc.value.code == "no-tab" and not bridge.jobs
     bridge.sessions = lambda: [time.time()]
-    assert bridge.agent_create({**plan_body(), "queued_after": "no-older-tab"})["queued_after"] == "no-older-tab"
+    assert bridge.agent_create({**run_body(), "queued_after": "no-older-tab"})["queued_after"] == "no-older-tab"
+
+
+def test_the_session_reports_its_tools_and_a_new_session_starts_unknown(bridge, clock):
+    assert bridge.state_view()["agent"]["capabilities"] is None
+    with pytest.raises(ApiError):
+        bridge.report_capabilities({"session": A, "chrome": "yes", "figma": False, "backlog": False})
+    bridge.report_capabilities({"session": A, "chrome": True, "figma": False, "backlog": True})
+    caps = bridge.state_view()["agent"]["capabilities"]
+    assert caps["chrome"] and not caps["figma"] and caps["backlog"] and caps["at"]
+    clock.t += 3600  # the old session went silent long enough to be taken over
+    bridge.wait("s-bbbbbbbbbbbbbbbb", 0)
+    assert bridge.state_view()["agent"]["capabilities"] is None

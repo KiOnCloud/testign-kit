@@ -120,29 +120,30 @@ def test_job_record_shape_and_kind_table(bridge):
     assert re.fullmatch(r"j\d{8}-\d{6}-[0-9a-f]{4}", record["id"])
     assert record["state"] == "queued" and record["base_revision"] == "DEMO-1-survey-r2.md"
     assert record["params"] == {"tester": "Asher"} and record["ui_lang"] == "ja" and record["report_lang"] is None
-    assert set(jobs.KINDS) == {"survey", "close", "testcase", "webtest-plan", "webtest-run"}
+    assert set(jobs.KINDS) == {"survey", "close", "testcase", "webtest-run", "suite-generate"}
 
 
 @pytest.mark.parametrize("body,code", [
-    ({"kind": "deploy", "ui_lang": "vi"}, "bad-request"),
+    ({"kind": "deploy", "ui_lang": "en"}, "bad-request"),
     ({"kind": "close", "ticket": "DEMO-1", "tester": "A"}, "bad-request"),
     ({"kind": "close", "ticket": "DEMO-1", "ui_lang": "fr", "tester": "A"}, "bad-request"),
-    ({"kind": "close", "ticket": "DEMO-1", "ui_lang": "vi"}, "tester-required"),
-    ({"kind": "close", "ticket": "DEMO-1", "ui_lang": "vi", "tester": "x" * 101}, "tester-required"),
-    ({"kind": "close", "ticket": "DEMO-9", "ui_lang": "vi", "tester": "A"}, "not-found"),
-    ({"kind": "survey", "ticket": "demo-1", "repo": "/repo", "ui_lang": "vi"}, "bad-request"),
-    ({"kind": "survey", "ticket": "DEMO-5", "repo": "/plain", "ui_lang": "vi"}, "bad-request"),
-    ({"kind": "survey", "ticket": "DEMO-5", "repo": "/repo", "master_ref": "a b", "ui_lang": "vi"}, "bad-request"),
-    ({"kind": "survey", "ticket": "DEMO-5", "repo": "/repo", "fetch": "yes", "ui_lang": "vi"}, "bad-request"),
-    ({"kind": "survey", "ticket": "DEMO-5", "repo": "/repo", "report_lang": "fr", "ui_lang": "vi"}, "bad-request"),
-    ({"kind": "testcase", "ticket": "DEMO-1", "mode": "trace", "workbook": "tc.xlsx", "ui_lang": "vi"},
+    ({"kind": "close", "ticket": "DEMO-1", "ui_lang": "vi", "tester": "A"}, "bad-request"),
+    ({"kind": "close", "ticket": "DEMO-1", "ui_lang": "en"}, "tester-required"),
+    ({"kind": "close", "ticket": "DEMO-1", "ui_lang": "en", "tester": "x" * 101}, "tester-required"),
+    ({"kind": "close", "ticket": "DEMO-9", "ui_lang": "en", "tester": "A"}, "not-found"),
+    ({"kind": "survey", "ticket": "demo-1", "repo": "/repo", "ui_lang": "en"}, "bad-request"),
+    ({"kind": "survey", "ticket": "DEMO-5", "repo": "/plain", "ui_lang": "en"}, "bad-request"),
+    ({"kind": "survey", "ticket": "DEMO-5", "repo": "/repo", "master_ref": "a b", "ui_lang": "en"}, "bad-request"),
+    ({"kind": "survey", "ticket": "DEMO-5", "repo": "/repo", "fetch": "yes", "ui_lang": "en"}, "bad-request"),
+    ({"kind": "survey", "ticket": "DEMO-5", "repo": "/repo", "report_lang": "fr", "ui_lang": "en"}, "bad-request"),
+    ({"kind": "testcase", "ticket": "DEMO-1", "mode": "trace", "workbook": "tc.xlsx", "ui_lang": "en"},
      "template-required"),
-    ({"kind": "testcase", "ticket": "DEMO-1", "mode": "write", "template": "zz", "ui_lang": "vi"}, "unknown-template"),
-    ({"kind": "testcase", "ticket": "DEMO-1", "mode": "trace", "template": "a", "ui_lang": "vi"}, "workbook-required"),
-    ({"kind": "testcase", "ticket": "DEMO-1", "mode": "write", "workbook": "x.xlsx", "ui_lang": "vi"},
+    ({"kind": "testcase", "ticket": "DEMO-1", "mode": "write", "template": "zz", "ui_lang": "en"}, "unknown-template"),
+    ({"kind": "testcase", "ticket": "DEMO-1", "mode": "trace", "template": "a", "ui_lang": "en"}, "workbook-required"),
+    ({"kind": "testcase", "ticket": "DEMO-1", "mode": "write", "workbook": "x.xlsx", "ui_lang": "en"},
      "unknown-workbook"),
-    ({"kind": "testcase", "ticket": "DEMO-1", "mode": "write", "focus": ["R3"], "ui_lang": "vi"}, "unknown-row"),
-    ({"kind": "testcase", "ticket": "DEMO-1", "mode": "draw", "ui_lang": "vi"}, "bad-request"),
+    ({"kind": "testcase", "ticket": "DEMO-1", "mode": "write", "focus": ["R3"], "ui_lang": "en"}, "unknown-row"),
+    ({"kind": "testcase", "ticket": "DEMO-1", "mode": "draw", "ui_lang": "en"}, "bad-request"),
 ])
 def test_kind_checks(bridge, body, code):
     with pytest.raises(ApiError) as err:
@@ -156,11 +157,11 @@ def test_kind_checks_accept_valid_jobs(bridge, world):
     record = bridge.jobs[survey["id"]]
     assert record["report_lang"] == "vi" and record["base_revision"] is None
     assert record["params"] == {"repo": "/repo", "develop_ref": "release/1.2", "fetch": True, "feature": "注文確定"}
-    tc = bridge.create({"kind": "testcase", "ticket": "DEMO-1", "mode": "write", "focus": ["R1"], "ui_lang": "vi"})
+    tc = bridge.create({"kind": "testcase", "ticket": "DEMO-1", "mode": "write", "focus": ["R1"], "ui_lang": "en"})
     assert bridge.jobs[tc["id"]]["params"] == {"mode": "write", "template": "a", "focus": ["R1"]}
     world.templates = {"default": "a", "templates": [{"name": "a"}, {"name": "b"}]}
     with pytest.raises(ApiError):
-        bridge.create({"kind": "testcase", "ticket": "DEMO-1", "mode": "write", "ui_lang": "vi"})
+        bridge.create({"kind": "testcase", "ticket": "DEMO-1", "mode": "write", "ui_lang": "en"})
 
 
 def test_wait_offers_one_job_at_a_time_in_order(bridge):
@@ -501,8 +502,8 @@ def test_a_tab_opened_after_the_claim_cannot_answer(bridge):
 
 def test_testcase_jobs_only_see_testcase_templates(bridge, world):
     world.templates = {"default": "web", "templates": [{"name": "web", "purpose": "webtest"}, {"name": "a"}]}
-    tc = bridge.create({"kind": "testcase", "ticket": "DEMO-1", "mode": "write", "ui_lang": "vi"})
+    tc = bridge.create({"kind": "testcase", "ticket": "DEMO-1", "mode": "write", "ui_lang": "en"})
     assert bridge.jobs[tc["id"]]["params"]["template"] == "a"
     with pytest.raises(ApiError) as err:
-        bridge.create({"kind": "testcase", "ticket": "DEMO-1", "mode": "write", "template": "web", "ui_lang": "vi"})
+        bridge.create({"kind": "testcase", "ticket": "DEMO-1", "mode": "write", "template": "web", "ui_lang": "en"})
     assert err.value.code == "unknown-template"

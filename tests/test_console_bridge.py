@@ -217,7 +217,7 @@ def test_restart_fails_open_and_queued_jobs(home):
         assert on_disk["reason"] == "server-stopped"
     assert lifecycle.status(home)["busy"] is False
 
-    job = bridge.create({"kind": "close", "ticket": "DEMO-1", "tester": "A", "ui_lang": "vi"})
+    job = bridge.create({"kind": "close", "ticket": "DEMO-1", "tester": "A", "ui_lang": "en"})
     assert lifecycle.stop(home, force=True)["stopped"] is True
     thread.join(5)
     on_disk = json.loads((folder / f"{job['id']}.json").read_text(encoding="utf-8"))
@@ -243,7 +243,7 @@ def test_release_and_mark_failed_from_the_console(server, home, monkeypatch):
 def test_survey_repo_must_be_a_git_clone(server, home, demo_repo, tmp_path):
     wt = tmp_path / "wt"
     demo_repo.git("worktree", "add", "-q", str(wt), "develop")
-    body = {"kind": "survey", "ticket": "DEMO-7", "ui_lang": "vi"}
+    body = {"kind": "survey", "ticket": "DEMO-7", "ui_lang": "en"}
     assert api(server, "POST", "/api/jobs", {**body, "repo": str(wt)})[0] == 200
     plain = tmp_path / "plain"
     plain.mkdir()

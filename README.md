@@ -5,7 +5,7 @@
 A Claude Code plugin that helps manual testers working on large legacy codebases. Before writing test cases, the tester gets an agent-generated survey of how the feature behaves today, what the current phase has already changed, and where the ticket's spec disagrees with either.
 
 > [!WARNING]
-> **Status: v0.5.1, not yet validated on real tickets.** The survey, close, testcase, console and webtest commands are implemented and covered by tests on made-up repositories. The replay check on real released tickets, a round of the console with a real Claude Code session and a web test run on a real Figma table in Chrome are still pending, so treat survey results and web test runs as drafts to review.
+> **Status: v0.6.0, not yet validated on real tickets.** The survey, close, testcase, console and webtest commands, and test suites from Figma, survey reports, Excel and manual entry, are implemented and covered by tests on made-up repositories. The replay check on real released tickets, a round of the console with a real Claude Code session and a web test run from each kind of suite in Chrome are still pending, so treat survey results, generated suites and web test runs as drafts to review.
 
 ## Why
 
@@ -33,6 +33,7 @@ testign-kit makes that investigation an automatic step for every ticket, and tur
 | `/testign:close` (skill `qa-close`) | Classify answers, append approved decisions to the Backlog wiki decisions log, write a new report revision |
 | `/testign:testcase` (skill `testcase`) | Fill a copy of your Excel template and run the gap/orphan trace check |
 | `/testign:console` (skill `console`) | A local web console for tickets, reports, trace, templates and the scout cache, with a job queue this Claude Code session works through |
+| `/testign:webtest` (skill `webtest`) | Build a web test suite from a Figma change table, a survey report, an Excel workbook or by hand, then run a run made from it in your own Chrome and export a workbook and a report |
 | Shared rules | [`references/rules.md`](references/rules.md): language, source labels, fact/intent routing, F1–F5 |
 | Survey report template | [`templates/survey-report-template.md`](templates/survey-report-template.md) |
 | Local scout cache | Reuse the `master` brief per feature (`~/.testign-kit/cache/`), validated by file blob hashes. The `develop` diff always runs fresh |
@@ -109,7 +110,7 @@ Settings live in `~/.testign-kit/config.json` (`%USERPROFILE%\.testign-kit\confi
 | Key | Default | Meaning |
 |---|---|---|
 | `output_dir` | `~/Downloads` | Where reports and test case files are written |
-| `lang` | `vi` | Report language (`vi`, `ja`, `en`) |
+| `lang` | `vi` | Report language (`vi`, `ja`, `en`); the console's own language is chosen in the console |
 | `master_ref` / `develop_ref` | `master` / `develop` | Branch names for Production and the current phase |
 | `ticket_id_regex` | Backlog keys like `PROJ-123` | How commits are grouped by ticket |
 | `backlog.space`, `backlog.project_key` | empty | Backlog space and the project that holds the decisions log |
@@ -167,12 +168,22 @@ The report defaults to Vietnamese (falling back to Japanese, then English), and 
 ## Console
 
 `/testign:console` opens a local web page on `127.0.0.1` (port 4791 by default) and keeps the Claude
-Code session attached to it. The console shows every ticket under `output_dir` with its latest survey
-report, the trace between a report and a filled workbook, your registered templates (register, set
-default, remove) and the scout cache. Its chrome switches between Vietnamese, English and Japanese;
-report content, quotes and template headers stay as written.
+Code session attached to it. Its menu has three groups:
 
-From the console you queue jobs: survey a ticket, close QA, write test cases, write §7. The attached
+- **Test case design:** *Test suites* (the cases of a web test, see below) and *Ticket survey* (every
+  ticket under `output_dir` with its latest survey report and the trace between a report and a
+  filled workbook).
+- **Test runs:** *Runs* (web test runs made from a suite, their results and exports) and *Agent &
+  jobs* (the attached session, the tools it reported and the job queue).
+- **Settings:** *Projects & hosts*, *Login scenarios*, *Templates* (register, set default, remove),
+  *Scout cache* and *Preferences* (theme, interface language, your tester name; the `config.json`
+  values are shown read-only).
+
+The console is in English or Japanese; report content, quotes and template headers stay as written.
+Japanese text uses the system's Japanese font, so on Linux install one (for example Noto Sans CJK).
+
+From the console you queue jobs: survey a ticket, close QA, write test cases, write §7, generate a
+test suite, run or export a web test. The attached
 session takes them one at a time, follows the same skills as the chat commands and asks you its
 questions in the console (row review with edits, the wiki diff as the tool computed it, pasted
 answers). The session must be running `/testign:console`; with no session attached, queued jobs wait.
@@ -187,9 +198,11 @@ answers). The session must be running `/testign:console`; with no session attach
 What it can and cannot change:
 
 - The server itself writes only under `~/.testign-kit/console/` (its state, job records, temporary
-  uploads), `~/.testign-kit/templates/` (template registration) and `~/.testign-kit/webtest/`
-  (projects, login scenarios, your answers and images for web test runs). It never changes
-  `output_dir`, a report, a repository or `config.json`.
+  uploads), `~/.testign-kit/templates/` (template registration), `~/.testign-kit/webtest/`
+  (projects, login scenarios, your answers and images for web test runs) and
+  `<output_dir>/webtest/`, where it keeps test suites, creates a run from a confirmed suite and
+  changes a run's export columns while no job works on it. It never changes a report, a repository
+  or `config.json`.
 - Reports, workbooks and the Backlog wiki change only through jobs the session runs, with the same
   guards as the chat commands: report revisions are never overwritten, and the wiki is written only
   after you confirmed the exact diff in the console.
@@ -217,38 +230,52 @@ Limits:
   `console open --print` for a single-use URL.
 - If another program holds the port, set another one in `console.port` of `config.json`.
 
-### Web test runs
+### Web test suites and runs
 
-`/testign:webtest` tests a web change from a Figma change table in your own Chrome. It needs the
-Claude in Chrome extension and the Figma MCP server (a seat that can read the file). In the console:
+`/testign:webtest` tests a web change in your own Chrome. The cases live in a **test suite**; a run
+copies a confirmed suite, so editing the suite later never changes a run. Running needs the Claude in
+Chrome extension; a Figma suite needs the Figma MCP server (a seat that can read the file). The
+session tells the console which of these tools it has, and *Agent & jobs* shows them.
 
-1. **Login scenarios:** create a project and its allowed hosts. Only you edit hosts, and only here;
-   the agent runs rows on those hosts and nowhere else. A scenario is a checklist for signing in by
-   hand. The agent drafts it when a row needs one, and you approve or reject it with a note.
-2. **Test runs → New run:** paste the Figma link (with `node-id`), pick the project, the test base URL
-   and a template, and queue the import. The agent imports the table once, sorts every row into
-   *sure*, *your choice* or *not runnable on web*, and guesses its screen and login scenario.
-3. **Review table:** check the Excel column plan against sample rows, the result labels and one line
-   per row, fix what is wrong, then confirm once. No row runs before you confirm. A row the agent runs
+1. **Projects & hosts:** create a project and its allowed hosts. Only you edit hosts, and only here;
+   the agent runs cases on those hosts and nowhere else.
+2. **Login scenarios:** a scenario is a checklist for signing in by hand. The agent drafts one when
+   a case needs it, and you approve or reject it with a note.
+3. **Test suites → New suite:** pick where the cases come from.
+   - *Figma:* a change table link with `node-id`. The agent reads the table once, one case per row
+     with its capture, and guesses each case's screen and login scenario.
+   - *Ticket survey:* a survey report revision. The agent writes cases from its behavior (`B*`) and
+     regression (`R*`) rows; the suite's coverage shows which rows have a case.
+   - *Excel:* a workbook (`.xlsx` or `.xlsm`, up to 10 MB and 2000 rows) laid out as one of your
+     registered templates. The server reads it itself; no agent job is needed.
+   - *Manual:* you type every case.
+
+   A suite generated by the agent stays *generating* until the job ends, then waits for your
+   *review*. On its Cases tab you edit cases (one at a time or in bulk), duplicate or delete them,
+   then confirm; a confirmed suite is *ready*. No case runs before you confirm. A case the agent runs
    that writes data needs the preconditions you name.
-4. **Run:** the agent works one row at a time in your Chrome and saves a screenshot per row. It stops
-   at a sign-in card when the scenario changes; you sign in yourself and press "Signed in". It parks
-   rows it should not decide (you delegate them with preconditions, run them yourself, or skip them),
-   and rows you run yourself wait for your result and an optional image.
-5. **Export:** the run's workbook (a copy of your template) and a report, written next to the run.
-   The sample template's cover placeholders (`<project>`, `<TICKET-ID>`, `<tester>`,
-   `<YYYY-MM-DD>`) are filled from the run, and each row's `No` cell (its content cell when the
-   column plan has no `No` column) links to its Figma capture.
-   The links point into the run folder, so keep the workbook next to its `source` folder.
+4. **Runs → New run:** pick a ready suite, the test base URL on one of the project's hosts, your
+   name and a template. The run's export columns can be changed on the run while no job works on it.
+5. **Run:** the agent works one case at a time in your Chrome and saves a screenshot per case. It
+   stops at a sign-in card when the scenario changes; you sign in yourself and press "Signed in". It
+   parks cases it should not decide (you delegate them with preconditions, run them yourself, or
+   skip them), and cases you run yourself wait for your result and an optional image.
+6. **Export:** the run's workbook (a copy of your template) and a report, written next to the run.
+   The cover placeholders `<project>`, `<TICKET-ID>`, `<tester>`, `<YYYY-MM-DD>` and `<suite>` are
+   filled from the run where the template has them, a run from a survey suite adds a `Trace` column
+   with the `B*`/`R*` rows each case covers, and each Figma row's `No` cell (its content cell when the
+   column plan has no `No` column) links to its capture. The links point into the run folder, so keep
+   the workbook next to its `source` folder.
 
-Helpers the agent uses so an import is read once:
+Runs made before suites existed (run file version 1, imported straight from a Figma table) still
+open, run and export; the old import job (`webtest-plan`) is retired, and a queued one fails with
+`retired-kind` when the console starts.
 
-- `webtest-new --from-run <earlier run>`: a plan job queued again copies the earlier import (rows,
-  captures, page index) and an unconfirmed triage draft instead of reading Figma again. A bad
-  earlier run is refused before any run is created.
+Helpers the agent uses so a Figma table is read once:
+
 - `webtest-table --urls`, then `--captures <dir>`: the whole change table read with one
   `get_design_context` call when it fits, with only Figma asset URLs downloaded. A table of another
-  shape is read row by row as before.
+  shape is read row by row.
 - When every console tab was opened after a job was queued, no one may answer it: the job fails
   at claim with `no-older-tab` before any work, the agent queues it again once (the job card says
   "Queued again"), and a newer tab shows a notice instead of answer buttons. If that fails too, or
@@ -256,12 +283,16 @@ Helpers the agent uses so an import is read once:
   earlier and then closed still counts, so keep the tab you queued from open.
 
 A template's purpose is set when you register it: *test cases* (needs the item and trace columns) or
-*web test* (needs the item column; result columns can be added at the review table).
+*web test* (needs the item column; result columns can be added on the run's export columns). An
+Excel suite reads a workbook through a template's item, steps, expected and trace columns.
 
 Where things live:
 
-- Runs: `<output_dir>/webtest/<run id>/` holds `run.json`, the Figma captures, the evidence
-  screenshots and the exports. Only the agent's commands write there.
+- Suites: `<output_dir>/webtest/suites/<suite id>/` holds `suite.json`, the Figma captures and an
+  uploaded Excel source.
+- Runs: `<output_dir>/webtest/<run id>/` holds `run.json`, the captures, the evidence screenshots
+  and the exports. The agent's commands write there; the console only creates `run.json` from a
+  suite and changes its export columns.
 - `~/.testign-kit/webtest/` holds the projects, login scenarios, your answers to parked rows, your
   results and the images you upload. It is created readable by you only (mode 700 on macOS and
   Linux). On Windows, mode bits do nothing: the folder takes the ACL of your user profile, which by
@@ -277,8 +308,8 @@ Limits:
   job. That keeps a tab opened during a job from acting on it, but not a tab opened before the job:
   an agent misled into minting itself a console link before the job started would pass this check.
   The new-tab notice above still shows such a tab.
-- Rows at phone width are checked on a real phone by you unless you switch a row to emulation in
-  the review table; the agent then checks it in a 390 px phone frame inside your Chrome (same
+- Cases at phone width are checked on a real phone by you unless you switch a case to emulation in
+  the suite; the agent then checks it in a 390 px phone frame inside your Chrome (same
   sign-in, desktop user agent, no touch). For those rows only, a separate worker agent runs two
   fixed page scripts in your signed-in tab: one that draws the frame and one that reads the
   frame's text. The rule that it runs nothing else is written in its instructions, not enforced by
@@ -292,8 +323,9 @@ Limits:
 │   ├── plugin.json                 # plugin "testign"
 │   └── marketplace.json            # marketplace "testign-kit"
 ├── .github/workflows/test.yml      # pytest + claude plugin validate on Windows and macOS
-├── commands/                       # /testign:survey, /testign:close, /testign:console
-├── skills/                         # scout (internal), spec-qa, qa-close, testcase (/testign:testcase), console
+├── commands/                       # /testign:survey, /testign:close, /testign:console, /testign:webtest
+├── skills/                         # scout (internal), spec-qa, qa-close, testcase (/testign:testcase), console, webtest
+├── agents/                         # web test workers that check one case in Chrome
 ├── references/
 │   ├── rules.md                    # shared rules every skill reads
 │   ├── decisions-log-format.md     # Backlog wiki decisions log format
@@ -304,7 +336,11 @@ Limits:
 ├── scripts/
 │   ├── run.py                      # single entry point the skills call
 │   └── testign/                    # python package (config, git scoping, ...)
-│       └── console/                # console server, read API, job queue and the browser UI (ui/)
+│       ├── webtest_sources.py      # where suite cases come from (figma, backlog, excel, manual)
+│       ├── webtest_suite.py        # test suites: cases, review and confirmation
+│       ├── webtest.py              # web test runs, copied from a suite
+│       └── console/                # console server, read API, job queue, suite API
+│           └── ui/                 # browser UI: ES modules, no build step, Yohaku styles, en/ja
 ├── tests/                          # pytest
 ├── pyproject.toml
 ├── LICENSE
@@ -316,6 +352,7 @@ Limits:
 ```bash
 python -m pip install pytest openpyxl
 python -m pytest
+node --test "scripts/testign/console/ui/tests/*.test.mjs"
 claude plugin validate --strict .
 ```
 

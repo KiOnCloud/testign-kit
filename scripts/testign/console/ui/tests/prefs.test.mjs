@@ -18,14 +18,36 @@ const throwing = {
   setItem: () => { throw new Error('blocked'); },
 };
 
-test('default language follows the browser: ja, en, else vi', () => {
+test('default language follows the browser: the first of ja or en, else en', () => {
   assert.equal(prefs.defaultLang(['ja-JP', 'en-US']), 'ja');
   assert.equal(prefs.defaultLang(['en-GB']), 'en');
-  assert.equal(prefs.defaultLang(['vi-VN', 'en']), 'vi');
+  assert.equal(prefs.defaultLang(['fr-FR', 'ja']), 'ja');
   assert.equal(prefs.defaultLang(['fr-FR', 'en-US']), 'en');
-  assert.equal(prefs.defaultLang(['fr-FR']), 'vi');
-  assert.equal(prefs.defaultLang([]), 'vi');
-  assert.equal(prefs.defaultLang(undefined), 'vi');
+  assert.equal(prefs.defaultLang(['fr-FR']), 'en');
+  assert.equal(prefs.defaultLang([]), 'en');
+  assert.equal(prefs.defaultLang(undefined), 'en');
+});
+
+test('the console speaks English and Japanese; any other language shows in English', () => {
+  assert.deepEqual(prefs.LANGS, ['en', 'ja']);
+  assert.equal(prefs.uiLang('ja'), 'ja');
+  assert.equal(prefs.uiLang('en'), 'en');
+  assert.equal(prefs.uiLang('fr'), 'en');
+  assert.equal(prefs.uiLang(undefined), 'en');
+});
+
+test('a saved language the console no longer speaks falls back to the browser, then English', () => {
+  const store = memoryStore();
+  store.setItem('testign.uiLang', 'fr');
+  const saved = globalThis.navigator;
+  try {
+    Object.defineProperty(globalThis, 'navigator', { value: { languages: ['ja-JP'] }, configurable: true, writable: true });
+    assert.equal(prefs.getLang(store), 'ja');
+    Object.defineProperty(globalThis, 'navigator', { value: { languages: ['fr-FR'] }, configurable: true, writable: true });
+    assert.equal(prefs.getLang(store), 'en');
+  } finally {
+    Object.defineProperty(globalThis, 'navigator', { value: saved, configurable: true, writable: true });
+  }
 });
 
 test('saved values round-trip and unknown ones fall back', () => {

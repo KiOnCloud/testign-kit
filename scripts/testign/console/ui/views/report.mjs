@@ -117,7 +117,7 @@ function summaryStrip(ctx, view, ticketId, lang) {
       cov && Number.isFinite(cov.total_cases)
         ? h('span.text-1.num', t('report_cases_summary', { covered: cov.rows_with_case ?? NONE, total: cov.rows_total ?? NONE, n: cov.total_cases }))
         : h('span.k-muted', t('tickets_not_written')),
-      h('a', { href: href(['tickets', ticketId, 'trace']) }, t('report_open_trace'))),
+      h('a', { href: href(['survey', ticketId, 'trace']) }, t('report_open_trace'))),
   ]);
 }
 
@@ -128,8 +128,9 @@ export function render(ctx) {
   const body = h('div.page');
   mount(ctx.view, body);
   const crumbs = (current) => breadcrumb(t, [
-    { label: t('nav_tickets'), href: href(['tickets']) },
-    { label: id, href: current ? href(['tickets', id]) : undefined },
+    { label: t('nav_group_design') },
+    { label: t('nav_survey'), href: href(['survey']) },
+    { label: id, href: current ? href(['survey', id]) : undefined },
     ...(current ? [{ label: current }] : []),
   ]);
   ctx.topbar(crumbs(null), spacer());
@@ -162,7 +163,7 @@ function revisionPicker(ctx, ticket, view, latestName) {
   });
   if (!current) options.unshift(h('option', { value: '', selected: true, disabled: true }, t('report_revision')));
   const select = h('select.k-select.k-input--sm', {
-    on: { change: (e) => ctx.navigate(href(['tickets', id], { rev: e.target.value === latestName ? undefined : e.target.value })) },
+    on: { change: (e) => ctx.navigate(href(['survey', id], { rev: e.target.value === latestName ? undefined : e.target.value })) },
   }, options);
   return h('label.k-select-wrap.rev-picker', [h('span.sr-only', t('report_revision')), select, icon('chevron', 'k-icon--sm chevron-down')]);
 }
@@ -170,7 +171,7 @@ function revisionPicker(ctx, ticket, view, latestName) {
 function draw(ctx, body, ticket, view, latestName, crumbs) {
   const { t } = ctx;
   const id = ticket.id;
-  const traceLink = h('a.k-btn.k-btn--ghost.k-btn--sm', { href: href(['tickets', id, 'trace']) }, [icon('layers'), t('report_open_trace')]);
+  const traceLink = h('a.k-btn.k-btn--ghost.k-btn--sm', { href: href(['survey', id, 'trace']) }, [icon('layers'), t('report_open_trace')]);
   if (!view) {
     ctx.topbar(crumbs(null), spacer(), ticket.revisions && ticket.revisions.length ? revisionPicker(ctx, ticket, null, latestName) : null);
     const key = ticket.error === 'inconsistent' ? 'report_inconsistent' : 'report_unreadable';

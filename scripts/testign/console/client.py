@@ -71,6 +71,10 @@ def progress(job: str, session: str, message: str, home: Path | None = None) -> 
     return call("POST", f"/agent/jobs/{job}/progress", {"session": session, "message": message}, home=home)
 
 
+def capabilities(session: str, tools: dict, home: Path | None = None) -> dict:
+    return call("POST", "/agent/capabilities", {"session": session, **tools}, home=home)
+
+
 def ask(job: str, session: str, ask_obj: dict, timeout: float | None = None, home: Path | None = None) -> dict:
     return call("POST", f"/agent/jobs/{job}/ask", {"session": session, "ask": ask_obj, "timeout": timeout},
                 timeout=_held_timeout(timeout), home=home)
@@ -90,24 +94,29 @@ def queue(job: dict, home: Path | None = None) -> dict:
     return call("POST", "/agent/jobs", job, home=home)
 
 
+def suite_stage(suite: str, job: str, session: str, cases: list, home: Path | None = None) -> dict:
+    """The agent's cases for a suite its generate job writes."""
+    return call("POST", f"/agent/suites/{_q(suite)}/stage", {"job": job, "session": session, "cases": cases},
+                home=home)
+
+
+def suite_generated(suite: str, job: str, session: str, home: Path | None = None) -> dict:
+    """Every case is written: the suite goes to review."""
+    return call("POST", f"/agent/suites/{_q(suite)}/generated", {"job": job, "session": session}, home=home)
+
+
 def _q(value: str) -> str:
     return quote(str(value), safe="")
 
 
 class Reader:
-    """What the web test commands read from the console: job, review, sign-in and run answers."""
+    """What the web test commands read from the console: job, sign-in and run answers."""
 
     def __init__(self, home: Path | None = None) -> None:
         self.home = home
 
     def job(self, job: str, session: str) -> dict:
         return call("GET", f"/agent/jobs/{_q(job)}/info?session={_q(session)}", home=self.home)
-
-    def attach_run(self, job: str, session: str, run: str) -> dict:
-        return call("POST", f"/agent/jobs/{_q(job)}/run", {"session": session, "run": run}, home=self.home)
-
-    def review(self, job: str, session: str) -> dict | None:
-        return call("GET", f"/agent/jobs/{_q(job)}/review?session={_q(session)}", home=self.home).get("review")
 
     def job_open(self, job: str) -> bool:
         try:

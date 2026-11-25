@@ -1,17 +1,30 @@
-// The frame around every screen (sidebar, top bar, view area) and the building blocks the views
-// share: loading, empty and error states, banners, badges, dialogs, toasts and the Esc stack.
+// The frame around every screen (top bar, menu, content area) and the building blocks the views
+// share: crumbs, page heads, fields, tables, loading, empty and error states, alerts, badges,
+// dialogs, toasts and the Esc stack.
 
 import { h, icon, mount } from '../dom.mjs';
 import { trapFocus } from '../palette.mjs';
 import { LANGS } from '../prefs.mjs';
-import { href } from '../router.mjs';
+import { HOME, href } from '../router.mjs';
 
-export const LANG_NAMES = { vi: 'Tiếng Việt', en: 'English', ja: '日本語' };
+export const LANG_NAMES = { en: 'English', ja: '日本語' };
+/** The name of any language code, in the language itself (report languages may be more than the UI's). */
+export function langName(code) {
+  if (LANG_NAMES[code]) return LANG_NAMES[code];
+  try {
+    return new Intl.DisplayNames([code], { type: 'language' }).of(code) || code;
+  } catch {
+    return code;
+  }
+}
+
+/** The id of the top bar's language select, so a re-render can give it focus back. */
+export const LANG_SELECT_ID = 'ui-lang';
 
 // Esc closes the topmost thing that registered itself: a dialog, then a split panel.
 const escapeStack = [];
 
-/** The product name as a wordmark: one span per letter, coloured in turn from the Kestrel status palette. */
+/** The product name as a wordmark: one span per letter. */
 export function wordmark(name) {
   return h('span.wordmark', [...name].map((ch) => h('span', ch)));
 }
@@ -65,93 +78,132 @@ export function radioGroup({ label, labelledBy, options, value, onChange, name }
   return group;
 }
 
-/** The sidebar, top bar and view area. Returns the parts the router fills. */
-export function renderShell({ t, lang, section, counts, onLang, onPalette }) {
-  const nav = (key, target, iconName, label) => h('a.k-nav-item', {
-    href: target, class: section === key ? 'is-active' : '', 'aria-current': section === key ? 'page' : undefined,
-    dataset: { nav: key },
-  }, [icon(iconName), h('span.nav-label', label),
-    h('span.k-nav-item__count', { dataset: { count: key } }, counts[key] === undefined ? '' : String(counts[key]))]);
+// The menu: three groups, each a bold row with a caret over its screens. Counts sit on the rows.
+export const NAV = Object.freeze([
+  { id: 'design', icon: 'design', items: [['suites', 'suite'], ['survey', 'search']] },
+  { id: 'run', icon: 'play', items: [['runs', 'refresh'], ['agent', 'agent']] },
+  { id: 'config', icon: 'settings', items: [['projects', 'folder'], ['scenarios', 'key'], ['templates', 'layers'], ['cache', 'database'],
+    ['settings', 'sliders']] },
+]);
+
+/** The group a menu row belongs to. */
+export function groupOf(section) {
+  const group = NAV.find((g) => g.items.some(([id]) => id === section));
+  return group ? group.id : null;
+}
+
+function navGroups(t, section, counts, prefs) {
+  const closed = prefs && prefs.getNavGroups ? prefs.getNavGroups() : {};
+  const current = groupOf(section);
+  return NAV.flatMap((g) => {
+    // The group of the current screen stays open, so the menu always shows where the tester is.
+    const open = g.id === current || closed[g.id] !== false;
+    const sub = h('div.nav-sub', { id: `nav-sub-${g.id}`, hidden: open ? undefined : true, dataset: { navSub: g.id } },
+      g.items.map(([id, iconName]) => h('a.nav-row', {
+        href: href([id]), class: section === id ? 'is-active' : '', 'aria-current': section === id ? 'page' : undefined, dataset: { nav: id },
+      }, [icon(iconName), h('span.nav-label', { title: t(`nav_${id}`) }, t(`nav_${id}`)),
+        id === 'agent' ? h('span.n', { id: 'nav-jobs-badge' })
+          : h('span.n', { dataset: { count: id } }, counts[id] === undefined ? '' : String(counts[id]))])));
+    const button = h('button.nav-row.nav-group', {
+      type: 'button', 'aria-expanded': open ? 'true' : 'false', 'aria-controls': sub.getAttribute('id'), dataset: { group: g.id },
+      on: {
+        click: () => {
+          const next = button.getAttribute('aria-expanded') !== 'true';
+          button.setAttribute('aria-expanded', next ? 'true' : 'false');
+          sub.hidden = !next;
+          if (prefs && prefs.setNavGroup) prefs.setNavGroup(g.id, next);
+        },
+      },
+    }, [icon(g.icon), h('span.nav-label', t(`nav_group_${g.id}`)), icon('down', 'yh-icon--sm caret')]);
+    return [button, sub];
+  });
+}
+
+/** The top bar, the menu and the content area. Returns the parts the router fills. */
+export function renderShell({ t, lang, section, counts, onLang, onPalette, prefs }) {
   const mod = isMac() ? '⌘' : 'Ctrl';
-  const sidebar = h('nav.k-sidebar.side', { 'aria-label': t('nav_main') }, [
-    h('div.k-sidebar__ws', [h('span.k-avatar', 'T'), wordmark('Testign'), h('span.ws-sub', t('nav_console'))]),
-    h('button.k-btn.k-btn--secondary.k-btn--sm.side-search', {
-      type: 'button', 'aria-keyshortcuts': 'Control+K Meta+K', on: { click: onPalette },
-    }, [icon('search'), h('span.side-search__label', t('nav_search')),
-      h('span.k-kbd-group', [h('kbd.k-kbd', mod), h('kbd.k-kbd', 'K')])]),
-    h('div.k-sidebar__section', t('nav_work')),
-    nav('tickets', href(['tickets']), 'file', t('nav_tickets')),
-    nav('runs', href(['runs']), 'play', t('nav_runs')),
-    h('a.k-nav-item', {
-      href: href(['jobs']), class: section === 'jobs' ? 'is-active' : '', 'aria-current': section === 'jobs' ? 'page' : undefined,
-      dataset: { nav: 'jobs' },
-    }, [icon('refresh'), h('span.nav-label', t('nav_jobs')), h('span.nav-jobs', { id: 'nav-jobs-badge' })]),
-    h('div.k-sidebar__section', t('nav_setup')),
-    nav('templates', href(['templates']), 'layers', t('nav_templates')),
-    nav('login', href(['login']), 'key', t('nav_login')),
-    nav('cache', href(['cache']), 'folder', t('nav_cache')),
-    nav('settings', href(['settings']), 'settings', t('nav_settings')),
-    h('div.side-foot', [
-      h('div.stack-4', [
-        h('span.k-section-label', { id: 'side-lang-label' }, t('ui_lang')),
-        radioGroup({
-          labelledBy: 'side-lang-label', name: 'side-lang', value: lang, onChange: onLang,
-          options: LANGS.map((l) => ({ value: l, label: LANG_NAMES[l], lang: l })),
-        }),
-      ]),
-      h('div.stack-2', [
-        h('div.agent-status', { id: 'agent-status', role: 'status' }),
-        h('span.k-note', t('local_only')),
-      ]),
+  const shell = h('div.shell');
+  const navToggle = h('button.yh-tool.nav-toggle', {
+    type: 'button', 'aria-label': t('nav_menu'), 'aria-controls': 'nav', 'aria-expanded': 'false',
+    on: {
+      click: () => {
+        const open = !shell.classList.contains('is-nav-open');
+        shell.classList.toggle('is-nav-open', open);
+        navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      },
+    },
+  }, icon('menu'));
+  const langSelect = h('select.yh-select.yh-input--sm.lang-select', {
+    id: LANG_SELECT_ID, 'aria-label': t('ui_lang'),
+    on: { change: (event) => { if (LANGS.includes(event.target.value)) onLang(event.target.value); } },
+  }, LANGS.map((l) => h('option', { value: l, lang: l, selected: l === lang }, LANG_NAMES[l])));
+  const top = h('header.top', [
+    navToggle,
+    h('a.yh-logo', { href: href([HOME]) }, ['TESTIGN', ' ', h('small', t('nav_console'))]),
+    h('div.top-tools', [
+      h('button.yh-tool.top-search', {
+        type: 'button', 'aria-label': `${t('nav_search')} (${mod}+K)`, 'aria-keyshortcuts': 'Control+K Meta+K', on: { click: onPalette },
+      }, icon('search')),
+      h('a.agent', { id: 'agent-status', href: href(['agent']), role: 'status' }),
+      h('span.yh-select-wrap', langSelect),
     ]),
   ]);
-  const topbar = h('header.k-topbar.topbar-wrap');
+  const nav = h('nav.nav', { id: 'nav', 'aria-label': t('nav_main') }, [
+    ...navGroups(t, section, counts, prefs),
+    h('p.nav-foot.k-note', t('local_only')),
+  ]);
+  // Views fill the crumbs row and the view; session notices stay between them across screens.
+  const topbar = h('div.crumbs-row');
   const view = h('div.view', { id: 'view' });
   const notices = h('div.notices', { id: 'session-notices', 'aria-live': 'polite' });
   drawNotices(t, notices);
-  const main = h('main.main', { id: 'main', tabindex: '-1' }, [topbar, notices, view]);
-  return { root: [sidebar, main], topbar, view, main };
+  const main = h('main.content', { id: 'main', tabindex: '-1' }, [topbar, notices, view]);
+  mount(shell, top, h('div.frame', [nav, h('div.scroll', main)]));
+  return { root: [shell], topbar, view, main };
 }
 
-/** The sidebar's agent line and Jobs badge from a console state (or a polling error). */
+/** The top bar's agent line and the Agent & jobs row's badge, from a console state (or a polling error). */
 export function updateAgentStatus(t, state, error) {
   const box = document.getElementById('agent-status');
   const badgeBox = document.getElementById('nav-jobs-badge');
   if (box) {
-    let dot = 'dot-off';
+    let dot = 'dot--off';
     let text = t('agent_none');
     let note = t('agent_none_hint');
     if (error) {
-      dot = 'dot-danger';
+      dot = 'dot--bad';
       text = t('agent_server_lost');
       note = errorText(t, error);
     } else if (state && state.agent && state.agent.attached) {
       const open = state.open;
+      note = '';
       if (open && open.silent) {
-        dot = 'dot-warning';
+        dot = 'dot--warn';
         text = t('agent_silent', { min: Math.floor((state.agent.silent_seconds || 0) / 60) });
         note = t('agent_silent_hint');
       } else if (open && open.state !== 'offered') {
-        dot = 'dot-ok';
+        dot = '';
         text = open.state === 'needs-input' ? t('agent_waiting_you') : t('agent_working');
-        note = '';
       } else {
-        dot = 'dot-ok';
+        dot = '';
         text = t('agent_ok');
-        note = '';
       }
     } else if (!state) {
       text = t('agent_checking');
       note = '';
     }
-    mount(box, h('span.agent-line', [h('span.k-badge__dot', { class: dot }), text]), note ? h('span.k-note', note) : null);
+    box.setAttribute('aria-label', note ? `${text}. ${note}` : text);
+    box.setAttribute('title', note ? `${text}. ${note}` : text);
+    mount(box, h('span.dot', { class: dot }), h('span.agent-label', text));
   }
   if (badgeBox) {
     const needs = state ? state.needs_input || 0 : 0;
     const waiting = state ? (state.queue || []).length + (state.open ? 1 : 0) : 0;
+    // A short count keeps the menu label readable; the full wording is the badge's name.
+    const needsText = needs ? t('nav_needs_you', { n: needs }) : '';
     mount(badgeBox, needs
-      ? h('span.k-badge.k-badge--warning', t('nav_needs_you', { n: needs }))
-      : h('span.k-nav-item__count', waiting ? String(waiting) : ''));
+      ? h('span.yh-badge', { title: needsText }, [h('span', { 'aria-hidden': 'true' }, String(needs)), h('span.sr-only', needsText)])
+      : (waiting ? String(waiting) : ''));
   }
 }
 
@@ -221,29 +273,117 @@ export function setNavCount(key, value) {
 }
 
 export function topbarTitle(text) {
-  return h('span.k-topbar__title', text);
+  return h('span.crumbs-title', text);
 }
 
+/**
+ * Crumbs: [{label, href}]. An item without a link before the last one is a menu group; the last
+ * item is the current page.
+ */
 export function breadcrumb(t, items) {
   const nodes = [];
   items.forEach((item, i) => {
-    if (i) nodes.push(icon('chevron', 'k-icon--sm k-sep'));
-    nodes.push(item.href
-      ? h('a', { href: item.href }, item.label)
-      : h('span.k-breadcrumb__item.is-current', { 'aria-current': 'page' }, item.label));
+    const last = i === items.length - 1;
+    if (i) nodes.push(h('span.yh-chevron', { 'aria-hidden': 'true' }));
+    if (last) nodes.push(h('span', { 'aria-current': 'page', lang: item.lang }, item.label));
+    else if (item.href) nodes.push(h('a', { href: item.href, lang: item.lang }, item.label));
+    else nodes.push(h('span.yh-muted', item.label));
   });
-  return h('nav.k-breadcrumb.crumbs', { 'aria-label': t('breadcrumb') }, nodes);
+  return h('nav.yh-crumbs', { 'aria-label': t('breadcrumb') }, nodes);
 }
 
 export function spacer() {
-  return h('div.k-topbar__spacer');
+  return h('span.push');
 }
 
-export function pageHead(title, subtitle, actions) {
-  return h('section.page-head', [
-    h('div.stack-4', [h('h1.page-title', title), subtitle ? h('p.k-note', subtitle) : null]),
-    actions ? h('div.row-8', actions) : null,
+/** The page head: title, one line of help, a meta line and the page's actions. */
+export function pageHead(title, subtitle, actions, meta, titleLang) {
+  return h('div.page-head', [
+    h('div.page-head__text', [
+      h('h1', { lang: titleLang }, title),
+      subtitle ? h('p', subtitle) : null,
+      meta ? h('div.meta', meta) : null,
+    ]),
+    actions && (!Array.isArray(actions) || actions.some(Boolean)) ? h('div.actions', actions) : null,
   ]);
+}
+
+/** A Yohaku badge: kind is '', 'neutral', 'outline', 'success', 'danger' or 'inverse'. */
+export function ybadge(text, kind, attrs) {
+  return h('span.yh-badge', { ...(attrs || {}), class: kind ? `yh-badge--${kind}` : '' }, text);
+}
+
+/** The badge of a suite source kind: Figma, Backlog, Excel, Manual. */
+export function srcBadge(t, kind) {
+  const key = `src_${String(kind || '').replace(/[^a-z]/g, '')}`;
+  const label = t(key);
+  return ybadge(label === key ? String(kind || '') : label, 'outline', { dataset: { source: kind } });
+}
+
+/** A select with [value, label] options. */
+export function selectEl(attrs, options, value) {
+  return h('select.yh-select', attrs, (options || []).map(([v, label]) =>
+    h('option', { value: v, selected: String(v) === String(value ?? '') }, label)));
+}
+
+export function selectWrap(select) {
+  return h('span.yh-select-wrap', select);
+}
+
+/** A labelled field; `id` names the control the label points at (else the control's own id). */
+export function field(label, control, help, error, id) {
+  const forId = id || (control && control.getAttribute ? control.getAttribute('id') : null);
+  return h('div.yh-field', [
+    h('label.yh-field__label', { for: forId || undefined }, label),
+    control,
+    help ? h('span.yh-field__help', help) : null,
+    error || null,
+  ]);
+}
+
+/** A search box for a toolbar; `/` focuses it. */
+export function searchBox(placeholder, value, onInput) {
+  const input = h('input.yh-input.yh-input--sm', {
+    type: 'search', placeholder, 'aria-label': placeholder, value: value || '', dataset: { search: '1' },
+    on: { input: (e) => onInput(e.target.value) },
+  });
+  return h('div.yh-input-wrap', [icon('search'), input]);
+}
+
+/** Filter chips: one pressed at a time. items: [{value, label}]. */
+export function segFilter(label, items, value, onChange) {
+  return h('div.seg', { role: 'group', 'aria-label': label }, items.map((it) => h('button.yh-tag', {
+    type: 'button', 'aria-pressed': it.value === value ? 'true' : 'false', dataset: { filter: it.value },
+    on: { click: () => { if (it.value !== value) onChange(it.value); } },
+  }, it.label)));
+}
+
+/** A Yohaku alert: kind '', 'warning', 'success' or 'danger'. */
+export function alertBox(kind, iconName, title, body, action) {
+  return h('div.yh-alert', { class: kind ? `yh-alert--${kind}` : '', role: kind === 'danger' ? 'alert' : 'status' }, [
+    icon(iconName),
+    h('div.yh-alert__body', [title ? h('div.yh-alert__title', title) : null, body || null]),
+    action || null,
+  ]);
+}
+
+/** A wide table that scrolls sideways in its box. head: [cell], rows: [tr]. */
+export function tableBox(head, rows, { narrow = false, label } = {}) {
+  return h('div.tbl-box', h('table.yh-table', { class: narrow ? 'tbl--narrow' : '', 'aria-label': label }, [
+    h('thead', h('tr', head)),
+    h('tbody', rows),
+  ]));
+}
+
+/** Rows that open their page on click, keeping links, buttons and inputs inside them clickable. */
+export function rowLink(target, navigate) {
+  return {
+    click: (event) => {
+      const el = event && event.target;
+      if (el && typeof el.closest === 'function' && el.closest('a, button, input, select, textarea, label')) return;
+      navigate(target);
+    },
+  };
 }
 
 export function loading(t, rows = 4) {

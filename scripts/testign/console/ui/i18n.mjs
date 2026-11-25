@@ -1,9 +1,9 @@
-// UI strings: flat keys, `{name}` interpolation, fallback to vi and then to the key itself.
+// UI strings: flat keys, `{name}` interpolation, fallback to English and then to the key itself.
 // Only chrome goes through t(); report content is shown as written.
 
-import { LANGS } from './prefs.mjs';
+import { DEFAULT_LANG, LANGS } from './prefs.mjs';
 
-export const FALLBACK = 'vi';
+export const FALLBACK = DEFAULT_LANG;
 
 /** Replace `{name}` with params.name; unknown placeholders stay as they are. */
 export function interpolate(text, params) {
@@ -20,7 +20,7 @@ function lookup(dict, key) {
 }
 
 /**
- * A translator over `dicts` ({vi: {...}, en: {...}, ja: {...}}) for `lang`.
+ * A translator over `dicts` ({en: {...}, ja: {...}}) for `lang`.
  * With params.n === 1 a `<key>_one` entry is preferred when it exists.
  */
 export function createTranslator(dicts, lang) {
@@ -36,7 +36,7 @@ export function createTranslator(dicts, lang) {
   };
 }
 
-/** Fetch the three dictionaries; a dictionary that fails to load is empty, so t() falls back. */
+/** Fetch the dictionaries; a dictionary that fails to load is empty, so t() falls back. */
 export async function loadDictionaries(fetchImpl = globalThis.fetch) {
   const entries = await Promise.all(LANGS.map(async (lang) => {
     try {

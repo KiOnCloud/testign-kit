@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import { confirmAnswer, pasteAnswer, questionsAnswer, reviewAnswer, splitAnchors } from '../views/ask-form.mjs';
 import { requeueBody, revOf } from '../views/job-actions.mjs';
-import { checkSurvey, looksAbsolute, prefillFromReport } from '../views/survey-form.mjs';
+import { checkSurvey, looksAbsolute, prefillFromReport, reportLangs } from '../views/survey-form.mjs';
 
 const QUESTIONS = {
   type: 'questions', id: 'q-1', questions: [
@@ -85,11 +85,17 @@ test('survey checks mirror the server and prefill prefers the remembered repo', 
   assert.deepEqual(Object.keys(checkSurvey({ ticket: '', repo: 'app', master_ref: 'a b', feature: 'x y', report_lang: 'fr' })).sort(),
     ['feature', 'master_ref', 'repo', 'report_lang', 'ticket']);
   const fm = { ticket: 'DEMO-2', repo: '/old/clone', master_ref: 'master', develop_ref: 'develop', lang: 'ja', cache_feature: 'order' };
-  assert.deepEqual(prefillFromReport(fm, 'D:\\repos\\app', 'vi'),
+  assert.deepEqual(prefillFromReport(fm, 'D:\\repos\\app', 'en'),
     { ticket: 'DEMO-2', repo: 'D:\\repos\\app', master_ref: 'master', develop_ref: 'develop', feature: 'order', report_lang: 'ja', fetch: false });
-  assert.equal(prefillFromReport(fm, '', 'vi').repo, '/old/clone');
+  assert.equal(prefillFromReport(fm, '', 'en').repo, '/old/clone');
   assert.equal(prefillFromReport({ repo: 'relative' }, '', 'en').repo, '');
   assert.equal(prefillFromReport({}, '', 'en').report_lang, 'en');
+  assert.equal(prefillFromReport({ lang: 'fr' }, '', 'fr').report_lang, 'en');
+  const server = reportLangs({ report_langs: ['ko', 'en', 'ja'] });
+  assert.deepEqual(server, ['ko', 'en', 'ja']);
+  assert.deepEqual(reportLangs({}), ['en', 'ja']);
+  assert.equal(prefillFromReport({ lang: 'ko' }, '', 'en', server).report_lang, 'ko');
+  assert.deepEqual(checkSurvey({ ticket: 'DEMO-1', repo: '/app', report_lang: 'ko' }, server), {});
 });
 
 test('queue again keeps the job parameters; the server pins the latest revision', () => {
