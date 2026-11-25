@@ -1,0 +1,17 @@
+{
+  "name": "Yohaku",
+  "source": "https://github.com/KiOnCloud/qingyi-test-kit/tree/78b044ba7f4caf77a7a33ec7232b095617d97a7a/qingyi/lab/static/yohaku",
+  "commit": "78b044ba7f4caf77a7a33ec7232b095617d97a7a",
+  "version": "qingyi-test-kit 78b044b (2026-11-25)",
+  "note": "copied via plans/261125-1455-webtest-multi-source/mockup/ds/yohaku; fonts.css is not vendored, app.css declares the Noto Sans faces with absolute /fonts/ URLs",
+  "files": {
+    "tokens.css": {
+      "sha256": "c9917f1b30006af9647da4e5bec3451f55f77163663a8e7d76ecaa82bd929833",
+      "changes": []
+    },
+    "bundle.css": {
+      "sha256": "3c3934872c137b741faa5f57119946be9a035f3e980ffd34cbf448f3e026d3b3",
+      "changes": []
+    }
+  }
+}

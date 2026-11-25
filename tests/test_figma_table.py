@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from make_webtest_run import FakeConsole, plan_params
+from make_webtest_run import FakeConsole
 from testign import figma_table, webtest
 from testign.figma_table import TableError
 
@@ -150,88 +150,80 @@ def test_metadata_only_or_unknown_output_is_refused():
 
 
 # staging -----------------------------------------------------------------------------------------
+FIGMA_URL = "https://www.figma.com/design/FILEKEY0000/x?node-id=0-1"
+
+
 @pytest.fixture
-def run_folder(tmp_path):
-    server = FakeConsole()
-    server.add_job("j-plan", "webtest-plan", **{**plan_params(), "source": {
-        "kind": "figma", "url": "https://www.figma.com/design/FILEKEY/x?node-id=0-1", "file": "FILEKEY", "node": "0:1"}})
+def suite(tmp_path):
+    from testign import webtest_sources, webtest_suite
+
     root = tmp_path / "out" / "webtest"
-    return webtest.find_run(root, webtest.new_run(root, server, "j-plan", S, None)["run"])
+    made = webtest_suite.new_suite(root, name="Figma", kind="figma", payload={"figma_url": FIGMA_URL},
+                                   env=webtest_sources.Env(tmp_path / "out", tmp_path))
+    folder = webtest_suite.find_suite(root, made["id"])
+    webtest_suite.attach_job(folder, "j-gen")
+    return folder
 
 
-def test_urls_skip_staged_rows_and_captures_stage_the_rest(run_folder, tmp_path):
+def stage(folder, rows, caps=None):
+    from testign import webtest_suite
+
+    return webtest_suite.stage_rows(folder, rows, caps, "j-gen")
+
+
+def test_urls_skip_staged_rows_and_captures_stage_the_rest(suite, tmp_path):
+    from testign import webtest_suite
+
     rows = parse()
     caps = tmp_path / "caps"
     caps.mkdir()
-    first = tmp_path / "first.png"
-    first.write_bytes(PNG)
-    webtest.stage(run_folder, {k: rows[0][k] for k in webtest.STAGED_KEYS}, first)
-    listed = webtest.stage_table(run_folder, rows)
+    (caps / "r01.png").write_bytes(PNG)
+    assert stage(suite, rows[:1], caps)["staged"] == ["c1"]
+    listed = stage(suite, rows)
     assert listed["skipped"] == ["r01"] and listed["numbered_by"] == "no"
     assert listed["rows"] == [{"row": "r02", "capture_url": f"{PREFIX}/20.png"},
                               {"row": "r03", "capture_url": f"{PREFIX}/30.png"}]
     (caps / "r02.png").write_bytes(PNG)
     with pytest.raises(webtest.WebtestError, match="no capture for r03"):
-        webtest.stage_table(run_folder, rows, caps)
-    assert webtest.load(run_folder)["import"]["staged"] == ["r01"]
+        stage(suite, rows, caps)
+    assert len(webtest_suite.load(suite)["cases"]) == 1
     (caps / "r03.png").write_bytes(PNG)
-    done = webtest.stage_table(run_folder, rows, caps)
-    assert done["staged"] == ["r02", "r03"] and done["total"] == 3
-    assert (run_folder / "source" / "r03.png").read_bytes() == PNG
-    assert webtest.stage_table(run_folder, rows, caps)["staged"] == []
+    done = stage(suite, rows, caps)
+    assert done["total"] == 3 and len(done["staged"]) == 2
+    assert all(c["capture"] for c in webtest_suite.load(suite)["cases"])
+    assert stage(suite, rows, caps)["staged"] == []
 
 
-def test_the_cli_lists_urls_and_reports_a_refused_shape_as_a_fallback(run_folder, tmp_path):
-    from console_helpers import run_cli, write_config
+def test_a_row_without_an_image_is_staged_without_a_capture(suite, tmp_path):
+    from testign import webtest_suite
 
-    write_config(tmp_path)  # output_dir is tmp_path / "out", where run_folder lives
-    ctx, meta = tmp_path / "ctx.txt", tmp_path / "meta.txt"
-    ctx.write_text(design_context(), encoding="utf-8")
-    meta.write_text(metadata(), encoding="utf-8")
-    args = ("webtest-table", "--run", run_folder.name, "--context", str(ctx), "--metadata", str(meta), "--urls")
-    out = run_cli(tmp_path, *args)
-    assert out.returncode == 0, out.stderr
-    assert [r["row"] for r in json.loads(out.stdout)["rows"]] == ["r01", "r02", "r03"]
-    ctx.write_text(metadata(), encoding="utf-8")
-    out = run_cli(tmp_path, *args)
-    assert out.returncode == 2 and "row by row" in out.stderr
-
-
-def test_a_row_staged_without_its_capture_is_offered_again(run_folder, tmp_path):
-    rows = parse()
-    for r in rows:
-        webtest.stage(run_folder, {k: r[k] for k in webtest.STAGED_KEYS}, None)
-    assert [r["row"] for r in webtest.stage_table(run_folder, rows)["rows"]] == ["r01", "r02", "r03"]
-    caps = tmp_path / "caps"
-    caps.mkdir()
-    for r in rows:
-        (caps / f"{r['row']}.png").write_bytes(PNG)
-    assert webtest.stage_table(run_folder, rows, caps)["staged"] == ["r01", "r02", "r03"]
-    assert (run_folder / "source" / "r02.png").read_bytes() == PNG
-    assert webtest.stage_table(run_folder, rows)["rows"] == []
-
-
-def test_a_row_id_taken_by_another_table_row_stages_nothing(run_folder, tmp_path):
-    rows = parse()
-    webtest.stage(run_folder, {**{k: rows[2][k] for k in webtest.STAGED_KEYS}, "row": "r02"}, None)
-    caps = tmp_path / "caps"
-    caps.mkdir()
-    for r in rows:
-        (caps / f"{r['row']}.png").write_bytes(PNG)
-    with pytest.raises(webtest.WebtestError, match="r02 is already staged for another table row"):
-        webtest.stage_table(run_folder, rows, caps)
-    assert webtest.load(run_folder)["import"]["staged"] == ["r02"]
-
-
-def test_a_row_without_an_image_is_staged_without_a_capture(run_folder, tmp_path):
     rows = [{**r, "capture_url": None} if r["row"] == "r02" else r for r in parse()]
     caps = tmp_path / "caps"
     caps.mkdir()
     for row in ("r01", "r03"):
         (caps / f"{row}.png").write_bytes(PNG)
-    done = webtest.stage_table(run_folder, rows, caps)
-    assert done["staged"] == ["r01", "r02", "r03"] and done["without_capture"] == ["r02"]
-    assert not (run_folder / "source" / "r02.png").exists()
+    done = stage(suite, rows, caps)
+    assert done["total"] == 3 and done["without_capture"] == ["r02"]
+    by_no = {c["source"]["no"]: c for c in webtest_suite.load(suite)["cases"]}
+    assert "capture" not in by_no["2"] and by_no["1"]["capture"]
+
+
+def test_the_cli_lists_urls_and_reports_a_refused_shape_as_a_fallback(suite, tmp_path, monkeypatch, capsys):
+    from testign import cli
+
+    server = FakeConsole()
+    server.jobs["j-gen"] = {"id": "j-gen", "kind": "suite-generate", "session": S, "suite": suite.name}
+    monkeypatch.setattr(cli.console_client, "Reader", lambda: server)
+    monkeypatch.setattr(cli.webtest, "runs_root", lambda cfg=None: suite.parent.parent)
+    ctx, meta = tmp_path / "ctx.txt", tmp_path / "meta.txt"
+    ctx.write_text(design_context(), encoding="utf-8")
+    meta.write_text(metadata(), encoding="utf-8")
+    args = ["webtest-table", "--suite", suite.name, "--job", "j-gen", "--session", S, "--context", str(ctx),
+            "--metadata", str(meta), "--urls"]
+    assert cli.main(args) == 0
+    assert [r["row"] for r in json.loads(capsys.readouterr().out)["rows"]] == ["r01", "r02", "r03"]
+    ctx.write_text(metadata(), encoding="utf-8")
+    assert cli.main(args) == 2 and "row by row" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("tail", ['a";calc;".png', "a.png?x=1", "a.png#f", "a b.png", "a'b.png", "a(1).png"])
@@ -265,3 +257,30 @@ def test_deep_nesting_is_refused_cleanly():
     rows = [("1:10", "10:1", "1", 1, deep, "imgA")]
     with pytest.raises(TableError, match="nested too deeply"):
         parse(design_context(rows), metadata(rows))
+
+
+def test_the_suite_target_writes_cases_from_its_generate_job_only(suite, tmp_path, monkeypatch, capsys):
+    from testign import cli, webtest_suite
+
+    server = FakeConsole()
+    server.jobs["j-gen"] = {"id": "j-gen", "kind": "suite-generate", "session": S, "suite": suite.name}
+    server.jobs["j-other"] = {"id": "j-other", "kind": "suite-generate", "session": S, "suite": "S20261125-0000-x"}
+    monkeypatch.setattr(cli.console_client, "Reader", lambda: server)
+    monkeypatch.setattr(cli.webtest, "runs_root", lambda cfg=None: suite.parent.parent)
+    ctx, meta, caps = tmp_path / "ctx.txt", tmp_path / "meta.txt", tmp_path / "caps"
+    ctx.write_text(design_context(), encoding="utf-8")
+    meta.write_text(metadata(), encoding="utf-8")
+    caps.mkdir()
+    for n in (1, 2, 3):
+        (caps / f"r0{n}.png").write_bytes(PNG)
+
+    def table(job):
+        return cli.main(["webtest-table", "--suite", suite.name, "--job", job, "--session", S,
+                         "--context", str(ctx), "--metadata", str(meta), "--captures", str(caps)])
+
+    assert table("j-other") == 2 and "does not generate suite" in capsys.readouterr().err
+    assert webtest_suite.load(suite)["cases"] == []
+    assert table("j-gen") == 0 and json.loads(capsys.readouterr().out)["total"] == 3
+    cases = webtest_suite.load(suite)["cases"]
+    assert [c["source"]["no"] for c in cases] == ["1", "2", "3"] and all(c.get("capture") for c in cases)
+    assert cases[0]["source"]["target_node"] == "I10:2;3:4"

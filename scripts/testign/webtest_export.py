@@ -9,17 +9,15 @@ only ever read; every export writes new files.
 
 from __future__ import annotations
 
-import hashlib
-import json
 import re
 from pathlib import Path
 from typing import Any
 
-from . import templates, webtest, xlsx
+from . import templates, webtest, webtest_sources, xlsx
 from .webtest import WebtestError
 
 CASE_FIELDS = ("no", "type", "content", "creator", "screen", "viewport", "mobile_method", "kind", "class", "reason",
-               "scenario", "runner", "preconditions", "steps", "expected", "target_node")
+               "scenario", "runner", "preconditions", "steps", "expected", "target_node", "trace")
 RESULT_FIELDS = ("verdict", "actual", "evidence", "executed_at", "by")
 FIELDS = CASE_FIELDS + RESULT_FIELDS
 ROLE_FIELD = {"no": "no", "item": "content", "steps": "steps", "expected": "expected", "evidence": "evidence"}
@@ -37,18 +35,19 @@ HEADERS = {
            "screen": "Screen", "scenario": "Scenario", "by": "By", "reason": "Reason", "steps": "Steps",
            "expected": "Expected", "preconditions": "Preconditions", "kind": "Kind", "class": "Class",
            "runner": "Runner", "viewport": "Viewport", "mobile_method": "Phone check", "type": "Type", "creator": "Creator",
-           "target_node": "Figma node", "no": "No", "content": "Content"},
+           "target_node": "Figma node", "no": "No", "content": "Content", "trace": "Trace"},
     "ja": {"verdict": "結果", "actual": "実際の結果", "executed_at": "実施日", "evidence": "エビデンス",
            "screen": "画面", "scenario": "ログインシナリオ", "by": "実施者", "reason": "理由", "steps": "手順",
            "expected": "期待結果", "preconditions": "前提条件", "kind": "種類", "class": "分類",
            "runner": "実施", "viewport": "表示幅", "mobile_method": "スマホ確認方法", "type": "種別", "creator": "作成者",
-           "target_node": "Figmaノード", "no": "No", "content": "内容"},
+           "target_node": "Figmaノード", "no": "No", "content": "内容", "trace": "トレース"},
     "vi": {"verdict": "Kết quả", "actual": "Thực tế", "executed_at": "Ngày chạy", "evidence": "Bằng chứng",
            "screen": "Màn hình", "scenario": "Kịch bản đăng nhập", "by": "Người chạy", "reason": "Lý do",
            "steps": "Các bước", "expected": "Kết quả mong đợi", "preconditions": "Tiền điều kiện",
            "kind": "Loại", "class": "Phân loại", "runner": "Người chạy", "viewport": "Khổ màn hình",
            "mobile_method": "Cách kiểm tra mobile",
-           "type": "Kiểu", "creator": "Người tạo", "target_node": "Node Figma", "no": "No", "content": "Nội dung"},
+           "type": "Kiểu", "creator": "Người tạo", "target_node": "Node Figma", "no": "No", "content": "Nội dung",
+           "trace": "Truy vết"},
 }
 
 
@@ -195,20 +194,47 @@ def check_columns(columns: Any, facts: dict) -> list[dict]:
     return sorted(out, key=lambda c: _index(c["letter"]))
 
 
-def _entry(name: str | None) -> dict:
+def _entry(name: str | None, home: Path | None = None) -> dict:
     try:
-        return templates.resolve(name)
+        return templates.resolve(name, home)
     except templates.TemplateError as exc:
         raise WebtestError(str(exc)) from None
 
 
-def confirmed_plan(run: dict, answer: dict) -> dict:
+def confirmed_plan(run: dict, answer: dict, home: Path | None = None) -> dict:
     """The column plan from the confirmed review table, checked against the template it names."""
-    entry = _entry(answer.get("template") or run.get("template"))
+    entry = _entry(answer.get("template") or run.get("template"), home)
     facts = sheet_facts(entry)
     return {"template": entry["name"], "sheet": entry["sheet"], "header_row": entry["header_row"],
             "verdict_labels": check_labels(answer.get("verdict_labels")),
             "columns": check_columns(answer.get("columns"), facts)}
+
+
+def suite_plan(run: dict, entry: dict | None = None) -> dict:
+    """The column plan of a run made from a suite: the first guess plus the source's trace column.
+
+    The tester can change it later on the run page; ``trace`` is added explicitly because the first
+    guess only proposes the result columns.
+    """
+    entry = entry or _entry(run.get("template"))
+    facts = sheet_facts(entry)
+    plan = first_guess(entry, facts, run.get("report_lang") or "en",
+                       phone_rows=any(c.get("viewport") == "mobile" for c in run["cases"]))
+    columns = plan["columns"]
+    label = (webtest_sources.REGISTRY.get((run.get("source") or {}).get("kind")) or
+             webtest_sources.REGISTRY["manual"]).trace_label
+    if label and not any(c["field"] == "trace" for c in columns):
+        last = max([facts["last"], *(_index(c["letter"]) for c in columns)])
+        columns.append({"field": "trace", "letter": _letter(last + 1), "header": label, "new": True})
+    return {"template": entry["name"], "sheet": entry["sheet"], "header_row": entry["header_row"],
+            "verdict_labels": check_labels(plan["verdict_labels"]), "columns": check_columns(columns, facts)}
+
+
+def replace_plan(run: dict, answer: Any, home: Path | None = None) -> dict:
+    """A column plan the tester edited on the run page, checked against the template it names."""
+    if not isinstance(answer, dict):
+        raise WebtestError("the column plan must be an object")
+    return confirmed_plan(run, answer, home)
 
 
 # values ---------------------------------------------------------------------------------------
@@ -267,6 +293,10 @@ def value_for(case: dict, field: str, labels: dict[str, str], lang: str = "en") 
         return f"{name} ({url})" if name and url else name or url
     if field == "target_node":
         return (case.get("source") or {}).get("target_node") or ""
+    if field == "trace":
+        source = case.get("source") or {}
+        entry = webtest_sources.REGISTRY.get(source.get("kind"))
+        return entry.trace_value(source) if entry else ""
     if field == "verdict":
         return verdict_text(case, labels)
     if field == "actual":
@@ -302,46 +332,21 @@ def samples(run: dict, plan: dict) -> list[dict]:
     return picked
 
 
-def review_lines(run: dict) -> list[dict]:
-    return [{"row": c["row"], "no": str((c.get("source") or {}).get("no") or ""), "content": c.get("content") or "",
-             "screen": (c.get("screen") or {}).get("url") or "", "screen_name": (c.get("screen") or {}).get("name") or "",
-             "confidence": (c.get("screen") or {}).get("confidence") or "none", "class": c.get("class"),
-             "kind": c.get("kind"), "reason": c.get("reason") or "", "runner": c.get("runner") or "none",
-             "scenario": c.get("scenario"), "viewport": c.get("viewport") or "pc",
-             "mobile_method": webtest.mobile_method(c.get("viewport") or "pc", c.get("mobile_method")),
-             "preconditions": c.get("preconditions") or "", "steps": c.get("steps") or "",
-             "expected": c.get("expected") or "", "capture": c.get("capture")}
-            for c in run["cases"]]
-
-
-def columns_view(folder: Path, run: dict, template: str | None = None, *, ask: bool = False) -> dict:
+def columns_view(folder: Path, run: dict, template: str | None = None) -> dict:
+    """The first-guess column plan of a run against a template, with three sample rows."""
     if not run["import"]["complete"]:
-        raise WebtestError("import the run first")
+        raise WebtestError("this run has no case list")
     entry = _entry(template or run.get("template"))
     facts = sheet_facts(entry)
     plan = first_guess(entry, facts, run.get("report_lang") or "en",
                        phone_rows=any(c.get("viewport") == "mobile" for c in run["cases"]))
-    view = {"plan": plan, "headers": facts["headers"], "last_column": _letter(max(facts["last"], 1)),
+    return {"plan": plan, "headers": facts["headers"], "last_column": _letter(max(facts["last"], 1)),
             "samples": samples(run, plan)}
-    if not ask:
-        return view
-    missing = [c["row"] for c in run["cases"] if not c.get("class")]
-    if missing:
-        raise WebtestError(f"rows without a class: {', '.join(missing[:10])}; run webtest-triage first")
-    lines = review_lines(run)
-    digest = webtest.cases_digest(run)
-    # A new id whenever the rows or the proposal change: an ask id that was answered before hands back
-    # its old answer, which would confirm a table the tester never saw.
-    ask_id = hashlib.sha256(json.dumps([digest, lines], ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
-    return {"type": "review-table", "id": f"review-{ask_id[:20]}", "run": run["id"], "template": entry["name"],
-            "headers": facts["headers"], "last_column": view["last_column"], "columns": plan["columns"],
-            "verdict_labels": plan["verdict_labels"], "verdict_options": plan["verdict_options"],
-            "samples": view["samples"], "lines": lines, "digest": digest}
 
 
 # export ---------------------------------------------------------------------------------------
 REPORT = {
-    "en": {"title": "Web test run report", "source": "Source", "base": "Base URL", "hosts": "Hosts",
+    "en": {"title": "Web test run report", "suite": "Test suite", "source": "Source", "base": "Base URL", "hosts": "Hosts",
            "project": "Project", "template": "Template", "confirmed": "Plan confirmed", "counts": "Counts",
            "state": "State", "count": "Rows", "fail": "Failed rows", "notrun": "Rows not run", "reason": "Reason",
            "self": "Rows run by the tester", "changed": "Rows whose class changed during the run",
@@ -352,7 +357,7 @@ REPORT = {
            "class": "Class", "workbook": "Workbook", "capture": "Capture",
            "capture_note": "Capture links point into the run folder: keep the workbook and this report next to its "
                            "source folder."},
-    "ja": {"title": "Webテスト実施レポート", "source": "ソース", "base": "ベースURL", "hosts": "対象ホスト",
+    "ja": {"title": "Webテスト実施レポート", "suite": "テストスイート", "source": "ソース", "base": "ベースURL", "hosts": "対象ホスト",
            "project": "プロジェクト", "template": "テンプレート", "confirmed": "計画確認", "counts": "件数",
            "state": "状態", "count": "件数", "fail": "NGの行", "notrun": "未実施の行", "reason": "理由",
            "self": "テスターが実施した行", "changed": "実施中に分類が変わった行", "visual": "見た目の行",
@@ -363,7 +368,7 @@ REPORT = {
            "class": "分類", "workbook": "ワークブック", "capture": "キャプチャ",
            "capture_note": "キャプチャへのリンクは実施フォルダー内を指します。ワークブックとこのレポートは source "
                            "フォルダーと同じ場所に置いてください。"},
-    "vi": {"title": "Báo cáo chạy test web", "source": "Nguồn", "base": "URL gốc", "hosts": "Host",
+    "vi": {"title": "Báo cáo chạy test web", "suite": "Bộ test", "source": "Nguồn", "base": "URL gốc", "hosts": "Host",
            "project": "Dự án", "template": "Template", "confirmed": "Kế hoạch đã xác nhận", "counts": "Số lượng",
            "state": "Trạng thái", "count": "Số dòng", "fail": "Các dòng fail", "notrun": "Các dòng không chạy",
            "reason": "Lý do", "self": "Các dòng tester tự chạy", "changed": "Các dòng đổi phân loại khi chạy",
@@ -405,7 +410,8 @@ def report_markdown(run: dict, workbook_name: str, captures: dict[str, str] | No
     confirmed = run.get("confirmed") or {}
     lines = [f"# {t['title']}: {run.get('name') or run['id']}", "",
              f"- Run: `{run['id']}`",
-             f"- {t['source']}: {src.get('url') or src.get('file') or ''}",
+             *([f"- {t['suite']}: {run['suite'].get('name')} (`{run['suite'].get('id')}`)"] if run.get("suite") else []),
+             f"- {t['source']}: {src.get('url') or src.get('report') or src.get('file') or ''}",
              f"- {t['base']}: {run.get('base_url') or ''}",
              f"- {t['hosts']}: {', '.join(run['hosts'])}",
              f"- {t['project']}: {run.get('project') or ''}",
@@ -454,7 +460,8 @@ def cover_values(run: dict, today: str | None = None) -> dict[str, str]:
     """The sample template's cover placeholders and what replaces them; empty when the run has none."""
     tester = run.get("tester") if isinstance(run.get("tester"), str) else ""
     return {"<project>": str(run.get("project") or ""), "<TICKET-ID>": str(run.get("ticket") or ""),
-            "<tester>": tester, "<YYYY-MM-DD>": today or webtest.now_iso()[:10]}
+            "<tester>": tester, "<YYYY-MM-DD>": today or webtest.now_iso()[:10],
+            "<suite>": str((run.get("suite") or {}).get("name") or "")}
 
 
 def export(folder: Path, run: dict) -> dict:

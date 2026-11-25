@@ -3,12 +3,19 @@
 // job is queued. The checks here mirror the server's; the server stays authoritative.
 
 import { h, icon, mount } from '../dom.mjs';
-import { LANGS } from '../prefs.mjs';
+import { DEFAULT_LANG, LANGS } from '../prefs.mjs';
+import { href } from '../router.mjs';
 import { queueJob } from './job-actions.mjs';
-import { LANG_NAMES, openDialog } from './shell.mjs';
+import { langName, openDialog } from './shell.mjs';
 
 const REF = /^[A-Za-z0-9._/-]{1,200}$/;
 const FEATURE = /^[\p{L}\p{N}_-]{1,80}$/u;
+
+/** The report languages the server accepts (config `report_langs`); the UI languages when it sent none. */
+export function reportLangs(cfg) {
+  const list = cfg && Array.isArray(cfg.report_langs) ? cfg.report_langs.filter((l) => typeof l === 'string') : [];
+  return list.length ? list : LANGS;
+}
 
 /** An absolute path on Windows (C:\…, \\server\…) or POSIX (/…). */
 export function looksAbsolute(path) {
@@ -17,7 +24,7 @@ export function looksAbsolute(path) {
 }
 
 /** Field problems as {field: i18n key}; empty when the values can be sent. */
-export function checkSurvey(v) {
+export function checkSurvey(v, langs = LANGS) {
   const errors = {};
   if (!String(v.ticket || '').trim()) errors.ticket = 'survey_err_ticket';
   if (!looksAbsolute(v.repo)) errors.repo = 'survey_err_repo';
@@ -25,7 +32,7 @@ export function checkSurvey(v) {
     if (v[key] && !REF.test(v[key])) errors[key] = 'survey_err_ref';
   }
   if (v.feature && !FEATURE.test(v.feature)) errors.feature = 'survey_err_feature';
-  if (!LANGS.includes(v.report_lang)) errors.report_lang = 'survey_err_lang';
+  if (!langs.includes(v.report_lang)) errors.report_lang = 'survey_err_lang';
   return errors;
 }
 
@@ -33,7 +40,7 @@ export function checkSurvey(v) {
  * Prefill for "Survey again" from a report's frontmatter. The browser cannot check that the
  * frontmatter's repo still exists, so the last repo the tester typed wins when there is one.
  */
-export function prefillFromReport(frontmatter, lastRepo, fallbackLang) {
+export function prefillFromReport(frontmatter, lastRepo, fallbackLang, langs = LANGS) {
   const fm = frontmatter || {};
   const text = (v) => (typeof v === 'string' ? v : '');
   const fmRepo = text(fm.repo);
@@ -43,13 +50,13 @@ export function prefillFromReport(frontmatter, lastRepo, fallbackLang) {
     master_ref: text(fm.master_ref),
     develop_ref: text(fm.develop_ref),
     feature: text(fm.cache_feature),
-    report_lang: LANGS.includes(fm.lang) ? fm.lang : (LANGS.includes(fallbackLang) ? fallbackLang : 'vi'),
+    report_lang: langs.includes(fm.lang) ? fm.lang : (langs.includes(fallbackLang) ? fallbackLang : DEFAULT_LANG),
     fetch: false,
   };
 }
 
 /** Open the form. `initial` prefills it; `again` marks the "Survey again" path. */
-export function openSurveyForm(ctx, { initial = {}, again = false, configLang } = {}) {
+export function openSurveyForm(ctx, { initial = {}, again = false, configLang, langs = LANGS } = {}) {
   const { t } = ctx;
   const values = {
     ticket: initial.ticket || '',
@@ -57,7 +64,7 @@ export function openSurveyForm(ctx, { initial = {}, again = false, configLang } 
     master_ref: initial.master_ref || '',
     develop_ref: initial.develop_ref || '',
     feature: initial.feature || '',
-    report_lang: initial.report_lang || (LANGS.includes(configLang) ? configLang : 'vi'),
+    report_lang: initial.report_lang || (langs.includes(configLang) ? configLang : DEFAULT_LANG),
   };
   const fields = {};
   const errors = {};
@@ -73,7 +80,7 @@ export function openSurveyForm(ctx, { initial = {}, again = false, configLang } 
     el.value = values[name];
     return el;
   };
-  const lang = h('select.k-select', LANGS.map((l) => h('option', { value: l, selected: l === values.report_lang }, LANG_NAMES[l])));
+  const lang = h('select.k-select', langs.map((l) => h('option', { value: l, selected: l === values.report_lang }, langName(l))));
   const fetch = h('input', { type: 'checkbox', id: 'survey-fetch' });
   const submit = h('button.k-btn.k-btn--primary', { type: 'button' }, again ? t('survey_queue_again') : t('survey_queue'));
 
@@ -101,7 +108,7 @@ export function openSurveyForm(ctx, { initial = {}, again = false, configLang } 
       feature: fields.feature.value.trim(),
       report_lang: lang.value,
     };
-    const problems = checkSurvey(v);
+    const problems = checkSurvey(v, langs);
     for (const [name, box] of Object.entries(errors)) {
       mount(box, problems[name] ? h('p.k-field__error', [icon('warning'), t(problems[name])]) : null);
       if (fields[name] && fields[name].classList) fields[name].classList.toggle('is-error', Boolean(problems[name]));
@@ -119,7 +126,7 @@ export function openSurveyForm(ctx, { initial = {}, again = false, configLang } 
     if (queued) {
       ctx.prefs.setLastRepo(v.repo);
       dlg.close();
-      ctx.navigate(`#/jobs/${encodeURIComponent(queued.id)}`);
+      ctx.navigate(href(['agent', queued.id]));
     }
   });
 

@@ -24,8 +24,9 @@ export function render(ctx) {
   const body = h('div.page');
   mount(ctx.view, body);
   const crumbs = breadcrumb(t, [
-    { label: t('nav_tickets'), href: href(['tickets']) },
-    { label: id, href: href(['tickets', id]) },
+    { label: t('nav_group_design') },
+    { label: t('nav_survey'), href: href(['survey']) },
+    { label: id, href: href(['survey', id]) },
     { label: t('trace_crumb') },
   ]);
   ctx.topbar(crumbs, spacer());
@@ -52,7 +53,7 @@ export function render(ctx) {
     const workbook = books.includes(route.query.workbook) ? route.query.workbook : books[0];
     const names = tpl.templates.map((x) => x.name);
     const template = names.includes(route.query.template) ? route.query.template : (tpl.default && names.includes(tpl.default) ? tpl.default : names[0]);
-    const go = (wb, tp) => ctx.navigate(href(['tickets', id, 'trace'], { workbook: wb, template: tp }));
+    const go = (wb, tp) => ctx.navigate(href(['survey', id, 'trace'], { workbook: wb, template: tp }));
     const pickers = h('div.pickers', [
       books.length > 1
         ? picker(t('trace_workbook'), workbook, books.map((b) => ({ value: b, label: b })), (wb) => go(wb, template))

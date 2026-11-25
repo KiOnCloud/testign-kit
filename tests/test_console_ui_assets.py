@@ -12,8 +12,8 @@ import pytest
 from testign.console import server as srv
 
 UI = Path(srv.__file__).resolve().parent / "ui"
-KESTREL = UI / "vendor" / "kestrel"
-LANGS = ("vi", "en", "ja")
+YOHAKU = UI / "vendor" / "yohaku"
+LANGS = ("en", "ja")
 
 
 def ui_files(*suffixes: str) -> list[Path]:
@@ -32,9 +32,7 @@ def load_dicts() -> dict[str, dict]:
 def test_i18n_dictionaries_have_the_same_keys_and_no_empty_values():
     dicts = load_dicts()
     keys = {lang: set(d) for lang, d in dicts.items()}
-    assert keys["vi"] == keys["en"] == keys["ja"], {
-        lang: sorted(keys["vi"] ^ k) for lang, k in keys.items() if k != keys["vi"]
-    }
+    assert keys["en"] == keys["ja"], sorted(keys["en"] ^ keys["ja"])
     for lang, d in dicts.items():
         for key, value in d.items():
             assert re.fullmatch(r"[a-z0-9_]+", key), (lang, key)
@@ -43,14 +41,18 @@ def test_i18n_dictionaries_have_the_same_keys_and_no_empty_values():
 
 def test_placeholders_match_across_languages():
     dicts = load_dicts()
-    for key, text in dicts["vi"].items():
+    for key, text in dicts["en"].items():
         expected = set(re.findall(r"\{(\w+)\}", text))
-        for lang in ("en", "ja"):
-            assert set(re.findall(r"\{(\w+)\}", dicts[lang][key])) == expected, (lang, key)
+        assert set(re.findall(r"\{(\w+)\}", dicts["ja"][key])) == expected, key
+
+
+def test_only_english_and_japanese_ship():
+    assert sorted(p.name for p in (UI / "i18n").iterdir()) == ["en.json", "ja.json"]
+    assert re.search(r'<html lang="en"', (UI / "index.html").read_text(encoding="utf-8"))
 
 
 def test_every_literal_key_used_in_code_exists():
-    known = set(load_dicts()["vi"])
+    known = set(load_dicts()["en"])
     used = set()
     for path in code_files():
         used |= set(re.findall(r"\bt\(\s*'([a-z0-9_]+)'", path.read_text(encoding="utf-8")))
@@ -86,14 +88,15 @@ def lf_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
-def test_vendored_kestrel_matches_lock():
-    lock = json.loads((KESTREL / "LOCK.json").read_text(encoding="utf-8"))
-    assert lock["source"].startswith("https://claude.ai/artifact/")
+def test_vendored_yohaku_matches_lock():
+    lock = json.loads((YOHAKU / "LOCK.json").read_text(encoding="utf-8"))
+    assert re.fullmatch(r"[0-9a-f]{40}", lock["commit"]), lock["commit"]
+    assert lock["source"] == f"https://github.com/KiOnCloud/qingyi-test-kit/tree/{lock['commit']}/qingyi/lab/static/yohaku"
     assert lock["version"]
-    on_disk = {p.name for p in KESTREL.iterdir() if p.suffix == ".css"}
-    assert on_disk == set(lock["files"])
+    on_disk = {p.name for p in YOHAKU.iterdir() if p.suffix == ".css"}
+    assert on_disk == set(lock["files"]) == {"tokens.css", "bundle.css"}
     for name, entry in lock["files"].items():
-        assert lf_sha256(KESTREL / name) == entry["sha256"], name
+        assert lf_sha256(YOHAKU / name) == entry["sha256"], name
         assert isinstance(entry["changes"], list)
 
 
@@ -106,7 +109,7 @@ def test_css_loads_nothing_from_outside():
 
 def test_every_font_has_its_licence_and_every_face_points_at_a_file():
     fonts = UI / "fonts"
-    licences = {"inter": "OFL-Inter.txt", "jetbrains-mono": "OFL-JetBrainsMono.txt"}
+    licences = {"noto-sans": "OFL-NotoSans.txt"}
     woff = sorted(fonts.glob("*.woff2"))
     assert woff
     for path in woff:
@@ -127,8 +130,8 @@ def test_relative_imports_resolve():
 
 def test_static_manifest_serves_the_ui_but_not_its_tests():
     manifest = srv.build_static_manifest(UI)
-    for url in ("/", "/index.html", "/main.mjs", "/app.css", "/i18n/vi.json", "/vendor/kestrel/bundle.css",
-                "/views/report.mjs", "/fonts/inter-latin-wght-normal.woff2", "/fonts/OFL-Inter.txt"):
+    for url in ("/", "/index.html", "/main.mjs", "/app.css", "/i18n/en.json", "/i18n/ja.json", "/vendor/yohaku/bundle.css",
+                "/views/report.mjs", "/fonts/noto-sans-latin-400-normal.woff2", "/fonts/OFL-NotoSans.txt"):
         assert url in manifest, url
     assert not any(url.startswith("/tests/") for url in manifest)
     html = (UI / "index.html").read_text(encoding="utf-8")

@@ -46,9 +46,9 @@ test('a template preview renders as heading, paragraphs and real tables', () => 
 });
 
 test('markup in an ask body stays text', () => {
-  const body = askBody('<img src=x onerror=alert(1)>\n| <b>x</b> |\n|---|\n| <script>y</script> |', 'vi');
+  const body = askBody('<img src=x onerror=alert(1)>\n| <b>x</b> |\n|---|\n| <script>y</script> |', 'ja');
   assert.equal(body.getAttribute('class'), 'ask-body');
-  assert.equal(body.getAttribute('lang'), 'vi');
+  assert.equal(body.getAttribute('lang'), 'ja');
   assert.equal(find(body, 'img').length + find(body, 'b').length + find(body, 'script').length, 0);
   assert.match(body.textContent, /<img src=x onerror=alert\(1\)>/);
   assert.match(body.textContent, /<script>y<\/script>/);
@@ -60,6 +60,6 @@ test('one-line bodies stay one paragraph; lists group consecutive items', () => 
 });
 
 test('report prose skips table lines, as before', () => {
-  const nodes = prose(['Intro', '| a | b |', '|---|---|', '| 1 | 2 |', '- item'], 'vi');
+  const nodes = prose(['Intro', '| a | b |', '|---|---|', '| 1 | 2 |', '- item'], 'ja');
   assert.deepEqual(tags(nodes), ['p', 'ul']);
 });

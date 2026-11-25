@@ -40,17 +40,15 @@ def root(home):
 
 
 def finished_run(root, server, *, close=True):
-    """Build the fixture run, confirm a real column plan, run its rows and close it."""
-    run_id = build(root, server, confirm=False)
+    """Build the fixture run, give it a real column plan, run its rows and close it."""
+    run_id = build(root, server)
     folder = webtest.find_run(root, run_id)
     run = webtest.load(folder)
-    view = webtest_export.columns_view(folder, run, "sample", ask=True)
-    columns = [c for c in view["columns"] if c["field"] != "executed_at"]  # the tester removes one column
-    server.reviews["j-plan"] = {"lines": view["lines"], "digest": view["digest"], "template": "sample",
-                                "answered_by": "fp", "answered_at": "t",
-                                "answer": {"columns": columns, "verdict_labels": view["verdict_labels"],
-                                           "rows": {}, "confirm": True}}
-    webtest.apply_plan(folder, server, "j-plan", S, check_columns=webtest_export.confirmed_plan)
+    plan = webtest_export.columns_view(folder, run, "sample")["plan"]
+    columns = [c for c in plan["columns"] if c["field"] != "executed_at"]  # the tester removes one column
+    run["columns"] = webtest_export.replace_plan(run, {"template": "sample", "columns": columns,
+                                                       "verdict_labels": plan["verdict_labels"]})
+    webtest.save(folder, run)
     server.add_job("j-run", "webtest-run", run=run_id)
     server.sign_ins["j-run"] = {"scenario": "member", "choice": "signed-in", "at": "t"}
     webtest.signed_in(folder, server, "j-run", S, "member")
@@ -104,29 +102,12 @@ def test_first_guess_on_the_shipped_sample(sample):
 
 def test_columns_view_has_three_samples(root, sample):
     server = FakeConsole()
-    run_id = build(root, server, confirm=False)
+    run_id = build(root, server)
     folder = webtest.find_run(root, run_id)
     view = webtest_export.columns_view(folder, webtest.load(folder), "sample")
     assert [s["class"] for s in view["samples"]] == ["sure", "choice", "not-web"]
     phone = next(c for c in view["plan"]["columns"] if c["field"] == "mobile_method")  # r08 is a phone row
     assert phone.get("new") and phone["header"] == "Phone check"
-    ask = webtest_export.columns_view(folder, webtest.load(folder), "sample", ask=True)
-    assert ask["type"] == "review-table" and len(ask["lines"]) == 8 and ask["digest"]
-
-
-def test_review_ask_id_changes_with_the_table(root, sample):
-    """An answered ask id hands back its old answer, so a changed table must be asked under a new id."""
-    from testign.console import jobs  # noqa: PLC0415
-
-    server = FakeConsole()
-    run_id = build(root, server, confirm=False)
-    folder = webtest.find_run(root, run_id)
-    first = webtest_export.columns_view(folder, webtest.load(folder), "sample", ask=True)
-    again = webtest_export.columns_view(folder, webtest.load(folder), "sample", ask=True)
-    assert first["id"] == again["id"] and jobs.validate_ask(first)["id"] == first["id"]
-    webtest.triage(folder, {"r01": {"class": "choice", "runner": "tester"}})
-    changed = webtest_export.columns_view(folder, webtest.load(folder), "sample", ask=True)
-    assert changed["id"] != first["id"]
 
 
 @pytest.mark.parametrize("columns,message", [
@@ -274,6 +255,9 @@ def test_the_cover_takes_the_run_and_no_placeholder_is_left(root, sample):
 
 def test_without_ticket_or_tester_the_placeholders_are_cleared(root, sample):
     folder = finished_run(root, FakeConsole())
+    run = webtest.load(folder)
+    run["tester"] = None  # a legacy run made before testers were stored
+    webtest.save(folder, run)
     cells = cell_texts(webtest_export.export(folder, webtest.load(folder))["workbook"])
     assert ("表紙", "C5") not in cells and ("表紙", "C6") not in cells and ("テストケース", "B2") not in cells
 
@@ -325,7 +309,7 @@ def test_runs_without_captures_export_without_links(root, sample):
 @pytest.mark.parametrize("capture", [r"\\server\share\x.png", "source/../../x.png", "evidence/r01-a1-1.png",
                                      "C:/x.png", "source/r01.gif"])
 def test_a_capture_outside_the_source_folder_fails_the_load(root, capture):
-    folder = webtest.find_run(root, build(root, FakeConsole(), confirm=False))
+    folder = webtest.find_run(root, build(root, FakeConsole()))
     run = webtest.load(folder)
     run["cases"][0]["capture"] = capture
     with pytest.raises(WebtestError, match="capture"):

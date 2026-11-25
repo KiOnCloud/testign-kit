@@ -1,6 +1,8 @@
 """Web test runs in the console: read routes, the tester's answers and results, images, finish.
 
-Runs live in ``<output_dir>/webtest/<run-id>/`` and are written by the CLI only. The tester's
+Runs live in ``<output_dir>/webtest/<run-id>/``. The CLI writes them while a job runs; the server
+writes ``run.json`` only to create a run from a suite (``suite_api``) and to change its export
+columns while no job is working on it (``put_columns``). The tester's
 decisions live in ``~/.testign-kit/webtest/runs/<run-id>/answers.json`` (owner-only), written by
 this module only::
 
@@ -16,18 +18,21 @@ Run ids and file names from a request are matched against a pattern and resolved
 
 from __future__ import annotations
 
+import contextlib
 import json
 import secrets
+import threading
 import time
 from pathlib import Path
 from typing import Any
 
-from .. import config, fsutil, login_scenarios, webtest
+from .. import config, fsutil, login_scenarios, templates, webtest, webtest_export
 from .server import ApiError, Response
 
 ANSWER_CAP = 2000
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 _cache: dict[str, tuple[tuple, int]] = {}
+COLUMNS_LOCK = threading.Lock()
 
 
 def now_iso() -> str:
@@ -150,7 +155,8 @@ def _summary(run_id: str, folder: Path) -> dict:
     except webtest.WebtestError:
         return {"id": run_id, "readable": False}
     return {"id": run_id, "readable": True, "name": run.get("name"), "created_at": run.get("created_at"),
-            "source": run.get("source"), "project": run.get("project"), "ticket": run.get("ticket"),
+            "source": run.get("source"), "suite": run.get("suite"), "base_url": run.get("base_url"),
+            "tester": run.get("tester"), "project": run.get("project"), "ticket": run.get("ticket"),
             "confirmed": bool(run.get("confirmed")), "closed": run.get("closed"), "halted": bool(run.get("halted")),
             "counts": webtest.counts(run), "open": webtest.open_rows(run),
             "exports": [{k: e.get(k) for k in ("at", "workbook", "report")} for e in run.get("exports") or []]}
@@ -192,7 +198,7 @@ def run_view(state, run_id: Any, session: str | None = None) -> dict:
             jobs = [bridge.summary(j) for j in sorted(bridge.jobs.values(), key=lambda j: j["created_at"],
                                                       reverse=True) if j.get("run") == run["id"]]
             can_act = tab_can_answer(bridge.run_cutoff(run["id"]), state.session_created(session))
-    keep = ("id", "name", "created_at", "source", "base_url", "project", "hosts", "template", "ticket",
+    keep = ("id", "name", "created_at", "source", "suite", "tester", "base_url", "project", "hosts", "template", "ticket",
             "report_lang", "confirmed", "columns", "signed_in", "halted", "closed", "exports", "import")
     return {**{k: run.get(k) for k in keep}, "counts": webtest.counts(run), "open": webtest.open_rows(run),
             "cases": cases, "jobs": jobs, "finish": answers["finish"], "can_act": can_act,
@@ -319,6 +325,42 @@ def finish(state, run_id: Any, session: str | None) -> dict:
 
 
 # agent reads ---------------------------------------------------------------------------------------
+def columns(state, run_id: Any) -> dict:
+    """The run's export columns, with the headers of its template for the editor on the run page."""
+    folder = run_folder(state, run_id)
+    run = load_run(folder)
+    plan = run.get("columns")
+    if not plan:
+        raise ApiError(409, "conflict", "this run has no export columns yet")
+    try:
+        facts = webtest_export.sheet_facts(webtest_export._entry(plan.get("template") or run.get("template"),
+                                                                 state.home))
+    except webtest.WebtestError as exc:
+        raise ApiError(409, "conflict", str(exc)) from None
+    return {"plan": plan, "headers": facts["headers"], "last_column": webtest_export._letter(max(facts["last"], 1)),
+            "fields": list(webtest_export.CASE_FIELDS),
+            "templates": [t["name"] for t in templates.list_templates(state.home)["templates"]
+                          if templates.purpose_of(t) == "webtest"]}
+
+
+def put_columns(state, run_id: Any, body: Any) -> dict:
+    """Replace the export columns (and verdict labels) of a run; refused while a job works on it."""
+    folder = run_folder(state, run_id)
+    bridge = getattr(state, "bridge", None)
+    # The job queue stays locked through the write, so no job can be queued or claimed in between.
+    with COLUMNS_LOCK, (bridge.cond if bridge is not None else contextlib.nullcontext()):
+        if bridge is not None and any(j.get("run") == folder.name and j["state"] in ("queued", "offered", "running", "needs-input")
+                                      for j in bridge.jobs.values()):
+            raise ApiError(409, "run-busy", "a job is working on this run; change the columns when it ends")
+        run = load_run(folder)
+        try:
+            run["columns"] = webtest_export.replace_plan(run, body, state.home)
+            webtest.save(folder, run)
+        except webtest.WebtestError as exc:
+            raise ApiError(400, "bad-columns", str(exc)) from None
+    return {"ok": True, "plan": run["columns"]}
+
+
 def _pending(state, run_id: str) -> dict:
     answers = read_answers(state.home, run_id)
     done = set(answers["applied"])
@@ -394,5 +436,7 @@ def install(state) -> None:
           lambda q: upload_image(state, q.params["run"], q.body, q.session), body="binary",
           max_body=webtest.IMAGE_CAP + 1)
     r.add("POST", "/api/webtest/runs/:run/finish", "browser", lambda q: finish(state, q.params["run"], q.session))
+    r.add("GET", "/api/webtest/runs/:run/columns", "browser", lambda q: columns(state, q.params["run"]))
+    r.add("PUT", "/api/webtest/runs/:run/columns", "browser", lambda q: put_columns(state, q.params["run"], q.body))
     r.add("POST", "/agent/webtest/runs/:run/pending", "agent", held(lambda q: pending(state, q.params["run"], q.body)))
     r.add("POST", "/agent/webtest/runs/:run/applied", "agent", lambda q: applied(state, q.params["run"], q.body))

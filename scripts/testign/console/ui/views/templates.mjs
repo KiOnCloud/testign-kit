@@ -2,10 +2,10 @@
 // one (upload, check the detected layout, adjust, name), set the default, remove one.
 
 import { ApiError, UPLOAD_CAP } from '../api.mjs';
-import { h, icon, mount } from '../dom.mjs';
+import { h, icon, mount, statusIcon } from '../dom.mjs';
 import { isoDate, NONE } from '../format.mjs';
 import {
-  badge, emptyState, errorState, errorText, loading, openDialog, pageHead, spacer, topbarTitle,
+  badge, breadcrumb, emptyState, errorState, errorText, loading, openDialog, pageHead, pushEscape, tableBox, ybadge,
 } from './shell.mjs';
 
 export const ROLES = ['no', 'item', 'steps', 'expected', 'evidence', 'trace'];
@@ -91,101 +91,108 @@ export function grid(t, preview, roles, { upload = false, purpose = 'testcase' }
 
 export function render(ctx) {
   const { t } = ctx;
-  const body = h('div.page');
-  mount(ctx.view, body);
-  ctx.topbar(topbarTitle(t('nav_templates')), spacer(),
-    h('span.k-note.break', [t('tpl_stored_in'), ' ', h('code.k-mono', '~/.testign-kit/templates/')]));
-  const registerBtn = h('button.k-btn.k-btn--primary', { type: 'button', on: { click: () => openRegister(ctx) } },
+  ctx.topbar(breadcrumb(t, [{ label: t('nav_group_config') }, { label: t('nav_templates') }]));
+  const registerBtn = h('button.yh-btn.yh-btn--primary', { type: 'button', dataset: { register: '1' }, on: { click: () => openRegister(ctx) } },
     [icon('plus'), t('tpl_register')]);
-  const head = pageHead(t('tpl_title'), t('tpl_subtitle'), [registerBtn]);
-  mount(body, head, loading(t, 3));
+  const head = pageHead(t('tpl_title'), t('tpl_subtitle'), [registerBtn],
+    [h('span.yh-caption.yh-muted.break', [t('tpl_stored_in'), ' ', h('code.mono', '~/.testign-kit/templates/')])]);
+  mount(ctx.view, head, loading(t, 3));
 
   ctx.memo('templates', () => ctx.api.templates()).then((data) => {
     if (!ctx.alive()) return;
     ctx.setCount('templates', data.templates.length);
-    draw(ctx, body, head, data);
+    draw(ctx, head, data);
   }, (err) => {
     if (!ctx.alive()) return;
-    mount(body, head, errorState(t, err, () => ctx.refresh()));
+    mount(ctx.view, head, errorState(t, err, () => ctx.refresh()));
     ctx.ready();
   });
 }
 
-function draw(ctx, body, head, data) {
+function draw(ctx, head, data) {
   const { t } = ctx;
   const list = data.templates || [];
   if (!list.length) {
-    mount(body, head, emptyState(t('tpl_empty_title'), t('tpl_empty_body')));
+    mount(ctx.view, head, emptyState(t('tpl_empty_title'), t('tpl_empty_body')));
     ctx.ready();
     return;
   }
   if (!list.some((x) => x.name === selectedName)) selectedName = data.default || list[0].name;
-  const listBox = h('div.k-list', { role: 'listbox', 'aria-label': t('tpl_title') });
-  const detail = h('div.split-panel-wide');
+  const tableHolder = h('div');
+  const detail = h('div');
+  let popEscape = null;
 
   function drawList() {
-    mount(listBox, list.map((x) => {
+    const rows = list.map((x) => {
       const cols = Object.keys(x.columns || {}).length;
-      return h('div.k-list-item.tpl-item', {
-        role: 'option', tabindex: '0', 'aria-selected': x.name === selectedName ? 'true' : 'false',
-        class: x.name === selectedName ? 'is-selected' : '', dataset: { template: x.name },
+      return h('tr.click', {
+        tabindex: '0', 'aria-selected': x.name === selectedName ? 'true' : 'false',
+        class: x.name === selectedName ? 'is-sel' : '', dataset: { template: x.name },
         on: {
           click: () => pick(x.name),
-          keydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(x.name); } },
+          keydown: (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); pick(x.name); } },
         },
       }, [
-        h('div.row-8', [
-          h('span.tpl-name', x.name),
-          x.default ? badge(t('templates_default'), 'accent') : null,
-          badge(t(`tpl_purpose_${x.purpose || 'testcase'}`), x.purpose === 'webtest' ? 'info' : 'outline'),
-          h('span.k-note.push-right.num', isoDate(x.registered_at)),
-        ]),
-        h('span.k-note', [x.source_name || x.file || '', ' · ', x.sheet || NONE, ' · ',
-          t('tpl_header_row', { n: x.header_row ?? NONE }), ' · ', t('tpl_columns', { n: cols })]),
+        h('td', [h('strong', x.name), h('span.sub', x.source_name || x.file || NONE)]),
+        h('td', ybadge(t(`tpl_purpose_${x.purpose || 'testcase'}`), x.purpose === 'webtest' ? '' : 'outline')),
+        h('td', [h('span', x.sheet || NONE), h('span.sub', `${t('tpl_header_row', { n: x.header_row ?? NONE })} · ${t('tpl_columns', { n: cols })}`)]),
+        h('td', x.default ? statusIcon('ok', 'check', t('templates_default')) : h('span.yh-muted', NONE)),
+        h('td.yh-num.yh-muted', isoDate(x.registered_at)),
       ]);
-    }));
+    });
+    mount(tableHolder, tableBox([h('th', t('tpl_col_name')), h('th', t('tpl_purpose')), h('th', t('tpl_col_sheet')),
+      h('th', t('templates_default')), h('th', t('tpl_registered'))], rows));
   }
 
   function pick(name) {
-    selectedName = name;
-    drawList();
-    drawDetail();
+    selectedName = selectedName === name ? null : name;
+    drawAll();
   }
 
   function drawDetail() {
     const x = list.find((y) => y.name === selectedName);
     if (!x) { mount(detail); return; }
-    const previewBox = h('div.stack-8', loading(t, 3));
-    mount(detail, h('aside.k-split__panel.split-panel-inner', { 'aria-label': x.name }, [
-      h('div.k-split__panel-head.panel-head-wrap', [
-        h('span', x.name),
-        h('div.row-4.push-right', [
-          h('button.k-btn.k-btn--ghost.k-btn--sm', { type: 'button', disabled: Boolean(x.default), on: { click: () => setDefault(ctx, x.name) } }, t('tpl_set_default')),
-          h('button.k-btn.k-btn--danger.k-btn--sm', { type: 'button', on: { click: () => confirmRemove(ctx, x.name) } }, t('tpl_remove')),
-        ]),
+    const previewBox = h('div.yh-stack', loading(t, 3));
+    mount(detail, h('section.panel.sticky', { 'aria-labelledby': 'tpl-panel-title', dataset: { templatePanel: x.name } }, [
+      h('div.panel-head', [
+        h('h2.yh-h3.m-0', { id: 'tpl-panel-title' }, x.name),
+        h('button.yh-tool', { type: 'button', 'aria-label': t('close'), on: { click: () => pick(x.name) } }, icon('close')),
       ]),
-      h('dl.k-props', [
-        h('dt', t('tpl_purpose')), h('dd', h('span.k-chip', t(`tpl_purpose_${x.purpose || 'testcase'}`))),
-        h('dt', t('tpl_source')), h('dd', h('span.k-chip.chip-wrap', x.source_name || NONE)),
-        h('dt', t('tpl_stored')), h('dd', h('span.k-chip.chip-wrap', h('code.k-mono', x.file || NONE))),
-        h('dt', t('tpl_sheet')), h('dd', h('span.k-chip.chip-wrap', x.sheet || NONE)),
-        h('dt', t('tpl_header')), h('dd', h('span.k-chip', t('tpl_header_row', { n: x.header_row ?? NONE }))),
-        h('dt', t('tpl_registered')), h('dd', h('span.k-chip.num', isoDate(x.registered_at))),
-        h('dt', t('tpl_roles')), h('dd', h('span.k-chip.chip-wrap', ROLES.filter((r) => (x.columns || {})[r])
-          .map((r) => `${r} ${x.columns[r]}`).join(' · ') || NONE)),
+      h('dl.kv', [
+        h('dt', t('tpl_purpose')), h('dd', t(`tpl_purpose_${x.purpose || 'testcase'}`)),
+        h('dt', t('tpl_source')), h('dd.break', x.source_name || NONE),
+        h('dt', t('tpl_stored')), h('dd.mono.break', x.file || NONE),
+        h('dt', t('tpl_sheet')), h('dd', x.sheet || NONE),
+        h('dt', t('tpl_header')), h('dd', t('tpl_header_row', { n: x.header_row ?? NONE })),
+        h('dt', t('tpl_registered')), h('dd.yh-num', isoDate(x.registered_at)),
+        h('dt', t('tpl_roles')), h('dd.break', ROLES.filter((r) => (x.columns || {})[r]).map((r) => `${r} ${x.columns[r]}`).join(' · ') || NONE),
       ]),
-      h('div.panel-body', [h('span.k-section-label', t('tpl_layout')), previewBox, h('p.k-note', t('tpl_legend'))]),
+      h('h3.yh-h3.m-0', t('tpl_layout')), previewBox, h('p.yh-caption.yh-muted.m-0', t('tpl_legend')),
+      h('div.foot', [
+        h('button.yh-btn.yh-btn--ghost.yh-btn--destructive.yh-btn--sm', { type: 'button', on: { click: () => confirmRemove(ctx, x.name) } },
+          [icon('trash'), t('tpl_remove')]),
+        h('span.push'),
+        h('button.yh-btn.yh-btn--sm', { type: 'button', disabled: Boolean(x.default), on: { click: () => setDefault(ctx, x.name) } }, t('tpl_set_default')),
+      ]),
     ]));
     ctx.memo(`preview:${x.name}`, () => ctx.api.templatePreview(x.name)).then((p) => {
-      if (ctx.alive() && selectedName === x.name) mount(previewBox, grid(t, p, x.columns, { purpose: x.purpose }));
+      if (ctx.alive() && selectedName === x.name) mount(previewBox, h('div.tbl-scroll', grid(t, p, x.columns, { purpose: x.purpose })));
     }, (err) => {
       if (ctx.alive() && selectedName === x.name) mount(previewBox, errorState(t, err));
     });
   }
 
-  mount(body, head, h('div.k-split.split-flex', [h('div.k-split__main.split-main-narrow', listBox), detail]));
-  drawList();
-  drawDetail();
+  function drawAll() {
+    if (popEscape) { popEscape(); popEscape = null; }
+    const selected = list.some((x) => x.name === selectedName);
+    if (selected) popEscape = pushEscape(() => pick(selectedName));
+    mount(ctx.view, head, h('div.split', { class: selected ? '' : 'split--single' }, [tableHolder, selected ? detail : null]),
+      h('p.yh-caption.yh-muted.m-0', t('tpl_note')));
+    drawList();
+    drawDetail();
+  }
+
+  drawAll();
   ctx.ready();
 }
 
@@ -207,7 +214,7 @@ function setDefault(ctx, name) {
 function confirmRemove(ctx, name) {
   const { t } = ctx;
   let dlg = null;
-  const removeBtn = h('button.k-btn.k-btn--danger', {
+  const removeBtn = h('button.yh-btn.yh-btn--destructive', {
     type: 'button',
     on: {
       click: () => {
@@ -223,7 +230,7 @@ function confirmRemove(ctx, name) {
       },
     },
   }, t('tpl_remove'));
-  const cancelBtn = h('button.k-btn.k-btn--ghost', { type: 'button', on: { click: () => dlg.close() } }, t('cancel'));
+  const cancelBtn = h('button.yh-btn', { type: 'button', on: { click: () => dlg.close() } }, t('cancel'));
   dlg = openDialog({
     t, title: t('tpl_remove_title', { name }),
     body: h('p', t('tpl_remove_body', { name })),
@@ -255,8 +262,8 @@ function openRegister(ctx) {
   const makeDefault = h('input', { type: 'checkbox' });
   const replace = h('input', { type: 'checkbox' });
   const layoutBox = h('div.stack-16');
-  const registerBtn = h('button.k-btn.k-btn--primary', { type: 'button', disabled: true, on: { click: submit } }, t('tpl_register_submit'));
-  const cancelBtn = h('button.k-btn.k-btn--ghost', { type: 'button', on: { click: () => dlg.close() } }, t('cancel'));
+  const registerBtn = h('button.yh-btn.yh-btn--primary', { type: 'button', disabled: true, on: { click: submit } }, t('tpl_register_submit'));
+  const cancelBtn = h('button.yh-btn', { type: 'button', on: { click: () => dlg.close() } }, t('cancel'));
 
   function showError(message) {
     mount(errorBox, message ? h('p.k-field__error', [icon('warning'), message]) : null);
@@ -299,7 +306,7 @@ function openRegister(ctx) {
       id: 'tpl-sheet', on: { change: (e) => adjust({ sheet: e.target.value }) },
     }, (resp.sheets || []).map((name) => h('option', { value: name, selected: name === s.sheet }, name)));
     const rowInput = h('input.k-input.row-input', { type: 'number', min: '1', step: '1', id: 'tpl-row', value: s.headerRow ? String(s.headerRow) : '' });
-    const applyBtn = h('button.k-btn.k-btn--secondary', {
+    const applyBtn = h('button.yh-btn', {
       type: 'button',
       on: {
         click: () => {

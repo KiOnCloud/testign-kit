@@ -1,0 +1,369 @@
+{
+  "version": 1,
+  "id": "W20261119-1000-header-update",
+  "name": "Header update",
+  "created_at": "2026-11-25T16:32:28+09:00",
+  "source": {
+    "kind": "figma",
+    "url": "https://www.figma.com/design/FILEKEY/x?node-id=1-1",
+    "file": "FILEKEY",
+    "node": "1:1"
+  },
+  "base_url": "https://dev.example.test/",
+  "project": "demo",
+  "hosts": [
+    "dev.example.test"
+  ],
+  "template": "sample",
+  "ticket": null,
+  "report_lang": "en",
+  "ui_lang": "en",
+  "plan_job": "j-plan",
+  "jobs": {
+    "current": "j-plan",
+    "session": "s-test0001"
+  },
+  "signed_in": null,
+  "import": {
+    "staged": [
+      "r01",
+      "r02",
+      "r03",
+      "r04",
+      "r05",
+      "r06",
+      "r07",
+      "r08"
+    ],
+    "complete": true,
+    "completed_at": "2026-11-25T16:32:28+09:00"
+  },
+  "digest": "af769d120358ce63df2a07b768d587d34afdf5580f0a0b971f88da2e379fe750",
+  "confirmed": {
+    "at": "2026-11-19T10:05:00+09:00",
+    "by": "fp-tester",
+    "job": "j-plan"
+  },
+  "columns": {
+    "columns": [
+      {
+        "field": "no",
+        "letter": "A"
+      },
+      {
+        "field": "content",
+        "letter": "B"
+      },
+      {
+        "field": "target_node",
+        "letter": "D"
+      },
+      {
+        "field": "verdict",
+        "letter": "F"
+      }
+    ],
+    "verdict_labels": {
+      "pass": "OK",
+      "fail": "NG"
+    },
+    "template": "sample"
+  },
+  "cases": [
+    {
+      "row": "r01",
+      "source": {
+        "file": "FILEKEY",
+        "kind": "figma",
+        "no": "1",
+        "row_node": "1:2",
+        "table_node": "1:1",
+        "target_node": "I10:1;2:3"
+      },
+      "type": "Modified",
+      "content": "予約確認 → 予約履歴 on the header link",
+      "creator": "designer_a",
+      "capture": "source/r01.png",
+      "screen": {
+        "url": "/mypage",
+        "name": "My Page",
+        "confidence": "high"
+      },
+      "viewport": "pc",
+      "kind": "label",
+      "class": "sure",
+      "reason": "text change on a visible link",
+      "scenario": "member",
+      "runner": "agent",
+      "preconditions": "",
+      "steps": "1. Open My Page",
+      "expected": "The header link reads 予約履歴",
+      "state": "queued",
+      "attempt": 0,
+      "owner_job": null,
+      "question": null,
+      "questions": [],
+      "decided_by": null,
+      "result": null,
+      "evidence": [],
+      "mobile_method": null
+    },
+    {
+      "row": "r02",
+      "source": {
+        "file": "FILEKEY",
+        "kind": "figma",
+        "no": "2",
+        "table_node": "1:1"
+      },
+      "type": "Added",
+      "content": "A help link is added to the footer",
+      "creator": "designer_a",
+      "capture": null,
+      "screen": {
+        "url": "/",
+        "name": "Top",
+        "confidence": "low"
+      },
+      "viewport": "pc",
+      "kind": "element",
+      "class": "sure",
+      "reason": "a link is added",
+      "scenario": "none",
+      "runner": "agent",
+      "preconditions": "",
+      "steps": "1. Open the top page",
+      "expected": "The footer has a help link",
+      "state": "queued",
+      "attempt": 0,
+      "owner_job": null,
+      "question": null,
+      "questions": [],
+      "decided_by": null,
+      "result": null,
+      "evidence": [],
+      "mobile_method": null
+    },
+    {
+      "row": "r03",
+      "source": {
+        "file": "FILEKEY",
+        "kind": "figma",
+        "no": "3",
+        "table_node": "1:1"
+      },
+      "type": "Modified",
+      "content": "New logo in the header",
+      "creator": "designer_b",
+      "capture": null,
+      "screen": {
+        "url": "/mypage",
+        "name": "My Page",
+        "confidence": "high"
+      },
+      "viewport": "pc",
+      "kind": "visual",
+      "class": "sure",
+      "reason": "logo compared with the capture",
+      "scenario": "member",
+      "runner": "agent",
+      "preconditions": "",
+      "steps": "1. Open My Page",
+      "expected": "The header logo matches the capture",
+      "state": "queued",
+      "attempt": 0,
+      "owner_job": null,
+      "question": null,
+      "questions": [],
+      "decided_by": null,
+      "result": null,
+      "evidence": [],
+      "mobile_method": null
+    },
+    {
+      "row": "r04",
+      "source": {
+        "file": "FILEKEY",
+        "kind": "figma",
+        "no": "4",
+        "table_node": "1:1"
+      },
+      "type": "Modified",
+      "content": "The news list opens in a new tab",
+      "creator": "designer_b",
+      "capture": null,
+      "screen": {
+        "url": "/news",
+        "name": "News",
+        "confidence": "low"
+      },
+      "viewport": "pc",
+      "kind": "behaviour",
+      "class": "sure",
+      "reason": "navigation, no data written",
+      "scenario": "member",
+      "runner": "agent",
+      "preconditions": "",
+      "steps": "1. Open News\n2. Click the first item",
+      "expected": "The item opens in a new tab",
+      "state": "queued",
+      "attempt": 0,
+      "owner_job": null,
+      "question": null,
+      "questions": [],
+      "decided_by": null,
+      "result": null,
+      "evidence": [],
+      "mobile_method": null
+    },
+    {
+      "row": "r05",
+      "source": {
+        "file": "FILEKEY",
+        "kind": "figma",
+        "no": "5",
+        "table_node": "1:1"
+      },
+      "type": "Modified",
+      "content": "Cancel button shows only for reservations not yet confirmed",
+      "creator": "designer_a",
+      "capture": null,
+      "screen": {
+        "url": "/reservations",
+        "name": "Reservations",
+        "confidence": "low"
+      },
+      "viewport": "pc",
+      "kind": "data-rule",
+      "class": "choice",
+      "reason": "depends on a reservation's status",
+      "scenario": "member",
+      "runner": "none",
+      "preconditions": "",
+      "steps": "1. Open a confirmed reservation",
+      "expected": "No cancel button",
+      "state": "not-run",
+      "attempt": 0,
+      "owner_job": null,
+      "question": null,
+      "questions": [],
+      "decided_by": null,
+      "result": null,
+      "evidence": [],
+      "mobile_method": null,
+      "not_run_reason": "unanswered"
+    },
+    {
+      "row": "r06",
+      "source": {
+        "file": "FILEKEY",
+        "kind": "figma",
+        "no": "6",
+        "table_node": "1:1"
+      },
+      "type": "Modified",
+      "content": "Hero image fades in",
+      "creator": "designer_b",
+      "capture": null,
+      "screen": {
+        "url": "",
+        "name": "",
+        "confidence": "none"
+      },
+      "viewport": "pc",
+      "kind": "motion",
+      "class": "not-web",
+      "reason": "animation",
+      "scenario": null,
+      "runner": "none",
+      "preconditions": "",
+      "steps": "",
+      "expected": "",
+      "state": "manual",
+      "attempt": 0,
+      "owner_job": null,
+      "question": null,
+      "questions": [],
+      "decided_by": null,
+      "result": null,
+      "evidence": [],
+      "mobile_method": null
+    },
+    {
+      "row": "r07",
+      "source": {
+        "file": "FILEKEY",
+        "kind": "figma",
+        "no": "7",
+        "table_node": "1:1"
+      },
+      "type": "Added",
+      "content": "Button variant: ghost",
+      "creator": "designer_b",
+      "capture": null,
+      "screen": {
+        "url": "",
+        "name": "",
+        "confidence": "none"
+      },
+      "viewport": "pc",
+      "kind": "design-only",
+      "class": "not-web",
+      "reason": "component variant without a page",
+      "scenario": null,
+      "runner": "none",
+      "preconditions": "",
+      "steps": "",
+      "expected": "",
+      "state": "not-applicable",
+      "attempt": 0,
+      "owner_job": null,
+      "question": null,
+      "questions": [],
+      "decided_by": null,
+      "result": null,
+      "evidence": [],
+      "mobile_method": null
+    },
+    {
+      "row": "r08",
+      "source": {
+        "file": "FILEKEY",
+        "kind": "figma",
+        "no": "8",
+        "table_node": "1:1"
+      },
+      "type": "Modified",
+      "content": "Menu label 料金 → プラン",
+      "creator": "designer_a",
+      "capture": null,
+      "screen": {
+        "url": "/menu",
+        "name": "Menu",
+        "confidence": "low"
+      },
+      "viewport": "mobile",
+      "kind": "label",
+      "class": "sure",
+      "reason": "label replaced",
+      "scenario": "member",
+      "runner": "tester",
+      "preconditions": "",
+      "steps": "1. Open the menu",
+      "expected": "The menu reads プラン",
+      "state": "awaiting-tester",
+      "attempt": 0,
+      "owner_job": null,
+      "question": null,
+      "questions": [],
+      "decided_by": null,
+      "result": null,
+      "evidence": [],
+      "mobile_method": "device"
+    }
+  ],
+  "halted": false,
+  "requeues_in_a_row": 0,
+  "closed": null,
+  "exports": []
+}

@@ -1,0 +1,12 @@
+{
+  "content": "Cancel button shows only for reservations not yet confirmed",
+  "creator": "designer_a",
+  "row": "r05",
+  "source": {
+    "file": "FILEKEY",
+    "kind": "figma",
+    "no": "5",
+    "table_node": "1:1"
+  },
+  "type": "Modified"
+}

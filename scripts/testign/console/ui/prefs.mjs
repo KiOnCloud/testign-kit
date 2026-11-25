@@ -1,9 +1,13 @@
 // Per-viewer settings kept in localStorage. Storage can be missing or throw (private mode,
 // blocked storage); every read and write is guarded and falls back to the default.
 
-export const LANGS = ['vi', 'en', 'ja'];
+export const LANGS = ['en', 'ja'];
+export const DEFAULT_LANG = 'en';
 export const THEMES = ['light', 'dark'];
-const KEYS = { uiLang: 'testign.uiLang', theme: 'testign.theme', testerName: 'testign.testerName', lastRepo: 'testign.lastRepo' };
+const KEYS = {
+  uiLang: 'testign.uiLang', theme: 'testign.theme', testerName: 'testign.testerName', lastRepo: 'testign.lastRepo',
+  navGroups: 'testign.navGroups',
+};
 const NAME_MAX = 100;
 
 function storage() {
@@ -32,16 +36,20 @@ function write(key, value, store = storage()) {
   }
 }
 
-/** ja → ja, en → en, anything else → vi, from the first language the browser lists. */
+/** The first browser language the console speaks (ja or en) wins; otherwise English. */
 export function defaultLang(languages) {
   const list = Array.isArray(languages) ? languages : [];
   for (const raw of list) {
     const tag = String(raw || '').toLowerCase();
     if (tag === 'ja' || tag.startsWith('ja-')) return 'ja';
     if (tag === 'en' || tag.startsWith('en-')) return 'en';
-    if (tag === 'vi' || tag.startsWith('vi-')) return 'vi';
   }
-  return 'vi';
+  return DEFAULT_LANG;
+}
+
+/** A language the console speaks for `lang`: anything else, such as an old job's language, shows in English. */
+export function uiLang(lang) {
+  return LANGS.includes(lang) ? lang : DEFAULT_LANG;
 }
 
 function browserLanguages() {
@@ -90,4 +98,21 @@ export function getLastRepo(store) {
 
 export function setLastRepo(path, store) {
   return write(KEYS.lastRepo, String(path ?? '').trim().slice(0, 1000), store);
+}
+
+/** Which menu groups the tester closed: {groupId: false}. A group not listed is open. */
+export function getNavGroups(store) {
+  const saved = read(KEYS.navGroups, store);
+  try {
+    const data = JSON.parse(saved || '{}');
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
+    return Object.fromEntries(Object.entries(data).filter(([k, v]) => /^[a-z]{1,20}$/.test(k) && typeof v === 'boolean'));
+  } catch {
+    return {};
+  }
+}
+
+export function setNavGroup(id, open, store) {
+  if (!/^[a-z]{1,20}$/.test(String(id))) throw new RangeError(`unknown menu group ${id}`);
+  return write(KEYS.navGroups, JSON.stringify({ ...getNavGroups(store), [id]: Boolean(open) }), store);
 }

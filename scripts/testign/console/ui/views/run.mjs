@@ -1,18 +1,22 @@
-// One web test run: header with project, hosts, signed-in scenario and progress; the run's actions
-// (Run, Finish with open rows, Export); the review table or sign-in card while a job waits on them;
-// the rows table with a filter; and the row panel with its design capture, evidence, expected result,
-// the answer form of a parked row and the result form of a row the tester runs.
+// One web test run: header with its suite, hosts, tester and signed-in scenario; the run's actions
+// (Run, Finish with open rows, Export, the export columns); the sign-in card while a job waits on it;
+// progress with result icons; the rows table with a filter; and the row panel with its design
+// capture, evidence, expected result, the answer form of a parked row and the result form of a row
+// the tester runs.
 
 import { h, icon, mount } from '../dom.mjs';
 import { NONE, timeOrDay } from '../format.mjs';
 import { askBody } from '../markdown.mjs';
 import { href } from '../router.mjs';
 import { askTesterName, jobErrorText, queueJob, tooNewNotice } from './job-actions.mjs';
-import { signInCard } from './login.mjs';
-import { activeJob, classBadge, countStrip, fromChat, NEEDS_YOU, reviewJob, rowStateBadge } from './runs.mjs';
-import { mobileMethod } from './review-table.mjs';
+import { openColumnsEditor } from './columns.mjs';
+import { mobileMethod } from './mobile-method.mjs';
 import {
-  badge, banner, breadcrumb, emptyState, errorState, loading, openDialog, pageHead, pushEscape, radioGroup, spacer,
+  activeJob, classBadge, fromChat, NEEDS_YOU, resultIcons, rowStateBadge, rowStateIcon, rowStateLabel,
+} from './runs.mjs';
+import { signInCard } from './sign-in-card.mjs';
+import {
+  alertBox, badge, breadcrumb, emptyState, errorState, loading, openDialog, pageHead, pushEscape, segFilter, srcBadge, tableBox, ybadge,
 } from './shell.mjs';
 
 const PARK_ACTIONS = ['delegate', 'self-run', 'skip'];
@@ -62,12 +66,10 @@ let filter = 'all';
 export function render(ctx) {
   const { t, route } = ctx;
   const runId = route.params.run;
-  const body = h('div.page.page-wide');
-  mount(ctx.view, body);
-  const crumbs = (name) => ctx.topbar(breadcrumb(t, [{ label: t('nav_runs'), href: href(['runs']) }, { label: name || runId }]),
-    spacer());
+  const crumbs = (name) => ctx.topbar(breadcrumb(t, [{ label: t('nav_group_run') }, { label: t('nav_runs'), href: href(['runs']) },
+    { label: name || runId }]));
   crumbs(runId);
-  mount(body, loading(t, 5));
+  mount(ctx.view, loading(t, 5));
   let selected = route.query && route.query.row ? route.query.row : null;
   let lastKey = null;
   let popEscape = null;
@@ -84,7 +86,7 @@ export function render(ctx) {
     } catch (err) {
       if (!ctx.alive()) return;
       lastKey = null;
-      mount(body, errorState(t, err, () => ctx.refresh()));
+      mount(ctx.view, errorState(t, err, () => ctx.refresh()));
       ctx.ready();
       return;
     }
@@ -101,95 +103,93 @@ export function render(ctx) {
 
   function draw(run, signInJob, stale) {
     const active = activeJob(run.jobs);
-    const review = reviewJob(run.jobs);
     const runJob = (run.jobs || []).find((j) => j.kind === 'webtest-run' && j.state !== 'queued' && active === j) || null;
     const finished = Boolean(run.finish && run.finish.at && runJob && Date.parse(run.finish.at) >= Date.parse(runJob.created_at));
     const actions = [];
-    if (run.confirmed && !active && !run.closed) {
-      actions.push(h('button.k-btn.k-btn--primary.k-btn--sm', { type: 'button', dataset: { runAction: 'run' }, on: { click: () => queue('run') } },
-        [icon('play'), t('run_run')]));
+    if (run.confirmed && !active) {
+      actions.push(h('button.yh-btn', { type: 'button', dataset: { runAction: 'columns' },
+        on: { click: () => openColumnsEditor(ctx, run, () => { ctx.invalidate(`run:${runId}`); lastKey = null; load(); }) } },
+      [icon('columns'), t('run_columns')]));
+      actions.push(h('button.yh-btn', { type: 'button', dataset: { runAction: 'export' }, on: { click: () => queue('export') } },
+        [icon('download'), t('run_export')]));
     }
     if (runJob && run.open > 0 && !finished && run.can_act !== false) {
-      actions.push(h('button.k-btn.k-btn--secondary.k-btn--sm', { type: 'button', dataset: { runAction: 'finish' }, on: { click: () => finishRun(run) } },
+      actions.push(h('button.yh-btn', { type: 'button', dataset: { runAction: 'finish' }, on: { click: () => finishRun(run) } },
         t('run_finish')));
     }
-    if (run.confirmed && !active) {
-      actions.push(h('button.k-btn.k-btn--secondary.k-btn--sm', { type: 'button', dataset: { runAction: 'export' }, on: { click: () => queue('export') } },
-        t('run_export')));
+    if (run.confirmed && !active && !run.closed) {
+      actions.push(h('button.yh-btn.yh-btn--primary', { type: 'button', dataset: { runAction: 'run' }, on: { click: () => queue('run') } },
+        [icon('play'), t('run_run')]));
     }
     const { done, total } = progressOf(run.cases);
     const signed = run.signed_in && run.signed_in.scenario ? run.signed_in.scenario : null;
-    const head = pageHead(run.name || run.id, null, actions);
-    const meta = h('div.run-meta', [
-      h('dl.k-props.run-props', [
-        h('dt', t('run_project')), h('dd', run.project || NONE),
-        h('dt', t('run_hosts')), h('dd', h('code.k-mono.break', (run.hosts || []).join(', ') || NONE)),
-        h('dt', t('run_signed_as')), h('dd', signed || NONE),
-        h('dt', t('run_template')), h('dd', run.template || NONE),
-        run.ticket ? h('dt', t('run_ticket')) : null, run.ticket ? h('dd', run.ticket) : null,
-      ]),
-      h('div.stack-4.run-progress-box', [
-        h('div.row-8', [h('span.k-section-label', t('run_progress')), h('span.k-note.num.push-right', `${done} / ${total}`)]),
-        h('progress.run-progress', { value: String(done), max: String(Math.max(total, 1)), 'aria-label': t('run_progress') }),
-        h('div.scroll-x', countStrip(t, run.counts, run.cases)),
-      ]),
+    const suite = run.suite;
+    const head = pageHead(run.name || run.id, null, actions, [
+      srcBadge(t, (run.source || {}).kind),
+      suite && suite.id ? h('a.lnk', { href: href(['suites', suite.id]) }, suite.name || suite.id) : h('span.yh-muted', t('runs_legacy')),
+      h('span', '·'), h('span.mono', (run.hosts || []).join(', ') || NONE),
+      run.tester ? [h('span', '·'), h('span', run.tester)] : null,
+      signed ? ybadge(t('run_signed_in_as', { name: signed }), 'outline') : null,
+    ]);
+    const meta = h('dl.kv.run-kv', [
+      h('dt', t('run_project')), h('dd', run.project || NONE),
+      h('dt', t('run_base')), h('dd.mono.break', run.base_url || NONE),
+      h('dt', t('run_template')), h('dd', run.template || NONE),
+      run.ticket ? h('dt', t('run_ticket')) : null, run.ticket ? h('dd', run.ticket) : null,
     ]);
     const notices = [];
     if (run.can_act === false && active) notices.push(tooNewNotice(t));
-    if (stale) notices.push(banner('warning', t('run_stale_title'), t('run_stale_body')));
-    if (!run.confirmed && !review) notices.push(banner('info', t('run_not_confirmed'), t('run_not_confirmed_body')));
-    if (review) {
-      notices.push(h('div.k-banner.k-banner--info', { role: 'status' }, [icon('info'),
-        h('div.k-banner__text', [h('strong', t('run_review_waiting')), h('span', t('run_review_waiting_body'))]),
-        h('a.k-btn.k-btn--primary.k-btn--sm', { href: href(['jobs', review.id, 'review-table']), dataset: { openReviewTable: review.id } },
-          t('runs_open_review'))]));
-    }
-    if (active && fromChat(active)) notices.push(banner('info', t('runs_from_chat'), t('run_from_chat_body')));
-    if (run.halted) notices.push(banner('warning', t('run_halted'), t('run_halted_body')));
+    if (stale) notices.push(alertBox('warning', 'warning', t('run_stale_title'), t('run_stale_body')));
+    if (!run.confirmed) notices.push(alertBox('', 'info', t('run_not_confirmed'), t('run_not_confirmed_body')));
+    if (active && fromChat(active)) notices.push(alertBox('', 'info', t('runs_from_chat'), t('run_from_chat_body')));
+    if (run.halted) notices.push(alertBox('warning', 'warning', t('run_halted'), t('run_halted_body')));
     if (signInJob && signInJob.state === 'needs-input' && signInJob.ask && signInJob.ask.type === 'sign-in') {
       notices.push(signInCard(ctx, signInJob));
     }
-    if (finished) notices.push(banner('info', t('run_finished'), t('run_finished_body')));
-    const exportsList = (run.exports || []).length ? h('div.stack-4', [h('span.k-section-label', t('run_exports')),
-      h('ul.plain-list', run.exports.slice().reverse().map((e) => h('li.k-note.break', [timeOrDay(e.at), ' · ',
-        h('code.k-mono', e.workbook || NONE), ' · ', h('code.k-mono', e.report || NONE)])))]) : null;
+    if (finished) notices.push(alertBox('', 'info', t('run_finished'), t('run_finished_body')));
+    if (run.closed) notices.push(alertBox('success', 'check', t('run_closed'), null));
+    const exportsList = (run.exports || []).length ? h('details.run-exports', [h('summary.yh-caption', t('run_exports')),
+      h('ul.plain-list', run.exports.slice().reverse().map((e) => h('li.yh-caption.break', [timeOrDay(e.at), ' · ',
+        h('code.mono', e.workbook || NONE), ' · ', h('code.mono', e.report || NONE)])))]) : null;
 
-    const tabs = radioGroup({
-      label: t('run_filter'), name: 'run-filter', value: filter,
-      options: [
-        { value: 'all', label: `${t('run_all')} ${(run.cases || []).length}` },
-        { value: 'needs', label: `${t('wt_count_needs_you')} ${filterCases(run.cases, 'needs').length}` },
-        { value: 'fail', label: `${t('wt_count_fail')} ${filterCases(run.cases, 'fail').length}` },
-      ],
-      onChange: (v) => { filter = v; lastKey = null; load(); },
-    });
+    const progress = h('div.toolbar.run-progress-bar', [
+      h('span.yh-caption', t('run_progress')),
+      h('progress.progress', { value: String(done), max: String(Math.max(total, 1)), 'aria-label': t('run_progress') }),
+      h('span.yh-num.yh-caption', `${done} / ${total}`),
+      resultIcons(t, run.counts, run.cases),
+    ]);
+    const chips = segFilter(t('run_filter'), [
+      { value: 'all', label: `${t('run_all')} ${(run.cases || []).length}` },
+      { value: 'needs', label: `${t('wt_count_needs_you')} ${filterCases(run.cases, 'needs').length}` },
+      { value: 'fail', label: `${t('wt_count_fail')} ${filterCases(run.cases, 'fail').length}` },
+    ], filter, (v) => { filter = v; lastKey = null; load(); });
     const shown = filterCases(run.cases, filter);
-    const table = shown.length ? h('div.k-table-wrap', h('div.scroll-x', h('table.k-table.tbl-run-rows', [
-      h('thead', h('tr', [h('th', '#'), h('th', t('run_col_content')), h('th', t('run_col_screen')), h('th', t('run_col_class')),
-        h('th', t('run_col_scenario')), h('th', t('run_col_state'))])),
-      h('tbody', shown.map((c) => h('tr.run-row', {
-        class: c.row === selected ? 'is-selected' : '', tabindex: '0', dataset: { row: c.row },
-        'aria-selected': c.row === selected ? 'true' : 'false',
-        on: {
-          click: () => select(c.row),
-          keydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(c.row); } },
-        },
-      }, [
-        h('td.k-id', c.row),
-        h('td.wrap-cell.run-content', c.content || NONE),
-        h('td.wrap-cell.run-screen', c.screen && c.screen.url ? h('code.k-mono.break', c.screen.url) : h('span.k-muted', t('run_no_screen'))),
-        h('td', classBadge(t, c.class)),
-        h('td', c.scenario || NONE),
-        h('td', [rowStateBadge(t, c.state, c.not_run_reason), c.answer || c.tester_result ? h('span.k-note.block', t('run_answer_pending')) : null]),
-      ]))),
+    const table = shown.length ? tableBox([h('th', '#'), h('th', t('run_col_content')), h('th', t('run_col_screen')),
+      h('th', t('run_col_class')), h('th', t('run_col_scenario')), h('th', t('run_col_state'))],
+    shown.map((c) => h('tr.click', {
+      class: c.row === selected ? 'is-sel' : '', tabindex: '0', dataset: { row: c.row },
+      'aria-selected': c.row === selected ? 'true' : 'false',
+      on: {
+        click: () => select(c.row),
+        keydown: (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); select(c.row); } },
+      },
+    }, [
+      h('td.id', c.row),
+      h('td.wrap', { lang: run.report_lang || undefined }, c.content || NONE),
+      h('td.mono.yh-muted', c.screen && c.screen.url ? c.screen.url : t('run_no_screen')),
+      h('td', classBadge(t, c.class)),
+      h('td.mono', c.scenario || NONE),
+      h('td', h('span.st-row', [rowStateIcon(t, c.state, c.not_run_reason),
+        h('span.yh-caption', rowStateLabel(t, c.state, c.not_run_reason)),
+        c.answer || c.tester_result ? h('span.yh-caption.yh-muted', t('run_answer_pending')) : null])),
     ]))) : emptyState(filter === 'all' ? t('run_no_rows') : t('run_no_rows_filter'));
     const current = (run.cases || []).find((c) => c.row === selected);
     if (popEscape) { popEscape(); popEscape = null; }
     if (current) popEscape = pushEscape(() => select(current.row));
-    mount(body, head, meta, notices.length ? h('div.stack-8', notices) : null, exportsList,
-      h('div.k-split.split-flex', [
-        h('div.k-split__main.split-main.stack-8', [h('div.k-toolbar.toolbar-wrap', h('div.k-toolbar__group', tabs)), table]),
-        current ? h('aside.k-split__panel.split-panel.run-panel', { 'aria-labelledby': 'run-row-title' }, rowPanel(ctx, run, current, () => {
+    mount(ctx.view, head, notices.length ? h('div.yh-stack', notices) : null, meta, exportsList, progress,
+      h('div.split', { class: current ? '' : 'split--single' }, [
+        h('div.yh-stack', [h('div.toolbar', chips), table]),
+        current ? h('section.panel.sticky.run-panel', { 'aria-labelledby': 'run-row-title' }, rowPanel(ctx, run, current, () => {
           ctx.invalidate(`run:${runId}`);
           lastKey = null;
           ctx.pollNow();
@@ -220,8 +220,8 @@ export function render(ctx) {
       t, title: t('run_finish_title'),
       body: h('p', t('run_finish_body', { n: run.open })),
       footer: [
-        h('button.k-btn.k-btn--ghost', { type: 'button', on: { click: () => dlg.close() } }, t('cancel')),
-        h('button.k-btn.k-btn--danger', {
+        h('button.yh-btn', { type: 'button', on: { click: () => dlg.close() } }, t('cancel')),
+        h('button.yh-btn.yh-btn--destructive', {
           type: 'button',
           on: {
             click: async () => {

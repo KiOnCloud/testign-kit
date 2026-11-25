@@ -1,8 +1,10 @@
-"""Browser test of the web test run screens (Playwright, Chromium). Runs only with TESTIGN_E2E=1.
+"""Browser test of the web test suite and run screens (Playwright, Chromium). Runs only with TESTIGN_E2E=1.
 
-The agent side is played in-process on the server's bridge: a project and its hosts saved on the
-Login screen, a plan job queued from the new-run form, the review table confirmed after one row is
-delegated with its preconditions, and a parked row answered on the Run screen.
+A project and its hosts are saved on the Projects & hosts screen, a manual suite is made in the new
+suite wizard, given one case and confirmed, and a run is started from it with the New run dialog.
+On the Run screen of runs made from the ready Figma suite of the fixture, with the agent side played
+in-process on the server's bridge, the tester signs in from the sign-in card, queues an export, and
+answers a parked row.
 """
 
 from __future__ import annotations
@@ -23,12 +25,17 @@ from console_helpers import InProcessServer  # noqa: E402
 from make_webtest_run import FakeConsole, build  # noqa: E402
 
 from testign import login_scenarios, webtest  # noqa: E402
-from testign.console import lifecycle, webtest_api  # noqa: E402
+from testign.console import lifecycle, suite_api, webtest_api  # noqa: E402
 from testign.console import server as srv  # noqa: E402
 
 AGENT = "s-e2ewebagent00001"
-FIGMA = "https://www.figma.com/design/AbCdEfGhIjKl/Shop?node-id=12-34"
 HOST = "dev.example.test"
+BASE_URL = f"https://{HOST}/"
+TESTER = "Tester A"
+MEMBER = {"name": "member", "label": "Member", "login_url": f"https://{HOST}/login",
+          "signout_url": f"https://{HOST}/logout", "steps": ["Open the login page", "Sign in as a member"],
+          "signed_in_check": {"url": f"https://{HOST}/mypage", "text": "My Page"},
+          "account_hint": "any member account on dev"}
 
 
 def make_state(home):
@@ -49,6 +56,18 @@ def console(demo_home):
 
 
 @pytest.fixture(scope="module")
+def runs_root(console):
+    return console.state.home / "Downloads" / "webtest"
+
+
+@pytest.fixture(scope="module")
+def figma_run(console, runs_root):
+    """The fixture's eight-row run, made from its ready Figma suite (built once: the suite id is fixed)."""
+    login_scenarios.save_project(console.state.home, "demo", [HOST])
+    return build(runs_root, FakeConsole(), when=datetime(2026, 11, 19, 12, 0))
+
+
+@pytest.fixture(scope="module")
 def browser():
     with sync_api.sync_playwright() as p:
         b = p.chromium.launch()
@@ -59,14 +78,14 @@ def browser():
 @pytest.fixture
 def page(browser, console):
     context = browser.new_context(viewport={"width": 1440, "height": 900}, locale="en-US")
-    context.add_init_script("localStorage.setItem('testign.uiLang', 'en'); localStorage.setItem('testign.testerName', 'Tester A')")
+    context.add_init_script(f"localStorage.setItem('testign.uiLang', 'en'); localStorage.setItem('testign.testerName', '{TESTER}')")
     pg = context.new_page()
     pg.problems = []
     pg.on("pageerror", lambda e: pg.problems.append(f"pageerror: {e}"))
     pg.on("console", lambda m: pg.problems.append(f"{m.type}: {m.text}")
           if m.type in ("error", "warning") and "status of 409" not in m.text else None)
     pg.goto(f"http://127.0.0.1:{console.port}/#c={console.state.mint_launch_code()}")
-    pg.wait_for_selector("#main[data-ready='tickets']")
+    pg.wait_for_selector("#main[data-ready='suites']")
     yield pg
     context.close()
 
@@ -77,6 +96,10 @@ def go(page, name, hash_):
         if (location.hash === h) window.dispatchEvent(new HashChangeEvent('hashchange')); else location.hash = h; }""",
         [hash_],
     )
+    page.wait_for_function("([n]) => document.getElementById('main') && document.getElementById('main').dataset.ready === n", arg=[name])
+
+
+def wait_ready(page, name):
     page.wait_for_function("([n]) => document.getElementById('main') && document.getElementById('main').dataset.ready === n", arg=[name])
 
 
@@ -107,85 +130,111 @@ def wait_for(fn, timeout=10.0):
     raise AssertionError("timed out")
 
 
-def test_project_hosts_and_new_run_form(page, console):
+def queued_run_job(bridge, run_id):
+    """The id of the queued webtest-run job of ``run_id``, or None."""
+    return next((j["id"] for j in bridge.list_jobs()
+                 if j["kind"] == "webtest-run" and j["run"] == run_id and j["state"] == "queued"), None)
+
+
+def test_project_suite_and_run_from_the_ui(page, console, runs_root):
     home = console.state.home
-    go(page, "login", "#/login")
-    page.fill("#login-project-name", "demo")
-    page.fill("#login-hosts", f"{HOST.upper()}\n")
-    page.click("[data-save-hosts]")
-    page.wait_for_selector("[data-project='demo'].is-selected")
+    bridge = console.state.bridge
+
+    go(page, "projects", "#/projects")
+    page.click("[data-new-project]")
+    page.fill("#project-name", "demo")
+    page.fill("#project-hosts", f"{HOST.upper()}\n")
+    page.click("[data-save-project]")
+    page.wait_for_selector("tr[data-project='demo']")
     assert login_scenarios.get_project(home, "demo")["hosts"] == [HOST]
 
-    go(page, "runs", "#/runs")
-    page.fill("#runform-figma_url", FIGMA)
-    page.select_option("#runform-project", "demo")
-    page.fill("#runform-base_url", f"https://{HOST}/")
-    page.fill("#runform-name", "Header update")
-    page.click(".run-form .k-btn--primary")
-    page.wait_for_function("() => location.hash.startsWith('#/jobs/')")
-    jid = page.evaluate("location.hash").split("/")[2]
-    job = console.state.bridge.get(jid)
-    assert job["kind"] == "webtest-plan" and job["params"]["project"] == "demo"
-    assert job["params"]["source"]["node"] == "12:34" and job["params"]["hosts"] == [HOST]
-    console.state.bridge.cancel(jid)
+    go(page, "suiteNew", "#/suites/new")
+    page.click("[data-src=manual]")
+    page.click("[data-wiz=next]")
+    page.wait_for_selector("#wiz-note")
+    page.click("[data-wiz=next]")
+    page.fill("#wiz-name", "Smoke")
+    page.select_option("#wiz-project", "demo")
+    page.click("[data-wiz=next]")
+    page.click("[data-wiz=done]")
+    page.wait_for_function("() => location.hash.startsWith('#/suites/S')")
+    suite_id = page.evaluate("location.hash").split("/")[2]
+    wait_ready(page, "suite")
+
+    page.click("[data-add-case]")
+    page.wait_for_selector("[data-case-form='new']")
+    page.fill("#case-content", "The header link reads 予約履歴")
+    page.select_option("#case-class", "sure")
+    page.select_option("#case-runner", "tester")
+    page.click("[data-case-save]")
+    page.wait_for_selector("tr[data-case='c1']")
+    page.click("[data-suite-action=confirm]")
+    page.wait_for_selector("[data-suite-action=new-run]:not([disabled])")
+
+    page.click("[data-suite-action=new-run]")
+    page.wait_for_selector("[data-new-run]")
+    assert page.input_value("#nr-suite") == suite_id
+    assert page.input_value("#nr-project") == "demo"
+    assert page.input_value("#nr-tester") == TESTER
+    page.fill("#nr-base_url", BASE_URL)
+    page.click("[data-new-run-submit]")
+    page.wait_for_function("() => location.hash.startsWith('#/runs/')")
+    run_id = page.evaluate("location.hash").split("/")[2]
+    wait_ready(page, "run")
+
+    run = webtest.load(webtest.find_run(runs_root, run_id))
+    assert run["suite"]["id"] == suite_id and run["hosts"] == [HOST] and run["tester"] == TESTER
+    jid = wait_for(lambda: queued_run_job(bridge, run_id))
+    assert bridge.get(jid)["params"]["mode"] == "run"
+    bridge.cancel(jid)
     assert not page.problems, page.problems
 
 
-def test_review_table_needs_preconditions_for_a_delegated_row(page, console):
+def test_run_screen_sign_in_card_and_export(page, console, runs_root, figma_run):
     home = console.state.home
     bridge = console.state.bridge
-    login_scenarios.save_project(home, "demo", [HOST])
-    run_id = build(home / "Downloads" / "webtest", FakeConsole(), confirm=False, when=datetime(2026, 11, 19, 11, 0))
-    jid = bridge.create({"kind": "webtest-plan", "ui_lang": "en", "name": "Header update", "figma_url": FIGMA,
-                         "base_url": f"https://{HOST}/", "project": "demo"})["id"]
+    suite_id = webtest.load(webtest.find_run(runs_root, figma_run))["suite"]["id"]
+    run_id = suite_api.create_run(console.state, {"suite": suite_id, "name": "Sign-in check", "base_url": BASE_URL,
+                                                  "project": "demo", "tester": TESTER}, None)["run"]
+    draft = login_scenarios.save_draft(home, "demo", MEMBER)
+    login_scenarios.approve(home, "demo", "member", draft["hash"], TESTER)
+
+    jid = bridge.create({"kind": "webtest-run", "ui_lang": "en", "run": run_id, "tester": TESTER})["id"]
     assert agent_take(bridge) == jid
-    bridge.attach_run(jid, AGENT, run_id)
-    ask = {"type": "review-table", "id": f"review-{run_id}", "run": run_id, "template": "mẫu",
-           "headers": {"A": "No", "B": "確認内容", "F": "結果"}, "last_column": "H",
-           "columns": [{"field": "content", "letter": "B"}, {"field": "verdict", "letter": "F"}],
-           "verdict_labels": {"pass": "OK", "fail": "NG"},
-           "samples": [{"row": "r01", "class": "sure", "cells": {"B": "Label reads 予約履歴"}}],
-           "lines": [{"row": "r01", "content": "label", "class": "sure", "runner": "agent", "scenario": "none",
-                      "viewport": "pc", "screen": "/mypage", "confidence": "high"},
-                     {"row": "r05", "content": "rule", "class": "choice", "runner": "tester", "scenario": "none",
-                      "viewport": "pc", "screen": "/reservations", "confidence": "low"}],
-           "digest": "d1"}
     out: dict = {}
-    t = threading.Thread(target=lambda: out.setdefault("r", bridge.ask(jid, AGENT, ask, 30)), daemon=True)
+    ask = {"type": "sign-in", "id": "signin-member", "scenario": "member"}
+    t = threading.Thread(target=lambda: out.setdefault("s", bridge.ask(jid, AGENT, ask, 30)), daemon=True)
     t.start()
     wait_for(lambda: bridge.get(jid)["state"] == "needs-input")
 
-    go(page, "reviewTable", f"#/jobs/{jid}/review-table")
-    page.wait_for_selector("[data-rt-row='r05']")
-    confirm = "[data-confirm-table]"
-    assert page.is_enabled(confirm)
-    page.select_option("#rt-runner-r05", "agent")
-    assert page.is_disabled(confirm)
-    page.fill("tr[data-rt-row='r05'] textarea", "booking #1042, Confirmed")
-    page.press("tr[data-rt-row='r05'] textarea", "Tab")
-    assert page.is_enabled(confirm)
-    page.click(confirm)
+    go(page, "run", f"#/runs/{run_id}")
+    card = "[data-sign-in-card='signin-member']"
+    page.wait_for_selector(card)
+    assert HOST in page.text_content(card)
+    page.click(f"{card} [data-sign-in=signed-in]")
     t.join(10)
-    answer = out["r"]["answers"]
-    assert answer["confirm"] is True
-    assert answer["rows"] == {"r05": {"runner": "agent", "preconditions": "booking #1042, Confirmed"}}
-    page.wait_for_function("([r]) => location.hash === '#/runs/' + r", arg=[run_id])
-    bridge.done(jid, AGENT, "done", "plan saved")
+    assert out["s"]["answers"]["choice"] == "signed-in"
+    page.wait_for_selector(card, state="detached")
+
+    # With no job working on the run, its actions come back: queue an export.
+    bridge.done(jid, AGENT, "failed", "stopped for the export check")
+    page.click("[data-run-action=export]")
+    export = wait_for(lambda: queued_run_job(bridge, run_id))
+    assert bridge.get(export)["params"]["mode"] == "export" and bridge.get(export)["params"]["tester"] == TESTER
+    bridge.cancel(export)
     assert not page.problems, page.problems
 
 
-def test_run_screen_answers_a_parked_row(page, console):
+def test_run_screen_answers_a_parked_row(page, console, runs_root, figma_run):
     home = console.state.home
     bridge = console.state.bridge
-    login_scenarios.save_project(home, "demo", [HOST])
-    run_id = build(home / "Downloads" / "webtest", FakeConsole(), when=datetime(2026, 11, 19, 12, 0))
-    jid = bridge.create({"kind": "webtest-run", "ui_lang": "en", "run": run_id, "tester": "Tester A"})["id"]
+    jid = bridge.create({"kind": "webtest-run", "ui_lang": "en", "run": figma_run, "tester": TESTER})["id"]
     assert agent_take(bridge) == jid
-    folder = webtest.find_run(home / "Downloads" / "webtest", run_id)
+    folder = webtest.find_run(runs_root, figma_run)
     assert webtest.next_row(folder, BridgeReader(bridge), jid, AGENT)["row"] == "r02"
     webtest.park(folder, "r02", {"body": "Which footer?"})
 
-    go(page, "run", f"#/runs/{run_id}")
+    go(page, "run", f"#/runs/{figma_run}")
     page.click("tr[data-row='r02']")
     # Kestrel radios hide the native input behind a drawn dot: wait for it in the DOM, check it by its label.
     page.wait_for_selector("#park-r02-0", state="attached")
@@ -194,7 +243,7 @@ def test_run_screen_answers_a_parked_row(page, console):
     page.wait_for_selector(".ask-form .k-field__error")
     page.fill("#park-r02-pre", "the footer of the member page")
     page.click(".ask-form .k-btn--primary")
-    answers = wait_for(lambda: webtest_api.read_answers(home, run_id)["answers"])
+    answers = wait_for(lambda: webtest_api.read_answers(home, figma_run)["answers"])
     (entry,) = answers.values()
     assert entry["action"] == "delegate" and entry["preconditions"] == "the footer of the member page"
     assert not page.problems, page.problems

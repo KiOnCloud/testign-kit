@@ -1,153 +1,178 @@
-// Jobs: the queue and history of agent jobs, a detail panel with progress, the agent's question
-// (questions asks answered in place, Close review asks opened on their own screen) and the tester's
-// actions: Cancel (queued), Mark failed and Release agent (silent), Queue again (failed).
+// Agent & jobs. #/agent: the attached Claude Code session with the tools it reported, and every job
+// it works (open and history). #/agent/<job>: one job on its own page with progress, the agent's
+// question (questions, sign-in, the Close review forms) and the tester's actions: Cancel (queued),
+// Mark failed and Release agent (silent), Queue again (failed, when the job kind can be rebuilt).
 
-import { h, icon, mount } from '../dom.mjs';
+import { h, icon, mount, statusIcon } from '../dom.mjs';
 import { dateTime, NONE, timeOrDay } from '../format.mjs';
 import { askBody } from '../markdown.mjs';
+import { uiLang } from '../prefs.mjs';
 import { href } from '../router.mjs';
 import { renderQuestions } from './ask-form.mjs';
-import { signInCard } from './login.mjs';
+import {
+  canRequeue, isLegacy, jobErrorText, jobTitle, kindLabel, queueJob, reasonShort, requeueBody, requeuedNote, revOf, shortId,
+  stateBadge, stateLabel, tooNewNotice,
+} from './job-actions.mjs';
+import { closeReview, forgetDraft, REVIEW_TYPES } from './job-review.mjs';
 import { fromChat } from './runs.mjs';
 import {
-  jobErrorText, jobTitle, kindLabel, queueJob, reasonShort, requeueBody, requeuedNote, revOf, shortId, stateBadge, stateGlyph,
-  stateLabel, tooNewNotice,
-} from './job-actions.mjs';
-import { badge, banner, emptyState, errorState, loading, pageHead, spacer, topbarTitle } from './shell.mjs';
+  alertBox, breadcrumb, emptyState, errorState, loading, pageHead, rowLink, segFilter, tableBox, ybadge,
+} from './shell.mjs';
+import { signInCard } from './sign-in-card.mjs';
 
 const ACTIVE = new Set(['queued', 'offered', 'running', 'needs-input']);
-const REVIEW_TYPES = new Set(['review-rows', 'confirm-diff', 'paste-pages']);
+export const CAPABILITIES = ['chrome', 'figma', 'backlog'];
+const STATE_ICONS = {
+  queued: ['busy', 'clock'], offered: ['busy', 'clock'], running: ['busy', 'play'], 'needs-input': ['warn', 'chat'],
+  done: ['ok', 'check'], failed: ['bad', 'close'], cancelled: ['busy', 'dash'],
+};
 let tab = 'open';
 
-/** The banner shown wherever the agent matters: none attached, or silent on its job. */
-export function agentBanner(t, state) {
+/** A job state as a status icon whose tooltip is the state in words. */
+export function jobStateIcon(t, state) {
+  const [kind, name] = STATE_ICONS[state] || ['busy', 'dash'];
+  return statusIcon(kind, name, stateLabel(t, state));
+}
+
+/**
+ * The tools the attached session reported, as [{name, kind, icon, tip}]: a check when it has the
+ * tool, a cross when it does not, a dash while the session has not reported (null).
+ */
+export function capabilityIcons(t, capabilities) {
+  return CAPABILITIES.map((name) => {
+    const label = t(`cap_${name}`);
+    if (!capabilities || typeof capabilities[name] !== 'boolean') {
+      return { name, kind: 'busy', icon: 'dash', tip: t('cap_unknown', { name: label }) };
+    }
+    return capabilities[name]
+      ? { name, kind: 'ok', icon: 'check', tip: t('cap_yes', { name: label }) }
+      : { name, kind: 'bad', icon: 'close', tip: t('cap_no', { name: label }) };
+  });
+}
+
+/** The alert about the agent: none attached, silent, or listening with its tools. */
+export function agentAlert(t, state) {
   if (!state) return null;
-  if (!state.agent || !state.agent.attached) {
-    return banner('warning', t('agent_none'), (state.queue || []).length ? t('agent_none_queued') : t('agent_none_body'));
+  const agent = state.agent || {};
+  if (!agent.attached) {
+    return alertBox('warning', 'warning', t('agent_none'), (state.queue || []).length ? t('agent_none_queued') : t('agent_none_body'));
   }
+  const caps = capabilityIcons(t, agent.capabilities);
+  const line = h('span.st-row.caps', { dataset: { capabilities: agent.capabilities ? 'reported' : 'unknown' } }, caps.map((c) =>
+    h('span.st-row', { dataset: { cap: c.name } }, [statusIcon(c.kind, c.icon, c.tip), h('span.yh-caption', t(`cap_${c.name}`))])));
+  const contact = agent.last_contact ? t('agent_last_contact', { when: timeOrDay(agent.last_contact) }) : null;
+  return alertBox('success', 'agent', t('agent_listening'), h('div.yh-stack', [contact ? h('span', contact) : null, line]));
+}
+
+/** Where a job's work lives: its run, its suite or its ticket. */
+export function jobTarget(job) {
+  if (job.run) return href(['runs', job.run]);
+  if (job.suite) return href(['suites', job.suite]);
+  if (job.ticket && (job.kind === 'survey' || job.kind === 'close' || job.kind === 'testcase')) return href(['survey', job.ticket]);
   return null;
 }
 
 export function render(ctx) {
-  const { t, route } = ctx;
-  const st0 = ctx.store.get();
-  const implicit = route.params.job ? null : (st0 && st0.open ? st0.open.id : null);
-  const selected = route.params.job || implicit;
-  const body = h('div.page');
-  mount(ctx.view, body);
-  ctx.topbar(topbarTitle(t('nav_jobs')), spacer(), h('span.k-note', t('jobs_one_at_a_time')));
+  if (ctx.route.params.job) renderJob(ctx, ctx.route.params.job);
+  else renderList(ctx);
+}
+
+function renderList(ctx) {
+  const { t } = ctx;
+  ctx.topbar(breadcrumb(t, [{ label: t('nav_group_run') }, { label: t('nav_agent') }]));
   const head = pageHead(t('jobs_title'), t('jobs_subtitle'));
-  const bannerBox = h('div');
-  const listBox = h('div.k-list', { role: 'listbox', 'aria-label': t('jobs_title') });
-  const tabs = h('div.k-tabs.k-tabs--segmented', { role: 'radiogroup', 'aria-label': t('jobs_filter') });
-  const detail = h('div.split-panel-jobs');
-  mount(body, head, loading(t, 3));
-  let jobs = null;
-  let detailKey = null;
-  let drawnShell = false;
-  let tabPicked = false;
+  const alertHolder = h('div');
+  const toolbar = h('div.toolbar');
+  const tableHolder = h('div');
+  mount(ctx.view, head, loading(t, 3));
+  let lastKey = null;
+  let drawn = false;
 
-  function drawShell() {
-    if (drawnShell) return;
-    drawnShell = true;
-    mount(body, head, bannerBox, h('div.k-split.split-flex', [
-      h('div.k-split__main.split-main', [h('div.k-toolbar.toolbar-wrap', [h('div.k-toolbar__group', tabs), h('div.k-toolbar__spacer')]), listBox]),
-      selected ? detail : null,
-    ]));
-  }
-
-  function drawBanner() {
-    mount(bannerBox, agentBanner(t, ctx.store.get()));
-  }
-
-  function drawList() {
+  const draw = (jobs) => {
+    if (!drawn) { drawn = true; mount(ctx.view, head, alertHolder, toolbar, tableHolder, h('p.yh-caption.yh-muted.m-0', t('jobs_one_at_a_time'))); }
+    mount(alertHolder, agentAlert(t, ctx.store.get()));
     const open = jobs.filter((j) => ACTIVE.has(j.state));
     const history = jobs.filter((j) => !ACTIVE.has(j.state));
-    if (selected && !tabPicked) {
-      // Show the selected job's tab until the tester picks a tab here.
-      if (open.some((j) => j.id === selected)) tab = 'open';
-      else if (history.some((j) => j.id === selected)) tab = 'history';
-    }
-    mount(tabs, [['open', `${t('jobs_open')} ${open.length}`], ['history', `${t('jobs_history')} ${history.length}`]].map(([v, label]) =>
-      h('button.k-tab', {
-        type: 'button', role: 'radio', 'aria-checked': tab === v ? 'true' : 'false', class: tab === v ? 'is-active' : '',
-        on: { click: () => { tab = v; tabPicked = true; drawList(); } },
-      }, label)));
+    mount(toolbar, segFilter(t('jobs_filter'), [{ value: 'open', label: `${t('jobs_open')} ${open.length}` },
+      { value: 'history', label: `${t('jobs_history')} ${history.length}` }], tab, (v) => { tab = v; draw(jobs); }));
     const shown = tab === 'open' ? open : history;
     const st = ctx.store.get();
     const silentId = st && st.open && st.open.silent ? st.open.id : null;
-    mount(listBox, shown.length ? shown.map((j) => h('a.k-issue-row.job-row', {
-      href: href(['jobs', j.id]), role: 'option', 'aria-selected': j.id === selected ? 'true' : 'false',
-      class: j.id === selected ? 'is-selected' : '', dataset: { job: j.id },
-    }, [
-      stateGlyph(j.state),
-      h('span.k-issue-row__title', jobTitle(t, j)),
-      fromChat(j) ? badge(t('runs_from_chat'), 'info') : null,
-      j.queued_after === 'no-older-tab' ? badge(t('jobs_requeued'), 'info') : null,
-      stateBadge(t, { ...j, silent: j.id === silentId }),
-      h('span.k-issue-row__date.num', timeOrDay(j.finished_at || j.started_at || j.created_at)),
-    ])) : emptyState(tab === 'open' ? t('jobs_empty_open') : t('jobs_empty_history'), tab === 'open' ? t('jobs_empty_open_body') : null));
-  }
+    const rows = shown.map((j) => {
+      const target = href(['agent', j.id]);
+      const work = jobTarget(j);
+      return h('tr.click', { dataset: { job: j.id }, on: rowLink(target, ctx.navigate) }, [
+        h('td', h('span.st-row', [jobStateIcon(t, j.state), h('a.lnk', { href: target }, jobTitle(t, j))])),
+        h('td', [kindLabel(t, j.kind), isLegacy(j) ? h('span.sub', ybadge(t('jobs_legacy'), 'neutral', { dataset: { legacy: j.kind } })) : null]),
+        h('td', work ? h('a.lnk.mono', { href: work }, j.run || j.suite || j.ticket) : h('span.yh-muted', NONE)),
+        h('td', [stateBadge(t, { ...j, silent: j.id === silentId }),
+          fromChat(j) ? h('span.sub', ybadge(t('runs_from_chat'), 'outline')) : null,
+          j.queued_after === 'no-older-tab' ? h('span.sub', ybadge(t('jobs_requeued'), 'outline')) : null]),
+        h('td.yh-num.yh-muted', timeOrDay(j.finished_at || j.started_at || j.created_at)),
+      ]);
+    });
+    mount(tableHolder, shown.length ? tableBox([h('th', t('col_job')), h('th', t('col_kind')), h('th', t('col_for')),
+      h('th', t('col_state')), h('th', t('col_when'))], rows)
+      : emptyState(tab === 'open' ? t('jobs_empty_open') : t('jobs_empty_history'), tab === 'open' ? t('jobs_empty_open_body') : null));
+  };
 
-  async function drawDetail(force) {
-    if (!selected) return;
+  const load = () => ctx.memo('jobs', () => ctx.api.jobs()).then((data) => {
+    if (!ctx.alive()) return;
+    const jobs = data.jobs || [];
+    const st = ctx.store.get();
+    const key = JSON.stringify([jobs, st && st.agent, st && st.open && st.open.silent]);
+    if (key === lastKey) return;
+    lastKey = key;
+    draw(jobs);
+    ctx.ready();
+  }, (err) => {
+    if (!ctx.alive()) return;
+    lastKey = null;
+    drawn = false;
+    mount(ctx.view, head, errorState(t, err, () => ctx.refresh()));
+    ctx.ready();
+  });
+  load();
+  ctx.onStoreChange(() => {
+    ctx.invalidate('jobs');
+    load();
+  });
+}
+
+function renderJob(ctx, id) {
+  const { t } = ctx;
+  const crumbs = (title) => ctx.topbar(breadcrumb(t, [{ label: t('nav_group_run') }, { label: t('nav_agent'), href: href(['agent']) },
+    { label: title || shortId(id) }]));
+  crumbs(null);
+  mount(ctx.view, loading(t, 4));
+  let lastKey = null;
+
+  const load = async () => {
     let job;
     try {
-      job = await ctx.memo(`job:${selected}`, () => ctx.api.job(selected));
+      job = await ctx.memo(`job:${id}`, () => ctx.api.job(id));
     } catch (err) {
       if (!ctx.alive()) return;
-      detailKey = null;
-      mount(detail, h('aside.k-split__panel.split-panel-inner', h('div.panel-body', errorState(t, err, () => ctx.refresh()))));
+      lastKey = null;
+      mount(ctx.view, errorState(t, err, () => ctx.refresh()));
+      ctx.ready();
       return;
     }
     if (!ctx.alive()) return;
     const st = ctx.store.get();
     const attached = Boolean(st && st.agent && st.agent.attached);
-    const key = JSON.stringify([job.state, job.ask && job.ask.id, (job.progress || []).length, job.silent, job.progress_stale, job.reason, attached, job.opened, job.can_answer]);
-    if (!force && key === detailKey) return;
-    detailKey = key;
-    mount(detail, jobPanel(ctx, job, attached));
-  }
-
-  async function load() {
-    try {
-      const data = await ctx.memo('jobs', () => ctx.api.jobs());
-      if (!ctx.alive()) return;
-      jobs = data.jobs || [];
-      drawShell();
-      drawBanner();
-      drawList();
-      await drawDetail(false);
-      ctx.ready();
-    } catch (err) {
-      if (!ctx.alive()) return;
-      mount(body, head, errorState(t, err, () => ctx.refresh()));
-      drawnShell = false;
-      ctx.ready();
-    }
-  }
-
+    const key = JSON.stringify([job.state, job.ask && job.ask.id, (job.progress || []).length, job.silent, job.progress_stale,
+      job.reason, attached, job.opened, job.can_answer]);
+    if (key === lastKey) return;
+    lastKey = key;
+    crumbs(jobTitle(t, job));
+    mount(ctx.view, ...jobPage(ctx, job, attached, () => { ctx.invalidate(`job:${id}`); lastKey = null; load(); }));
+    ctx.ready();
+  };
   load();
-  ctx.onStoreChange((st) => {
-    const nowOpen = st && st.open ? st.open.id : null;
-    if (!route.params.job && nowOpen !== implicit) {
-      ctx.refresh();
-      return;
-    }
-    ctx.invalidate('jobs');
-    if (selected) ctx.invalidate(`job:${selected}`);
+  ctx.onStoreChange(() => {
+    ctx.invalidate(`job:${id}`);
     load();
-  });
-  ctx.onKey((event) => {
-    const key = event.key.toLowerCase();
-    if (key !== 'j' && key !== 'k') return false;
-    const rows = [...listBox.querySelectorAll('.job-row')];
-    if (!rows.length) return false;
-    let i = rows.indexOf(document.activeElement);
-    if (i < 0) i = rows.findIndex((r) => r.dataset.job === selected);
-    const next = rows[i < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, i + (key === 'j' ? 1 : -1)))];
-    next.focus();
-    return true;
   });
 }
 
@@ -175,135 +200,137 @@ function paramList(t, job) {
     ['jobs_p_base_url', p.base_url],
     ['jobs_p_source', p.source && p.source.kind === 'figma' ? `Figma · ${p.source.node}` : null],
     ['jobs_p_run', job.run || p.run],
+    ['jobs_p_suite', job.suite || p.suite],
     ['jobs_p_signed_in', job.signed_in && job.signed_in.scenario ? `${job.signed_in.scenario} · ${t(`jobs_signed_${String(job.signed_in.choice).replace(/-/g, '_')}`)}` : null],
   ].filter(([, v]) => v !== null && v !== undefined && v !== '');
-  return h('dl.k-props', rows.flatMap(([k, v]) => [h('dt', t(k)), h('dd', h('span.k-chip.chip-wrap', String(v)))]));
+  return h('dl.kv', rows.flatMap(([k, v]) => [h('dt', t(k)), h('dd.break', String(v))]));
 }
 
 function progressList(t, job) {
   const items = job.progress || [];
   if (!items.length) {
-    return h('p.k-note', job.state === 'queued' || job.state === 'offered' ? t('jobs_no_progress_yet') : t('jobs_no_progress'));
+    return h('p.yh-caption.yh-muted.m-0', job.state === 'queued' || job.state === 'offered' ? t('jobs_no_progress_yet') : t('jobs_no_progress'));
   }
   const live = job.state === 'running' || job.state === 'needs-input';
   return h('ol.progress-steps', items.map((p, i) => {
     const last = i === items.length - 1;
     return h('li', { class: last && live ? 'is-current' : '' }, [
-      stateGlyph(last && live ? 'running' : 'done'),
+      last && live ? statusIcon('busy', 'clock', t('job_state_running')) : statusIcon('ok', 'check', t('job_state_done')),
       h('span.progress-text', p.message),
-      h('span.k-note.num.push-right', timeOrDay(p.at)),
+      h('span.yh-caption.yh-muted.yh-num.push', timeOrDay(p.at)),
     ]);
   }));
 }
 
-function jobPanel(ctx, job, attached) {
+/** The question part of a job page, or null. */
+function askPart(ctx, job) {
   const { t } = ctx;
-  const parts = [];
+  if (job.state !== 'needs-input' || !job.ask) return null;
+  if (job.can_answer === false) return tooNewNotice(t);
+  if (job.ask.type === 'questions') {
+    return h('section.panel', renderQuestions({
+      t, ask: job.ask, lang: uiLang(job.ui_lang),
+      onSubmit: async (answer) => {
+        try {
+          await ctx.api.answer(job.id, job.ask.id, answer);
+        } catch (err) {
+          if (err && err.status === 409) ctx.pollNow();
+          const e = new Error(jobErrorText(t, err));
+          e.userText = jobErrorText(t, err);
+          throw e;
+        }
+        ctx.toast(t('ask_sent'));
+        ctx.pollNow();
+      },
+    }));
+  }
+  if (job.ask.type === 'sign-in') return signInCard(ctx, job);
+  if (REVIEW_TYPES.has(job.ask.type)) {
+    return closeReview(ctx, job, async (answer) => {
+      try {
+        await ctx.api.answer(job.id, job.ask.id, answer);
+        forgetDraft(job.id, job.ask);
+        ctx.toast(t('ask_sent'));
+        ctx.pollNow();
+      } catch (err) {
+        ctx.toast(jobErrorText(t, err), 'danger');
+        if (err && err.status === 409) ctx.refresh();
+      }
+    });
+  }
+  // An ask this console does not answer here (a legacy job's table): show its text only.
+  return alertBox('', 'info', t('ask_title'), job.ask.body ? askBody(job.ask.body, uiLang(job.ui_lang)) : t('jobs_ask_elsewhere'));
+}
+
+function jobPage(ctx, job, attached, reload) {
+  const { t } = ctx;
   const act = async (fn, okText) => {
     try {
       await fn();
       ctx.toast(okText);
       ctx.pollNow();
+      reload();
     } catch (err) {
       ctx.toast(jobErrorText(t, err), 'danger');
     }
   };
-
-  if (job.state === 'queued' || job.state === 'offered') {
-    parts.push(h('p.panel-text', attached ? t('jobs_waiting_turn') : t('agent_none_queued')));
-  }
-  if (job.silent) {
-    parts.push(h('div.k-banner.k-banner--warning', { role: 'status' }, [icon('warning', 'icon-warn'),
-      h('div.k-banner__text', [h('strong', t('jobs_silent_title')), h('span', t('jobs_silent_body'))])]));
-  } else if (job.progress_stale) {
-    parts.push(banner('warning', t('run_stale_title'), t('run_stale_body')));
-  }
-  if (job.queued_by === 'agent') parts.push(h('p.k-note', [badge(t('runs_from_chat'), 'info'), ' ', t('jobs_from_chat_body')]));
-  parts.push(requeuedNote(t, job));
-  if (job.run) {
-    parts.push(h('div.row-8', h('a.k-btn.k-btn--secondary.k-btn--sm', { href: href(['runs', job.run]) }, [icon('play'), t('jobs_open_run')])));
-  }
-  if (job.state === 'failed') {
-    const moved = job.reason === 'revision-moved';
-    parts.push(h('div.k-banner.k-banner--danger', { role: 'status' }, [icon('warning'),
-      h('div.k-banner__text', [h('strong', reasonShort(t, job.reason)), h('span', t(`job_reason_${String(job.reason || 'agent').replace(/-/g, '_')}_body`))])]));
-    parts.push(h('div.row-8', h('button.k-btn.k-btn--secondary', {
-      type: 'button', on: { click: () => queueJob(ctx, requeueBody(job, ctx.prefs.getTesterName())) },
-    }, [icon('refresh'), moved ? t('jobs_requeue_latest') : t('jobs_requeue')])));
-  }
-  if (job.summary) {
-    parts.push(h('div.stack-4', [h('span.k-section-label', t('jobs_agent_summary')), h('p.agent-text', job.summary)]));
-  }
-  if (job.state === 'needs-input' && job.ask) {
-    if (job.can_answer === false) {
-      parts.push(tooNewNotice(t));
-    } else if (job.ask.type === 'questions') {
-      parts.push(renderQuestions({
-        t, ask: job.ask, lang: job.ui_lang,
-        onSubmit: async (answer) => {
-          try {
-            await ctx.api.answer(job.id, job.ask.id, answer);
-          } catch (err) {
-            if (err && err.status === 409) ctx.pollNow();
-            const e = new Error(jobErrorText(t, err));
-            e.userText = jobErrorText(t, err);
-            throw e;
-          }
-          ctx.toast(t('ask_sent'));
-          ctx.pollNow();
-        },
-      }));
-    } else if (job.ask.type === 'review-table') {
-      parts.push(h('div.ask-form', [
-        h('span.k-section-label', t('ask_title')),
-        h('p.panel-text', t('jobs_ask_review_table')),
-        h('div.row-8', h('a.k-btn.k-btn--primary', { href: href(['jobs', job.id, 'review-table']), dataset: { openReviewTable: job.id } },
-          t('runs_open_review'))),
-      ]));
-    } else if (job.ask.type === 'sign-in') {
-      parts.push(signInCard(ctx, job));
-    } else if (REVIEW_TYPES.has(job.ask.type)) {
-      parts.push(h('div.ask-form', [
-        h('span.k-section-label', t('ask_title')),
-        h('p.panel-text', t(`jobs_ask_${job.ask.type.replace('-', '_')}`)),
-        job.ask.body ? askBody(job.ask.body, job.ui_lang) : null,
-        h('div.row-8', h('a.k-btn.k-btn--secondary', { href: href(['jobs', job.id, 'review']), dataset: { openReview: '1' } },
-          t('jobs_open_review'))),
-      ]));
-    }
-  }
-  parts.push(h('div.stack-8', [h('span.k-section-label', t('jobs_progress')), progressList(t, job)]));
-  if (job.asked && job.asked.length) {
-    parts.push(h('div.stack-4', [h('span.k-section-label', t('jobs_asked')), h('ul.plain-list', job.asked.map((a) =>
-      h('li.k-note', [t(`jobs_ask_type_${a.type.replace('-', '_')}`), ' · ',
-        a.outcome === 'answered' ? `${t('jobs_answered')} ${a.answered_at ? timeOrDay(a.answered_at) : ''}` : t('jobs_unanswered')])))]));
-  }
-
   const actions = [];
+  const work = jobTarget(job);
+  if (work) {
+    actions.push(h('a.yh-btn', { href: work, dataset: { jobTarget: '1' } },
+      job.run ? [icon('play'), t('jobs_open_run')] : job.suite ? [icon('suite'), t('jobs_open_suite')] : [icon('file'), t('jobs_open_ticket')]));
+  }
   if (job.state === 'queued') {
-    actions.push(h('button.k-btn.k-btn--ghost.k-btn--sm', {
-      type: 'button', on: { click: () => act(() => ctx.api.cancelJob(job.id), t('jobs_cancelled')) },
-    }, t('jobs_cancel')));
+    actions.push(h('button.yh-btn', { type: 'button', dataset: { jobAction: 'cancel' },
+      on: { click: () => act(() => ctx.api.cancelJob(job.id), t('jobs_cancelled')) } }, t('jobs_cancel')));
   }
   if (job.silent) {
-    actions.push(h('button.k-btn.k-btn--danger.k-btn--sm', {
-      type: 'button', on: { click: () => act(() => ctx.api.failJob(job.id), t('jobs_marked')) },
-    }, t('jobs_mark_failed')));
-    actions.push(h('button.k-btn.k-btn--secondary.k-btn--sm', {
-      type: 'button', on: { click: () => act(() => ctx.api.releaseAgent(), t('jobs_released')) },
-    }, t('job_release')));
+    actions.push(h('button.yh-btn.yh-btn--destructive', { type: 'button', dataset: { jobAction: 'fail' },
+      on: { click: () => act(() => ctx.api.failJob(job.id), t('jobs_marked')) } }, t('jobs_mark_failed')));
+    actions.push(h('button.yh-btn', { type: 'button', dataset: { jobAction: 'release' },
+      on: { click: () => act(() => ctx.api.releaseAgent(), t('jobs_released')) } }, t('job_release')));
   }
-
-  return h('aside.k-split__panel.split-panel-inner', { 'aria-labelledby': 'job-panel-title' }, [
-    h('div.k-split__panel-head.panel-head-wrap', [
-      stateGlyph(job.state),
-      h('span', { id: 'job-panel-title', tabindex: '-1' }, jobTitle(t, job)),
-      h('span.k-id', shortId(job.id)),
-      actions.length ? h('div.row-4.push-right', actions) : null,
-    ]),
-    paramList(t, job),
-    h('div.panel-body', parts),
-    h('p.k-note.panel-foot', [h('span.k-id', job.id), ' · ', kindLabel(t, job.kind)]),
+  if (job.state === 'failed' && canRequeue(job)) {
+    actions.push(h('button.yh-btn.yh-btn--primary', { type: 'button', dataset: { jobAction: 'requeue' },
+      on: { click: () => queueJob(ctx, requeueBody(job, ctx.prefs.getTesterName())) } },
+    [icon('refresh'), job.reason === 'revision-moved' ? t('jobs_requeue_latest') : t('jobs_requeue')]));
+  }
+  const head = pageHead(jobTitle(t, job), null, actions, [
+    jobStateIcon(t, job.state), stateBadge(t, job), h('span', kindLabel(t, job.kind)),
+    isLegacy(job) ? ybadge(t('jobs_legacy'), 'neutral', { dataset: { legacy: job.kind } }) : null,
+    h('span.mono.yh-muted', shortId(job.id)),
   ]);
-}
 
+  const notices = [];
+  if (isLegacy(job)) notices.push(alertBox('', 'info', t('jobs_legacy_t'), t('jobs_legacy_d')));
+  if (job.state === 'queued' || job.state === 'offered') {
+    notices.push(alertBox('', 'clock', attached ? t('jobs_waiting_turn') : t('agent_none_queued'), null));
+  }
+  if (job.silent) notices.push(alertBox('warning', 'warning', t('jobs_silent_title'), t('jobs_silent_body')));
+  else if (job.progress_stale) notices.push(alertBox('warning', 'warning', t('run_stale_title'), t('run_stale_body')));
+  if (job.queued_by === 'agent') notices.push(alertBox('', 'info', t('runs_from_chat'), t('jobs_from_chat_body')));
+  const requeued = requeuedNote(t, job);
+  if (requeued) notices.push(requeued);
+  if (job.state === 'failed') {
+    notices.push(alertBox('danger', 'warning', reasonShort(t, job.reason),
+      t(`job_reason_${String(job.reason || 'agent').replace(/-/g, '_')}_body`)));
+  }
+  const ask = askPart(ctx, job);
+  const summary = job.summary ? h('section.panel', [h('h2.yh-h3.m-0', t('jobs_agent_summary')), h('p.agent-text.m-0', job.summary)]) : null;
+  const asked = job.asked && job.asked.length ? h('section.panel', [h('h2.yh-h3.m-0', t('jobs_asked')), h('ul.plain-list', job.asked.map((a) =>
+    h('li.yh-caption', [t(`jobs_ask_type_${a.type.replace(/-/g, '_')}`), ' · ',
+      a.outcome === 'answered' ? `${t('jobs_answered')} ${a.answered_at ? timeOrDay(a.answered_at) : ''}` : t('jobs_unanswered')])))]) : null;
+  return [
+    head,
+    notices.length ? h('div.yh-stack', notices) : null,
+    h('div.split', [
+      h('div.yh-stack', [ask, summary,
+        h('section.panel', [h('h2.yh-h3.m-0', t('jobs_progress')), progressList(t, job)]), asked]),
+      h('section.panel.sticky', { 'aria-labelledby': 'job-params-title' }, [
+        h('h2.yh-h3.m-0', { id: 'job-params-title' }, t('jobs_details')),
+        paramList(t, job),
+        h('p.yh-caption.yh-muted.m-0.break', [h('code.mono', job.id), ' · ', kindLabel(t, job.kind)]),
+      ]),
+    ]),
+  ];
+}

@@ -34,6 +34,18 @@ const ERROR_KEYS = {
   'not-web-runner': 'job_err_not_web_runner',
   'pc-method': 'job_err_pc_method',
   'too-long': 'job_err_too_long',
+  'case-rules': 'suite_err_case_rules',
+  'suite-generating': 'suite_err_generating',
+  'suite-unreadable': 'suite_err_unreadable',
+  'no-report': 'suite_err_no_report',
+  'bad-ticket': 'suite_err_bad_ticket',
+  'bad-file': 'suite_err_bad_file',
+  'bad-sheet': 'suite_err_bad_sheet',
+  'bad-template': 'suite_err_bad_template',
+  'no-cases': 'suite_err_no_cases',
+  'unknown-kind': 'suite_err_unknown_kind',
+  'run-busy': 'cols_err_busy',
+  'too-large': 'suite_err_too_large',
 };
 
 export function jobErrorText(t, err) {
@@ -70,6 +82,13 @@ export function revOf(name) {
   return m ? `r${m[1]}` : '';
 }
 
+// Kinds the server no longer runs. Their old records are still listed, read only.
+export const LEGACY_KINDS = new Set(['webtest-plan']);
+
+export function isLegacy(job) {
+  return Boolean(job && LEGACY_KINDS.has(job.kind));
+}
+
 export function kindLabel(t, kind) {
   const key = `job_kind_${String(kind).replace(/-/g, '_')}`;
   return t(key) === key ? kind : t(key);
@@ -78,11 +97,12 @@ export function kindLabel(t, kind) {
 /** "Close QA · DEMO-1 r2" (plus mode and focus when the full record is known). */
 export function jobTitle(t, job) {
   const p0 = job.params || {};
-  if (job.kind === 'webtest-plan' || job.kind === 'webtest-run') {
+  if (job.kind === 'webtest-run' || isLegacy(job)) {
     const parts = [kindLabel(t, job.kind), p0.name || job.run || job.ticket].filter(Boolean);
     if (job.kind === 'webtest-run' && p0.mode === 'export') parts.push(t('job_mode_export'));
     return parts.join(' · ');
   }
+  if (job.kind === 'suite-generate') return [kindLabel(t, job.kind), job.suite].filter(Boolean).join(' · ');
   const parts = [kindLabel(t, job.kind), [job.ticket, revOf(job.base_revision)].filter(Boolean).join(' ')];
   const p = job.params || {};
   if (job.kind === 'testcase' && p.mode === 'trace') parts.push(t('job_mode_trace'));
@@ -128,7 +148,7 @@ export async function queueJob(ctx, body, { open = true } = {}) {
     const job = await ctx.api.createJob({ ...body, ui_lang: ctx.lang });
     ctx.toast(ctx.t('job_queued', { title: jobTitle(ctx.t, job) }));
     ctx.pollNow();
-    if (open) ctx.navigate(href(['jobs', job.id]));
+    if (open) ctx.navigate(href(['agent', job.id]));
     return job;
   } catch (err) {
     ctx.toast(jobErrorText(ctx.t, err), 'danger');
@@ -199,17 +219,15 @@ export function chooseTemplate(ctx, listing, title) {
   });
 }
 
+/** Whether "Queue again" can rebuild this job: not a legacy kind, and not a generate job (its suite owns it). */
+export function canRequeue(job) {
+  return Boolean(job) && !isLegacy(job) && job.kind !== 'suite-generate';
+}
+
 /** The body that queues the same work again (the server pins it to the latest revision). */
 export function requeueBody(job, testerName) {
   const p = job.params || {};
   if (job.kind === 'close') return { kind: 'close', ticket: job.ticket, tester: p.tester || testerName };
-  if (job.kind === 'webtest-plan') {
-    const body = { kind: 'webtest-plan', name: p.name, figma_url: p.source && p.source.url, base_url: p.base_url,
-      project: p.project, template: p.template };
-    if (p.ticket) body.ticket = p.ticket;
-    if (job.report_lang) body.report_lang = job.report_lang;
-    return body;
-  }
   if (job.kind === 'webtest-run') {
     return { kind: 'webtest-run', run: p.run || job.run, tester: p.tester || testerName, mode: p.mode || 'run' };
   }

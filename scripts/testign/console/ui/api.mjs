@@ -1,6 +1,8 @@
 // Browser session and HTTP calls. The session token lives in sessionStorage of this origin only;
 // every /api/* call carries it in X-Testign-Session. A 403 means the console must be reopened.
 
+import { HOME, href } from './router.mjs';
+
 const TOKEN_KEY = 'testign.session';
 const VERSION_KEY = 'testign.version';
 const SESSION_HEADER = 'X-Testign-Session';
@@ -69,7 +71,8 @@ export function serverVersion() {
  */
 export async function bootstrap(loc = globalThis.location, hist = globalThis.history) {
   const code = readLaunchCode(loc.hash);
-  if (loc.hash.startsWith('#c=')) hist.replaceState(null, '', `${loc.pathname}${loc.search}#/tickets`);
+  // The launch link lands on the home screen once its code is read (see the router's redirect table).
+  if (loc.hash.startsWith('#c=')) hist.replaceState(null, '', `${loc.pathname}${loc.search}${href([HOME])}`);
   token = recall(TOKEN_KEY);
   version = recall(VERSION_KEY);
   if (!code) return Boolean(token);
@@ -218,10 +221,33 @@ export const api = {
     return request('PUT', `/api/webtest/runs/${seg(run)}/images`, { binary: await file.arrayBuffer() });
   },
   finishRun: (run) => request('POST', `/api/webtest/runs/${seg(run)}/finish`, { json: {} }),
+  runColumns: (run) => request('GET', `/api/webtest/runs/${seg(run)}/columns`),
+  putRunColumns: (run, plan) => request('PUT', `/api/webtest/runs/${seg(run)}/columns`, { json: plan }),
   projects: () => request('GET', '/api/webtest/projects'),
   saveProject: (name, body) => request('PUT', `/api/webtest/projects/${seg(name)}`, { json: body }),
   scenarios: (project) => request('GET', `/api/webtest/login/${seg(project)}`),
   approveScenario: (project, name, hash) => request('POST', `/api/webtest/login/${seg(project)}/${seg(name)}/approve`, { json: { hash } }),
   rejectScenario: (project, name, note) => request('POST', `/api/webtest/login/${seg(project)}/${seg(name)}/reject`, { json: { note } }),
   removeScenario: (project, name) => request('DELETE', `/api/webtest/login/${seg(project)}/${seg(name)}`),
+  sources: () => request('GET', '/api/webtest/sources'),
+  suites: () => request('GET', '/api/webtest/suites'),
+  suite: (id) => request('GET', `/api/webtest/suites/${seg(id)}`),
+  createSuite: (body) => request('POST', '/api/webtest/suites', { json: body }),
+  uploadSuiteFile: async (file) => {
+    if (file.size > UPLOAD_CAP) throw new ApiError(413, 'too-large', 'file larger than 10 MB');
+    return request('POST', '/api/webtest/suites/uploads', {
+      binary: await file.arrayBuffer(),
+      headers: { 'X-Filename': `UTF-8''${encodeURIComponent(file.name)}` },
+    });
+  },
+  patchSuite: (id, body) => request('PATCH', `/api/webtest/suites/${seg(id)}`, { json: body }),
+  duplicateSuite: (id, body = {}) => request('POST', `/api/webtest/suites/${seg(id)}/duplicate`, { json: body }),
+  removeSuite: (id) => request('DELETE', `/api/webtest/suites/${seg(id)}`),
+  addCase: (id, body) => request('POST', `/api/webtest/suites/${seg(id)}/cases`, { json: body }),
+  updateCase: (id, caseId, body) => request('PUT', `/api/webtest/suites/${seg(id)}/cases/${seg(caseId)}`, { json: body }),
+  bulkCases: (id, body) => request('POST', `/api/webtest/suites/${seg(id)}/cases/bulk`, { json: body }),
+  confirmSuite: (id, by) => request('POST', `/api/webtest/suites/${seg(id)}/confirm`, { json: by ? { by } : {} }),
+  suiteCapture: (id, name) => requestImage(`/api/webtest/suites/${seg(id)}/captures/${seg(name)}`),
+  exportSuite: (id, template) => request('POST', `/api/webtest/suites/${seg(id)}/export`, { json: template ? { template } : {} }),
+  createRun: (body) => request('POST', '/api/webtest/runs', { json: body }),
 };

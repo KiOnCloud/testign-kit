@@ -12,7 +12,7 @@ from pathlib import Path
 
 from . import (
     __version__, backlog_wiki, cache, config, decisions, figma_table, gitscope, hashcheck, login_scenarios, report,
-    templates, trace, webtest, webtest_export, xlsx,
+    templates, trace, webtest, webtest_export, webtest_sources, webtest_suite, xlsx,
 )
 from .console import client as console_client
 from .console import lifecycle
@@ -517,6 +517,12 @@ def _cmd_console_progress(args: argparse.Namespace) -> dict:
 
 
 @_agent_command
+def _cmd_console_capabilities(args: argparse.Namespace) -> dict:
+    return console_client.capabilities(args.session, {name: name in (args.has or []) for name in
+                                                      ("chrome", "figma", "backlog")})
+
+
+@_agent_command
 def _cmd_console_ask(args: argparse.Namespace) -> dict:
     if args.question:
         ask = console_client.read_json(args.question)
@@ -584,65 +590,72 @@ def _job_args(args: argparse.Namespace) -> tuple[str, str]:
     return args.job, args.session
 
 
-@_webtest_command
+def new_run_from_suite(suite_id: str, *, name: str | None, base_url: str, project: str, template: str | None,
+                       tester: str, home: Path | None = None) -> dict:
+    """A run copied from a ready suite onto one environment (the console calls the same helper)."""
+    cfg = config.load(home)
+    return webtest_suite.create_run(webtest.runs_root(cfg), suite_id, name=name, base_url=base_url, project=project,
+                                    template=template, tester=tester, home=home, report_lang=cfg.get("lang"))
+
+
+def _suite_env() -> webtest_sources.Env:
+    return webtest_sources.Env.from_config(config.load())
+
+
+def _suite_folder(args: argparse.Namespace) -> Path:
+    return webtest_suite.find_suite(webtest.runs_root(), args.suite)
+
+
+def _suite_command(fn):
+    """Suite commands print JSON; a broken case rule also prints every field's message."""
+    wrapped = _webtest_command(fn)
+
+    def run(args: argparse.Namespace) -> int:
+        try:
+            return wrapped(args)
+        except webtest_suite.CaseError as exc:
+            problems = getattr(exc, "problems", None) or {exc.case or "case": exc.errors}
+            raise webtest.WebtestError(f"{exc} ({json.dumps(problems, ensure_ascii=False)})") from None
+        except webtest_sources.SourceError as exc:
+            raise webtest.WebtestError(f"{exc.code}: {exc}") from None
+    return run
+
+
+@_suite_command
 def _cmd_webtest_new(args: argparse.Namespace) -> dict:
-    job, session = _job_args(args)
-    if args.from_run:
-        return webtest.new_run_from(webtest.runs_root(), console_client.Reader(), job, session, args.name,
-                                    args.from_run)
-    return webtest.new_run(webtest.runs_root(), console_client.Reader(), job, session, args.name)
+    return new_run_from_suite(args.suite, name=args.name, base_url=args.base_url, project=args.project,
+                              template=args.template, tester=args.tester)
 
 
-@_webtest_command
-def _cmd_webtest_find(args: argparse.Namespace) -> dict:
-    file_key, sep, node = args.source_ref.partition(":")
-    if not sep or not file_key or not node:
-        raise webtest.WebtestError("--source-ref must be <file key>:<node id>")
-    return {"runs": webtest.find_source(webtest.runs_root(), file_key, node)}
-
-
-@_webtest_command
-def _cmd_webtest_stage(args: argparse.Namespace) -> dict:
-    case = _read_json_file(args.case, "case")
-    if not isinstance(case, dict) or case.get("row") != args.row:
-        raise webtest.WebtestError("the case file names another row than --row")
-    return webtest.stage(_run_folder(args), case,
-                         Path(args.capture) if args.capture else None)
-
-
-@_webtest_command
-def _cmd_webtest_table(args: argparse.Namespace) -> dict:
-    folder = _run_folder(args)
-    source = webtest.load(folder).get("source") or {}
+def _figma_rows(args: argparse.Namespace, source: dict) -> list[dict]:
     if source.get("kind") != "figma" or not source.get("file") or not source.get("node"):
-        raise webtest.WebtestError("this run's source is not a Figma table")
+        raise webtest.WebtestError("this source is not a Figma table")
     try:
         context = Path(args.context).read_text(encoding="utf-8")
         metadata = Path(args.metadata).read_text(encoding="utf-8")
     except (OSError, ValueError) as exc:
         raise webtest.WebtestError(f"cannot read a saved Figma result: {type(exc).__name__}") from None
     try:
-        rows = figma_table.parse(context, metadata, file_key=source["file"], table_node=source["node"])
+        return figma_table.parse(context, metadata, file_key=source["file"], table_node=source["node"])
     except figma_table.TableError as exc:
         raise webtest.WebtestError(f"read the table row by row: {exc}") from None
-    return webtest.stage_table(folder, rows, Path(args.captures) if args.captures else None)
 
 
-@_webtest_command
-def _cmd_webtest_import(args: argparse.Namespace) -> dict:
-    return webtest.import_staged(_run_folder(args))
-
-
-@_webtest_command
-def _cmd_webtest_triage(args: argparse.Namespace) -> dict:
-    return webtest.triage(_run_folder(args), _read_json_file(args.file, "triage"))
-
-
-@_webtest_command
-def _cmd_webtest_plan(args: argparse.Namespace) -> dict:
+def _suite_generate_job(args: argparse.Namespace) -> str:
+    """The open suite-generate job of this agent session that writes ``--suite``."""
     job, session = _job_args(args)
-    return webtest.apply_plan(_run_folder(args), console_client.Reader(), job, session,
-                              check_columns=webtest_export.confirmed_plan)
+    info = console_client.Reader().job(job, session)
+    if info.get("kind") != "suite-generate" or info.get("suite") != args.suite:
+        raise webtest.WebtestError(f"job {job} does not generate suite {args.suite}")
+    return job
+
+
+@_suite_command
+def _cmd_webtest_table(args: argparse.Namespace) -> dict:
+    job = _suite_generate_job(args)
+    folder = _suite_folder(args)
+    rows = _figma_rows(args, webtest_suite.load(folder).get("source") or {})
+    return webtest_suite.stage_rows(folder, rows, Path(args.captures) if args.captures else None, job)
 
 
 @_webtest_command
@@ -715,7 +728,7 @@ def _cmd_webtest_status(args: argparse.Namespace) -> dict:
 @_webtest_command
 def _cmd_webtest_columns(args: argparse.Namespace) -> dict:
     folder = _run_folder(args)
-    return webtest_export.columns_view(folder, webtest.load(folder), args.template, ask=args.ask)
+    return webtest_export.columns_view(folder, webtest.load(folder), args.template)
 
 
 @_webtest_command
@@ -725,6 +738,73 @@ def _cmd_webtest_export(args: argparse.Namespace) -> dict:
         job, session = _job_args(args)
         webtest.resolve(folder, console_client.Reader(), job, session, webtest.server_images_dir(None, folder.name))
     return webtest_export.export(folder, webtest.load(folder))
+
+
+# web test suites ------------------------------------------------------------------------------
+
+
+@_suite_command
+def _cmd_suite_new(args: argparse.Namespace) -> dict:
+    payload = _read_json_file(args.input, "source input") if args.input else {}
+    if not isinstance(payload, dict):
+        raise webtest.WebtestError("the source input file must hold a JSON object")
+    upload = Path(args.file) if args.file else None
+    if upload is not None:
+        payload.setdefault("file_name", upload.name)
+    if args.figma_url:
+        payload["figma_url"] = args.figma_url
+    if args.ticket:
+        payload["ticket"] = args.ticket
+    return webtest_suite.new_suite(webtest.runs_root(), name=args.name, kind=args.kind, payload=payload,
+                                   env=_suite_env(), project=args.project, case_lang=args.case_lang, upload=upload)
+
+
+@_suite_command
+def _cmd_suite_show(args: argparse.Namespace) -> dict:
+    return webtest_suite.show(_suite_folder(args), _suite_env())
+
+
+@_suite_command
+def _cmd_suite_list(_args: argparse.Namespace) -> dict:
+    out = []
+    for _sid, folder in sorted(webtest_suite.list_suites(webtest.runs_root()).items()):
+        try:
+            out.append(webtest_suite.summary(webtest_suite.load(folder)))
+        except webtest.WebtestError:
+            continue
+    return {"suites": out}
+
+
+# The command line is the agent's: its case edits follow the agent's rules, and any edit sends a ready
+# suite back to review. Only the tester confirms a suite, in the console.
+@_suite_command
+def _cmd_suite_case_add(args: argparse.Namespace) -> dict:
+    return webtest_suite.add_case(_suite_folder(args), _read_json_file(args.file, "case"), by="agent")
+
+
+@_suite_command
+def _cmd_suite_case_update(args: argparse.Namespace) -> dict:
+    return webtest_suite.update_case(_suite_folder(args), args.case, _read_json_file(args.file, "case"), by="agent")
+
+
+@_suite_command
+def _cmd_suite_case_delete(args: argparse.Namespace) -> dict:
+    return webtest_suite.delete_cases(_suite_folder(args), list(args.case))
+
+
+@_suite_command
+def _cmd_suite_stage(args: argparse.Namespace) -> dict:
+    job, session = _job_args(args)
+    cases = _read_json_file(args.file, "stage")
+    if not isinstance(cases, list):
+        raise webtest.WebtestError('the stage file must be a list of cases: [{"content": ...}, ...]')
+    return console_client.suite_stage(args.suite, job, session, cases)
+
+
+@_suite_command
+def _cmd_suite_generated(args: argparse.Namespace) -> dict:
+    job, session = _job_args(args)
+    return console_client.suite_generated(args.suite, job, session)
 
 
 @_webtest_command
@@ -754,25 +834,25 @@ def _add_webtest_parser(sub) -> None:
         p.set_defaults(func=fn)
         return p
 
-    p = cmd("webtest-new", _cmd_webtest_new, "create a web test run from an open webtest-plan job", run=False, job=True)
-    p.add_argument("--name", help="run name (default: the name in the job)")
-    p.add_argument("--from-run", help="copy the import (and an unconfirmed triage draft) of this earlier run")
-    p = cmd("webtest-find", _cmd_webtest_find, "runs that hold an import of a source", run=False)
-    p.add_argument("--source-ref", required=True, help="<figma file key>:<node id>")
-    p = cmd("webtest-stage", _cmd_webtest_stage, "save one imported row, so an import can stop and resume")
-    p.add_argument("--row", required=True)
-    p.add_argument("--case", required=True, help='JSON file: {"row", "source": {"kind", ...}, "content", ...}')
-    p.add_argument("--capture", help="PNG or JPEG capture of the row")
-    p = cmd("webtest-table", _cmd_webtest_table, "stage the rows of one saved get_design_context of the table")
+    p = cmd("webtest-new", _cmd_webtest_new, "create a web test run from a ready suite, on one environment",
+            run=False)
+    p.add_argument("--suite", required=True, help="a ready suite to copy onto one environment")
+    p.add_argument("--base-url", required=True, help="the environment's URL, on the project's hosts")
+    p.add_argument("--project", required=True, help="the project of the Projects screen")
+    p.add_argument("--template", help="the result template (default: the default template)")
+    p.add_argument("--tester", required=True, help="the tester's name")
+    p.add_argument("--name", help="run name (default: the suite's name)")
+    p = cmd("webtest-table", _cmd_webtest_table,
+            "write the rows of one saved get_design_context of a Figma table as cases of a generating suite",
+            run=False)
+    p.add_argument("--suite", required=True, help="suite id of a generating Figma suite")
+    p.add_argument("--job", required=True, help="the suite-generate job id")
+    p.add_argument("--session", required=True, help="agent session id")
     p.add_argument("--context", required=True, help="the file Claude Code saved the get_design_context result to")
     p.add_argument("--metadata", required=True, help="the file Claude Code saved get_metadata of the table to")
     out = p.add_mutually_exclusive_group(required=True)
     out.add_argument("--urls", action="store_true", help="print the capture URLs of rows not staged yet")
     out.add_argument("--captures", help="folder of downloaded captures named <row>.png or <row>.jpg: stage the rows")
-    cmd("webtest-import", _cmd_webtest_import, "turn the staged rows into the case list")
-    p = cmd("webtest-triage", _cmd_webtest_triage, "store the draft kind, class, screen and steps per case")
-    p.add_argument("--file", required=True, help='JSON file: {"<row>": {kind, class, reason, screen, ...}}')
-    cmd("webtest-plan", _cmd_webtest_plan, "store the review table the tester confirmed in the console", job=True)
     cmd("webtest-recover", _cmd_webtest_recover, "requeue rows of finished jobs at the start of a run job", job=True)
     cmd("webtest-next", _cmd_webtest_next, "take the next queued row for the worker", job=True)
     p = cmd("webtest-row", _cmd_webtest_row, "record pass or fail for the running row")
@@ -801,11 +881,45 @@ def _add_webtest_parser(sub) -> None:
     cmd("webtest-status", _cmd_webtest_status, "counts by state and the rows")
     p = cmd("webtest-columns", _cmd_webtest_columns, "first-guess column plan with three sample rows")
     p.add_argument("--template", help="registered template (default: the run's)")
-    p.add_argument("--ask", action="store_true", help="print the review-table ask for `console ask --question`")
     p = cmd("webtest-export", _cmd_webtest_export, "write a new workbook and a Markdown report")
     p.add_argument("--apply-pending", action="store_true", help="apply the tester's pending results first")
     p.add_argument("--job")
     p.add_argument("--session")
+
+    def suite_cmd(name: str, fn, help_text: str, *, suite: bool = True):
+        p = sub.add_parser(name, help=help_text)
+        if suite:
+            p.add_argument("--suite", required=True, help="suite id (S<yyyymmdd>-<hhmm>-<slug>)")
+        p.set_defaults(func=fn)
+        return p
+
+    p = suite_cmd("suite-new", _cmd_suite_new, "create a test suite from a source (figma, backlog, excel, manual)",
+                  suite=False)
+    p.add_argument("--name", required=True)
+    p.add_argument("--kind", required=True, choices=list(webtest_sources.kinds()))
+    p.add_argument("--project", help="project of the Projects & hosts screen")
+    p.add_argument("--case-lang", choices=list(webtest_suite.CASE_LANGS), help="language the cases are written in")
+    p.add_argument("--figma-url", help="figma: the table's design URL with a node-id")
+    p.add_argument("--ticket", help="backlog: the ticket whose latest survey report the cases come from")
+    p.add_argument("--file", help="excel: the workbook to read")
+    p.add_argument("--input", help='JSON file with the source input (e.g. {"template": ..., "sheet": ...})')
+    suite_cmd("suite-show", _cmd_suite_show, "a suite with its cases and its coverage of the source rows")
+    suite_cmd("suite-list", _cmd_suite_list, "every suite with its state and case count", suite=False)
+    p = suite_cmd("suite-case-add", _cmd_suite_case_add, "add a case to a suite")
+    p.add_argument("--file", required=True, help='JSON file: {"content", "steps", "expected", "class", ...}')
+    p = suite_cmd("suite-case-update", _cmd_suite_case_update, "change fields of one case")
+    p.add_argument("--case", required=True)
+    p.add_argument("--file", required=True, help="JSON file with the fields to change")
+    p = suite_cmd("suite-case-delete", _cmd_suite_case_delete, "delete cases of a suite")
+    p.add_argument("--case", required=True, action="append", help="case id; repeat for several")
+    p = suite_cmd("suite-stage", _cmd_suite_stage, "write cases of a suite from its open suite-generate job")
+    p.add_argument("--job", required=True, help="the suite-generate job id")
+    p.add_argument("--session", required=True, help="agent session id")
+    p.add_argument("--file", required=True,
+                   help='JSON file: [{"case"?, "content", "trace", "class", "runner", "scenario", "screen", ...}]')
+    p = suite_cmd("suite-generated", _cmd_suite_generated, "every case is written: hand the suite to the tester")
+    p.add_argument("--job", required=True, help="the suite-generate job id")
+    p.add_argument("--session", required=True, help="agent session id")
 
     p = cmd("login-scenario-list", _cmd_login_scenario_list, "a project's login scenarios and their approval",
             run=False)
@@ -859,6 +973,12 @@ def _add_console_parser(sub) -> None:
     pg.add_argument("--message", required=True, help="one line in the job's ui_lang")
     pg.set_defaults(func=_cmd_console_progress)
 
+    ca = csub.add_parser("capabilities", help="tell the console which tools this session has (agent side)")
+    ca.add_argument("--session", required=True)
+    ca.add_argument("--has", action="append", choices=["chrome", "figma", "backlog"],
+                    help="a tool this session has: Claude in Chrome, a Figma MCP server, a Backlog MCP server; repeat")
+    ca.set_defaults(func=_cmd_console_capabilities)
+
     ak = csub.add_parser("ask", help="ask the tester through the console and hold for the answer (agent side)")
     ak.add_argument("job")
     ak.add_argument("--session", required=True)
@@ -880,9 +1000,9 @@ def _add_console_parser(sub) -> None:
     ap.add_argument("--session", required=True)
     ap.set_defaults(func=_cmd_console_approval)
 
-    qu = csub.add_parser("queue", help="queue a webtest-plan or webtest-run job from the chat (agent side)")
+    qu = csub.add_parser("queue", help="queue a suite-generate or webtest-run job from the chat (agent side)")
     qu.add_argument("--file", required=True,
-                    help='JSON file: {"kind": "webtest-plan"|"webtest-run", "ui_lang", ...the kind\'s fields}')
+                    help='JSON file: {"kind": "suite-generate"|"webtest-run", "ui_lang", ...the kind\'s fields}')
     qu.set_defaults(func=_cmd_console_queue)
 
     sv = csub.add_parser("serve")

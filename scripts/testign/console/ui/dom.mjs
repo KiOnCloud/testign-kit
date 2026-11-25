@@ -98,7 +98,7 @@ export function mount(el, ...children) {
   return el;
 }
 
-// Line icons from the Kestrel set: 16px box, 1.5px stroke, currentColor.
+// Line icons on a 16px box with a 1.5px stroke in currentColor, drawn like Yohaku's icons.
 const ICONS = {
   search: [['circle', { cx: 7, cy: 7, r: 4.5 }], ['path', { d: 'm13 13-2.6-2.6' }]],
   file: [['path', { d: 'M4 2.5h5l3 3v8H4v-11Z' }], ['path', { d: 'M9 2.5v3h3M6 8h4M6 10.5h4' }]],
@@ -123,13 +123,24 @@ const ICONS = {
   user: [['circle', { cx: 8, cy: 5.5, r: 2.5 }], ['path', { d: 'M3 13.5a5 5 0 0 1 10 0' }]],
   eye: [['path', { d: 'M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z' }], ['circle', { cx: 8, cy: 8, r: 2 }]],
   clock: [['circle', { cx: 8, cy: 8, r: 5.5 }], ['path', { d: 'M8 5v3l2 1.5' }]],
+  design: [['path', { d: 'M3 13l2.5-.5L12 6 10 4 3.5 10.5 3 13Z' }], ['path', { d: 'M9 5l2 2' }]],
+  suite: [['rect', { x: 2.5, y: 3, width: 11, height: 10 }], ['path', { d: 'M5 6h6M5 8.5h6M5 11h3' }]],
+  agent: [['rect', { x: 3, y: 4.5, width: 10, height: 8, rx: 2 }], ['path', { d: 'M8 2v2.5M6 8v1M10 8v1' }]],
+  database: [['ellipse', { cx: 8, cy: 4, rx: 5, ry: 1.8 }], ['path', { d: 'M3 4v8c0 1 2.2 1.8 5 1.8s5-.8 5-1.8V4M3 8c0 1 2.2 1.8 5 1.8s5-.8 5-1.8' }]],
+  sliders: [['path', { d: 'M3 4h10M3 8h10M3 12h10' }], ['circle', { cx: 6, cy: 4, r: 1.2 }], ['circle', { cx: 10, cy: 8, r: 1.2 }], ['circle', { cx: 5, cy: 12, r: 1.2 }]],
+  menu: [['path', { d: 'M2.5 4h11M2.5 8h11M2.5 12h11' }]],
+  more: [['circle', { cx: 4, cy: 8, r: 0.8 }], ['circle', { cx: 8, cy: 8, r: 0.8 }], ['circle', { cx: 12, cy: 8, r: 0.8 }]],
+  trash: [['path', { d: 'M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5' }]],
+  download: [['path', { d: 'M8 3v8M4.5 7.5 8 11l3.5-3.5M3 13.5h10' }]],
+  chat: [['path', { d: 'M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2Z' }]],
+  columns: [['rect', { x: 2.5, y: 3, width: 11, height: 10 }], ['path', { d: 'M6.2 3v10M9.8 3v10' }]],
 };
 
-/** An inline SVG icon built with createElementNS; `extra` adds classes such as 'k-icon--sm'. */
+/** An inline SVG icon built with createElementNS; `extra` adds classes such as 'yh-icon--sm'. */
 export function icon(name, extra) {
   const d = doc();
   const svg = d.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('class', ['k-icon', extra].filter(Boolean).join(' '));
+  svg.setAttribute('class', ['yh-icon', extra].filter(Boolean).join(' '));
   svg.setAttribute('viewBox', '0 0 16 16');
   svg.setAttribute('fill', 'none');
   svg.setAttribute('stroke', 'currentColor');
@@ -155,7 +166,25 @@ export function inline(text) {
   });
 }
 
-// Kestrel status glyphs: shape carries the state (hollow, partial, filled, crossed).
+// Status tones shared by statusIcon and statusGlyph. Each class sets the tone colours in app.css.
+export const STATUS_CLASSES = Object.freeze({ ok: 'st--ok', warn: 'st--warn', busy: 'st--busy', bad: 'st--bad' });
+
+/**
+ * A status shown as an icon whose meaning is a tooltip on hover or keyboard focus. The anchor is
+ * focusable and carries `tip` as its accessible name, so the meaning is reachable without a mouse.
+ * `kind` is one of STATUS_CLASSES' keys.
+ */
+export function statusIcon(kind, iconName, tip) {
+  if (!Object.prototype.hasOwnProperty.call(STATUS_CLASSES, kind)) throw new RangeError(`unknown status kind ${kind}`);
+  const label = String(tip ?? '');
+  return h('span.yh-tip-anchor.st', { class: STATUS_CLASSES[kind], tabindex: '0', role: 'img', 'aria-label': label }, [
+    icon(iconName),
+    h('span.yh-tip', { role: 'tooltip' }, label),
+  ]);
+}
+
+// Status glyphs: shape carries the state (hollow, partial, filled, crossed); the tone comes from STATUS_CLASSES.
+const GLYPH_TONES = { todo: 'busy', progress: 'busy', done: 'ok', crossed: 'bad' };
 const GLYPHS = {
   todo: [['circle', { cx: 7, cy: 7, r: 5.5, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }]],
   progress: [['circle', { cx: 7, cy: 7, r: 5.5, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }],
@@ -166,14 +195,15 @@ const GLYPHS = {
     ['path', { d: 'm5 5 4 4M9 5l-4 4', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5, 'stroke-linecap': 'round' }]],
 };
 
-/** A 14px status glyph: 'todo', 'progress', 'done' or 'crossed'; `extra` adds classes. */
+/** A 14px status glyph: 'todo', 'progress', 'done' or 'crossed'; `extra` adds classes that can retone it. */
 export function statusGlyph(shape, extra) {
+  const known = Object.prototype.hasOwnProperty.call(GLYPHS, shape) ? shape : 'todo';
   const d = doc();
   const svg = d.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('class', ['k-status', extra].filter(Boolean).join(' '));
+  svg.setAttribute('class', ['k-status', STATUS_CLASSES[GLYPH_TONES[known]], extra].filter(Boolean).join(' '));
   svg.setAttribute('viewBox', '0 0 14 14');
   svg.setAttribute('aria-hidden', 'true');
-  for (const [tag, attrs] of GLYPHS[shape] || GLYPHS.todo) {
+  for (const [tag, attrs] of GLYPHS[known]) {
     const part = d.createElementNS(SVG_NS, tag);
     for (const [k, v] of Object.entries(attrs)) part.setAttribute(k, String(v));
     svg.appendChild(part);

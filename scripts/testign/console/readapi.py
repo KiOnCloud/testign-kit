@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import cache, config, decisions, gitscope, hashcheck, report, templates, trace
+from .jobs import REPORT_LANGS
 from .server import ApiError, ConsoleState, Request
 
 HASH_TTL = 60.0
@@ -33,11 +34,15 @@ def load_config(state: ConsoleState) -> dict:
 
 def config_view(cfg: dict) -> dict:
     backlog = cfg.get("backlog") if isinstance(cfg.get("backlog"), dict) else {}
+    console = cfg.get("console") if isinstance(cfg.get("console"), dict) else {}
     return {
         "output_dir": cfg.get("output_dir"),
         "lang": cfg.get("lang"),
+        "report_langs": list(REPORT_LANGS),
         "master_ref": cfg.get("master_ref"),
         "develop_ref": cfg.get("develop_ref"),
+        "ticket_id_regex": cfg.get("ticket_id_regex"),
+        "console": {"port": console.get("port"), "idle_minutes": console.get("idle_minutes")},
         "backlog": {
             "space": backlog.get("space"),
             "project_key": backlog.get("project_key"),
@@ -388,6 +393,55 @@ def hash_status(path: Path, cache_: HashCache) -> dict:
         HASH_SLOTS.release()
 
 
+# One ticket listing spends at most this long checking report hashes; the rest are checked in the
+# background and show ``unknown`` (reason ``busy``) until the next listing.
+LIST_HASH_BUDGET = 2.0
+
+
+def list_hash_status(path: Path, cache_: HashCache, deadline: float) -> dict:
+    """``hash_status`` for the ticket list: from the cache, now while the budget lasts, else later."""
+    cached = cache_.get(f"{path}|{_mtime(path)}")
+    if cached is not None:
+        return cached
+    if time.monotonic() < deadline:
+        return hash_status(path, cache_)
+    key = str(path)
+    with _WARMING_LOCK:
+        if key not in _WARMING:
+            _WARMING.add(key)
+            threading.Thread(target=_warm, args=(path, cache_), daemon=True).start()
+    return {"status": "unknown", "reason": "busy"}
+
+
+_WARMING: set[str] = set()
+_WARMING_LOCK = threading.Lock()
+
+
+def _warm(path: Path, cache_: HashCache) -> None:
+    try:
+        hash_status(path, cache_)
+    finally:
+        with _WARMING_LOCK:
+            _WARMING.discard(str(path))
+
+
+def suites_by_ticket(cfg: dict) -> dict[str, list[dict]]:
+    """The suites made from each ticket's survey report."""
+    from .. import webtest, webtest_suite  # noqa: PLC0415
+
+    out: dict[str, list[dict]] = {}
+    for sid, folder in sorted(webtest_suite.list_suites(webtest.runs_root(cfg)).items()):
+        try:
+            suite = webtest_suite.load(folder)
+        except webtest.WebtestError:
+            continue
+        source = suite["source"]
+        if source.get("kind") == "backlog" and source.get("ticket"):
+            out.setdefault(source["ticket"], []).append(
+                {"id": sid, "name": suite["name"], "state": suite["state"], "revision": source.get("revision")})
+    return out
+
+
 # trace ----------------------------------------------------------------------------------------
 def trace_view(cfg: dict, ticket: str, workbook: str | None, template_name: str | None, home: Path | None) -> dict:
     folder, revisions = _ticket(cfg, ticket)
@@ -470,10 +524,17 @@ def install(state: ConsoleState) -> None:
     def get_tickets(req: Request) -> dict:
         cfg = load_config(req.state)
         tickets = []
+        suites = suites_by_ticket(cfg)
+        deadline = time.monotonic() + LIST_HASH_BUDGET
         for name, folder in sorted(ticket_folders(cfg).items()):
             summary = ticket_summary(name, folder)
-            if summary is not None:
-                tickets.append(summary)
+            if summary is None:
+                continue
+            summary["suites"] = suites.get(name, [])
+            summary["open_questions"] = summary.get("questions", 0) if "error" not in summary else 0
+            if summary.get("latest") and "error" not in summary:
+                summary["freshness"] = list_hash_status(folder / summary["latest"], hashes, deadline)
+            tickets.append(summary)
         return {"tickets": tickets, "output_dir": cfg.get("output_dir")}
 
     def get_ticket(req: Request) -> dict:

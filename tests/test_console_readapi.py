@@ -229,7 +229,10 @@ def test_coverage_after_trace_write_revision(console, home, tmp_path):
 def test_config_projection(console, home):
     status, _, data = get(console, "/api/config")
     assert status == 200
-    assert set(data) == {"output_dir", "lang", "master_ref", "develop_ref", "backlog"}
+    assert set(data) == {"output_dir", "lang", "report_langs", "master_ref", "develop_ref", "ticket_id_regex",
+                         "console", "backlog"}
+    assert set(data["console"]) == {"port", "idle_minutes"}
+    assert data["report_langs"] == ["vi", "en", "ja"]  # reports keep Vietnamese; the console UI does not
     assert set(data["backlog"]) == {"space", "project_key", "decisions_log_prefix"}
     assert data["output_dir"] == str(home / "Downloads")
 

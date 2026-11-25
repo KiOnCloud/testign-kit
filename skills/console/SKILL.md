@@ -1,6 +1,6 @@
 ---
 name: console
-description: Start the local testign console (a browser page on 127.0.0.1), then take the survey, close, testcase and web test jobs the tester queues there (or /testign:webtest queues from the chat) one at a time, follow the matching skill, ask the tester through the console instead of the chat, and close each job with a result. Used by /testign:console.
+description: Start the local testign console (a browser page on 127.0.0.1), then take the survey, close, testcase, test suite and web test jobs the tester queues there (or /testign:webtest queues from the chat) one at a time, follow the matching skill, ask the tester through the console instead of the chat, and close each job with a result. Used by /testign:console.
 ---
 
 # console
@@ -40,6 +40,14 @@ opens the browser itself and prints JSON with a `session` id. Keep that `session
 - Exit 2 naming a port: relay the message (another program holds the port; `console.port` in the
   config changes it) and stop.
 
+Then tell the console which tools this session has, so its Agent & jobs screen shows them: add
+`--has chrome` when the Claude in Chrome tools are present (loaded or deferred), `--has figma` for a
+Figma MCP server with `get_design_context`, `--has backlog` for a Backlog MCP server.
+
+```bash
+<run> console capabilities --session <session> --has chrome --has figma
+```
+
 Tell the tester in one line that the console is open and that you are waiting for jobs.
 
 ### 2. Wait for a job
@@ -78,7 +86,7 @@ own kind's route only:
 | `survey` | `spec-qa` | `params.repo`, `master_ref`, `develop_ref`, `fetch`, `feature`; report language `report_lang` |
 | `close` | `qa-close` | report `base_revision`; `params.tester` is `approved_by` and the `cache-review --by` name |
 | `testcase` | `testcase` | report `base_revision`; `params.mode` (`write` or `trace`), `template`, `workbook`, `focus` |
-| `webtest-plan` | `webtest` | `params.name`, `source` (`file`, `node`, `url`), `base_url`, `project`, `hosts`, `template`, `ticket`; report language `report_lang` |
+| `suite-generate` | `webtest` ("Generate job") | `params.suite`, `source` (Figma `url`, `file`, `node`, or Backlog `ticket`, `report`, `revision`); Backlog jobs also carry `ticket` (the source names its report revision, so a later survey does not stop the job); case language `report_lang` |
 | `webtest-run` | `webtest` | `params.run`, `tester`, `mode` (`run` or `export`) |
 
 While the job is open:

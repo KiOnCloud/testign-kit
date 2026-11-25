@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
 
-import { h, inline, mount, showBidi } from '../dom.mjs';
+import { h, icon, inline, mount, showBidi, STATUS_CLASSES, statusGlyph, statusIcon } from '../dom.mjs';
 import { installFakeDocument } from './fake-dom.mjs';
 
 beforeEach(() => installFakeDocument());
@@ -66,4 +66,32 @@ test('mount replaces children', () => {
   mount(el, h('i', 'new'), 'text');
   assert.equal(el.textContent, 'newtext');
   assert.equal(el.childNodes.length, 2);
+});
+
+test('a status icon is a focusable anchor named by its tip, with the tip as its tooltip', () => {
+  const el = statusIcon('warn', 'clock', 'Waiting for <you>');
+  assert.equal(el.tagName, 'SPAN');
+  assert.equal(el.getAttribute('class'), 'yh-tip-anchor st st--warn');
+  assert.equal(el.getAttribute('tabindex'), '0');
+  assert.equal(el.getAttribute('role'), 'img');
+  assert.equal(el.getAttribute('aria-label'), 'Waiting for <you>');
+  const [svg, tip] = el.children;
+  assert.equal(svg.tagName, 'SVG');
+  assert.equal(svg.getAttribute('class'), 'yh-icon');
+  assert.equal(svg.getAttribute('aria-hidden'), 'true');
+  assert.equal(tip.getAttribute('class'), 'yh-tip');
+  assert.equal(tip.getAttribute('role'), 'tooltip');
+  assert.equal(tip.textContent, 'Waiting for <you>');
+  assert.throws(() => statusIcon('great', 'check', 'x'), RangeError);
+});
+
+test('status icons and glyphs take their tone from the same class map', () => {
+  assert.deepEqual(Object.keys(STATUS_CLASSES), ['ok', 'warn', 'busy', 'bad']);
+  for (const [kind, cls] of Object.entries(STATUS_CLASSES)) {
+    assert.ok(statusIcon(kind, 'check', kind).getAttribute('class').split(' ').includes(cls));
+  }
+  assert.equal(statusGlyph('done').getAttribute('class'), `k-status ${STATUS_CLASSES.ok}`);
+  assert.equal(statusGlyph('crossed', 'text-danger').getAttribute('class'), `k-status ${STATUS_CLASSES.bad} text-danger`);
+  assert.equal(statusGlyph('unknown-shape').getAttribute('class'), `k-status ${STATUS_CLASSES.busy}`);
+  assert.equal(icon('check', 'yh-icon--sm').getAttribute('class'), 'yh-icon yh-icon--sm');
 });

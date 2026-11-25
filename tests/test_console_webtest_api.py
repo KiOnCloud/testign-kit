@@ -309,7 +309,7 @@ def test_agent_routes_for_the_run_commands(console, home, run_id):
     info = agent(console, "GET", f"/agent/jobs/{job['id']}/info?session={AGENT}")[2]
     assert info["kind"] == "webtest-run" and info["params"]["run"] == run_id
     assert agent(console, "GET", f"/agent/jobs/{job['id']}/signed-in?session={AGENT}")[2] == {"signed_in": None}
-    assert agent(console, "GET", f"/agent/jobs/{job['id']}/review?session={AGENT}")[2] == {"review": None}
+    assert agent(console, "GET", f"/agent/jobs/{job['id']}/review?session={AGENT}")[0] == 404  # retired with the plan job
     listed = browser(console, "GET", f"/api/jobs/{job['id']}")[2]
     assert listed["opened"] is True
 

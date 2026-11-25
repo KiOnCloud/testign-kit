@@ -107,44 +107,74 @@ class FakeConsole:
         return {"ok": True}
 
 
-def plan_params() -> dict:
-    return {"name": "Header update", "source": {"kind": "figma", "url": "https://www.figma.com/design/FILEKEY/x?node-id=1-1",
-                                                 "file": "FILEKEY", "node": "1:1"},
-            "base_url": BASE_URL, "project": "demo", "hosts": list(HOSTS), "template": "sample"}
-
-
 def write_json(path: Path, data) -> Path:
     path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return path
 
 
-def review_lines(run: dict) -> list[dict]:
-    return [{"row": c["row"], "class": c.get("class"), "runner": c.get("runner") or "none",
-             "scenario": c.get("scenario"), "viewport": c.get("viewport"), "mobile_method": c.get("mobile_method"),
-             "screen": (c.get("screen") or {}).get("url") or "", "preconditions": c.get("preconditions") or ""}
-            for c in run["cases"]]
+COLUMNS = {"template": "sample", "columns": [{"field": "content", "letter": "B"}, {"field": "verdict", "letter": "F"}],
+           "verdict_labels": {"pass": "OK", "fail": "NG"}}
 
 
-def build(root: Path, server: FakeConsole, *, confirm: bool = True, rows_answer: dict | None = None,
-          when: datetime | None = None) -> str:
-    """New run, all rows staged and imported, triage stored and (optionally) the plan confirmed."""
-    from testign import webtest  # noqa: PLC0415
+def eight_cases(rows_answer: dict | None = None) -> list[dict]:
+    """The eight made-up rows as suite cases, with the tester's edits of ``rows_answer`` applied."""
+    cases = []
+    for staged in STAGED:
+        source = {k: v for k, v in staged["source"].items() if k not in ("kind", "file")}
+        case = {"source": source, "type": staged["type"], "content": staged["content"], "creator": staged["creator"],
+                **TRIAGE[staged["row"]]}
+        for key, value in ((rows_answer or {}).get(staged["row"]) or {}).items():
+            if key == "screen":
+                case["screen"] = value or None
+            else:
+                case[key] = value
+        cases.append({k: v for k, v in case.items() if v is not None})
+    return cases
 
-    server.add_job("j-plan", "webtest-plan", **plan_params())
-    made = webtest.new_run(root, server, "j-plan", "s-test0001", None, when=when or datetime(2026, 11, 19, 10, 0))
-    folder = webtest.find_run(root, made["run"])
-    for case in STAGED:
-        webtest.stage(folder, case)
-    webtest.import_staged(folder)
-    webtest.triage(folder, TRIAGE)
-    if confirm:
-        run = webtest.load(folder)
-        server.reviews["j-plan"] = {
-            "lines": review_lines(run), "digest": webtest.cases_digest(run), "template": "sample",
-            "answered_by": "fp-tester", "answered_at": "2026-11-19T10:05:00+09:00",
-            "answer": {"columns": [{"field": "content", "letter": "B"}, {"field": "verdict", "letter": "F"}],
-                       "verdict_labels": {"pass": "OK", "fail": "NG"},
-                       "rows": rows_answer if rows_answer is not None else {}, "confirm": True},
-        }
-        webtest.apply_plan(folder, server, "j-plan", "s-test0001")
+
+def build(root: Path, server: FakeConsole | None = None, *, rows_answer: dict | None = None,
+          when: datetime | None = None, tester: str = "Asher") -> str:
+    """The eight-row run W20261119-1000-header-update, copied from a ready Figma suite."""
+    from testign import webtest, webtest_suite  # noqa: PLC0415
+
+    folder = ready_suite(root, kind="figma", cases=eight_cases(rows_answer))
+    made = webtest.new_run_from_suite(
+        root, webtest_suite.load(folder), folder, name=None, tester=tester, columns_for=lambda run: dict(COLUMNS),
+        target={"base_url": BASE_URL, "project": "demo", "hosts": list(HOSTS), "template": "sample"},
+        when=when or datetime(2026, 11, 19, 10, 0))
     return made["run"]
+
+
+SUITE_CASES = [
+    {"content": "予約確認 → 予約履歴 on the header link", "kind": "label", "class": "sure", "runner": "agent",
+     "scenario": "member", "screen": "/mypage", "steps": "1. Open My Page", "expected": "The header link reads 予約履歴",
+     "trace": ["B4", "R1"]},
+    {"content": "A help link is added to the footer", "kind": "element", "class": "sure", "runner": "agent",
+     "scenario": "none", "screen": "/", "steps": "1. Open the top page", "expected": "The footer has a help link",
+     "trace": ["B2"]},
+    {"content": "Cancel button only for unconfirmed reservations", "kind": "data-rule", "class": "choice",
+     "runner": "tester", "scenario": "member", "screen": "/reservations", "trace": ["B5"]},
+    {"content": "Totals are written by the nightly batch", "kind": "data-rule", "class": "not-web", "trace": ["R2"]},
+]
+
+
+def ready_suite(root: Path, *, kind: str = "manual", cases: list[dict] | None = None, name: str = "Header update",
+                project: str = "demo", when: datetime | None = None) -> Path:
+    """A confirmed suite with made-up cases, for runs made from suites. ``kind`` only labels its source."""
+    from testign import webtest_suite  # noqa: PLC0415
+
+    folder = webtest_suite.suites_root(root) / webtest_suite.new_suite_id(name, [], when or datetime(2026, 11, 25, 9, 0))
+    folder.mkdir(parents=True)
+    (folder / "source").mkdir()
+    source = {"manual": {"kind": "manual"},
+              "backlog": {"kind": "backlog", "ticket": "DEMO-1", "report": "DEMO-1-survey-r2.md", "revision": 2},
+              "figma": {"kind": "figma", "url": "https://www.figma.com/design/FILEKEY/x?node-id=1-1", "file": "FILEKEY",
+                        "node": "1:1"}}[kind]
+    suite = {"version": webtest_suite.VERSION, "id": folder.name, "name": name, "project": project, "case_lang": "en",
+             "created_at": "2026-11-25T09:00:00+09:00", "updated_at": "", "source": source, "state": "review",
+             "generate_job": None, "confirmed_at": None, "confirmed_by": None, "suite_digest": None,
+             "cases": [{"case": f"c{n}", **webtest_suite.check_case(c, case_id=f"c{n}")}
+                       for n, c in enumerate(cases if cases is not None else SUITE_CASES, start=1)]}
+    webtest_suite.save(folder, suite)
+    webtest_suite.confirm(folder, "fp-tester")
+    return folder
