@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>testign console · redesign</title>
+<link rel="stylesheet" href="ds/yohaku/fonts.css">
+<link rel="stylesheet" href="ds/yohaku/tokens.css">
+<link rel="stylesheet" href="ds/yohaku/bundle.css">
+<style>
+/* Shell on top of Yohaku, modelled on qingyi lab: fixed top bar and sidebar, one scroll container. */
+:root { --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }
+html, body { height: 100%; margin: 0; overflow: hidden; }
+body { background: var(--surface); color: var(--ink); font-family: var(--font-sans); }
+.shell { height: 100vh; display: flex; flex-direction: column; }
+.top { flex: none; height: 56px; display: flex; align-items: center; gap: var(--space-6); padding: 0 var(--space-6); border-bottom: var(--stroke-hairline) solid var(--line); }
+.top .yh-logo small { color: var(--ink-secondary); font-weight: var(--weight-regular); }
+.top-tools { margin-left: auto; display: flex; align-items: center; gap: var(--space-4); }
+.agent { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--ink-secondary); white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--success); display: inline-block; }
+.frame { flex: 1 1 auto; min-height: 0; display: flex; }
+.scroll { flex: 1 1 auto; min-width: 0; overflow: auto; }
+.content { padding: var(--space-8) var(--space-10); display: flex; flex-direction: column; gap: var(--space-8); min-width: 0; }
+.mock { flex: none; display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; padding: var(--space-1) var(--space-6); background: var(--ink); color: var(--ink-inverse); font-size: var(--text-xs); }
+.mock a { color: inherit; opacity: .75; } .mock a:hover { opacity: 1; }
+
+/* Sidebar: qingyi-lab groups (bold row + caret, indented sub rows, inset bar on the active row). */
+.nav { flex: 0 0 248px; overflow-y: auto; border-right: var(--stroke-hairline) solid var(--line); padding: var(--space-4) var(--space-3); display: flex; flex-direction: column; gap: var(--space-1); box-sizing: border-box; }
+.nav-row { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: var(--control-md); padding: 0 var(--space-3); box-sizing: border-box; border: 0; background: none;
+  color: var(--ink); font: inherit; font-size: var(--text-md); text-align: left; text-decoration: none; cursor: pointer; border-radius: var(--radius-sm); white-space: nowrap; }
+.nav-row:hover { background: var(--surface-sunken); }
+.nav-group { font-weight: var(--weight-bold); margin-top: var(--space-3); }
+.nav-group:first-child { margin-top: 0; }
+.nav-group .caret { margin-left: auto; transition: transform var(--duration-base) var(--ease-standard); }
+.nav-group[aria-expanded="false"] .caret { transform: rotate(-90deg); }
+.nav-sub { display: flex; flex-direction: column; gap: var(--space-1); padding-left: var(--space-8); }
+.nav-sub[hidden] { display: none; }
+.nav-sub .nav-row { color: var(--ink-secondary); }
+.nav-sub .nav-row.is-active { color: var(--ink); font-weight: var(--weight-bold); box-shadow: inset var(--stroke-active) 0 0 var(--line-ink); border-radius: 0; }
+.nav-row .n { margin-left: auto; font-size: var(--text-sm); color: var(--ink-tertiary); font-family: var(--font-num); }
+
+/* Wide tables scroll sideways instead of squeezing; rows are roomy. */
+.tbl-box { overflow-x: auto; border: var(--stroke-hairline) solid var(--line); }
+.tbl-box .yh-table { min-width: 960px; }
+.tbl-box .yh-table th, .tbl-box .yh-table td { padding: var(--space-4) var(--space-5); white-space: nowrap; }
+.tbl-box .yh-table td.wrap { white-space: normal; min-width: 280px; }
+.tbl-box .yh-table tbody tr { height: 64px; }
+.tbl-box .yh-table tbody tr.click { cursor: pointer; }
+.tbl-box .yh-table tbody tr.is-sel { background: var(--kinari); }
+.tbl-box .yh-table tr:last-child td { border-bottom: 0; }
+.sub { display: block; font-size: var(--text-sm); color: var(--ink-tertiary); margin-top: 2px; }
+.mono { font-family: var(--font-mono); font-size: var(--text-sm); }
+.id { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--ink-secondary); }
+a.lnk { color: var(--ink); text-decoration: underline; text-underline-offset: var(--underline-offset); text-decoration-color: var(--line-strong); }
+a.lnk:hover { text-decoration-color: var(--ink); }
+
+/* Icon status with a hover tooltip (Yohaku .yh-tip shown on hover or focus). */
+.yh-tip-anchor .yh-tip { display: none; white-space: normal; text-align: left; font-weight: var(--weight-regular); }
+.yh-tip-anchor:hover .yh-tip, .yh-tip-anchor:focus-visible .yh-tip { display: block; }
+.st { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: var(--radius-full); cursor: default; }
+.st .yh-icon { width: 18px; height: 18px; }
+.st--ok { color: var(--success); background: var(--success-soft); }
+.st--warn { color: var(--on-beige); background: var(--kinari); }
+.st--busy { color: var(--ink-secondary); background: var(--surface-sunken); }
+.st--bad { color: var(--danger); background: var(--danger-soft); }
+.st-row { display: inline-flex; align-items: center; gap: var(--space-3); }
+
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-6); flex-wrap: wrap; }
+.page-head h1 { margin: 0; font-size: var(--text-3xl); font-weight: var(--weight-bold); line-height: var(--leading-tight); }
+.page-head p { margin: var(--space-2) 0 0; color: var(--ink-secondary); font-size: var(--text-md); max-width: 760px; }
+.page-head .meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-top: var(--space-3); font-size: var(--text-sm); color: var(--ink-secondary); }
+.actions { display: flex; gap: var(--space-3); flex: none; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.toolbar .yh-input-wrap { flex: 0 1 320px; }
+.seg { display: inline-flex; gap: var(--space-2); flex-wrap: wrap; }
+.seg .yh-tag { height: var(--control-sm); font-size: var(--text-sm); }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: var(--space-6); align-items: start; }
+@media (max-width: 1200px) { .split { grid-template-columns: 1fr; } }
+.sticky { position: sticky; top: 0; }
+.panel { border: var(--stroke-hairline) solid var(--line); padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-4); background: var(--surface); }
+.panel-head { display: flex; align-items: center; gap: var(--space-3); }
+.panel-head .yh-btn { margin-left: auto; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-4); }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-2) var(--space-6); margin: 0; font-size: var(--text-md); }
+.kv dt { color: var(--ink-secondary); } .kv dd { margin: 0; }
+.picks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.pick { text-align: left; font: inherit; color: inherit; cursor: pointer; gap: var(--space-2); padding: var(--space-6); }
+.pick:hover { border-color: var(--line-ink); }
+.pick .yh-badge { align-self: flex-start; }
+.steps { display: flex; flex-wrap: wrap; gap: var(--space-6); list-style: none; padding: 0 0 var(--space-3); margin: 0; border-bottom: var(--stroke-hairline) solid var(--line); counter-reset: s; }
+.steps li { counter-increment: s; display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-md); color: var(--ink-tertiary); }
+.steps li::before { content: counter(s); display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: var(--radius-full); border: var(--stroke-hairline) solid var(--line-strong); font-size: var(--text-sm); }
+.steps li.is-done { color: var(--ink-secondary); } .steps li.is-done::before { content: "✓"; }
+.steps li.is-current { color: var(--ink); font-weight: var(--weight-bold); } .steps li.is-current::before { background: var(--ink); color: var(--ink-inverse); border-color: var(--ink); }
+.narrow { max-width: 880px; display: flex; flex-direction: column; gap: var(--space-6); }
+.foot { display: flex; align-items: center; gap: var(--space-3); }
+.foot .push { margin-left: auto; }
+.shot { aspect-ratio: 16/10; border: var(--stroke-hairline) solid var(--line-subtle); display: grid; place-items: center; color: var(--ink-tertiary); font-size: var(--text-sm);
+  background: repeating-linear-gradient(135deg, var(--surface-sunken) 0 8px, var(--surface) 8px 16px); }
+.quote { margin: 0; padding: var(--space-3) var(--space-4); background: var(--surface-sunken); border-left: var(--stroke-active) solid var(--line-strong); font-size: var(--text-md); }
+.yh-textarea.sm { min-height: 0; }
+.progress { width: 240px; height: 6px; background: var(--line-subtle); position: relative; }
+.progress span { position: absolute; inset: 0 auto 0 0; background: var(--ink); }
+.yh-alert .yh-btn { margin-left: auto; flex: none; }
+.lab-scrim { position: fixed; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="mock"><strong>MOCKUP</strong><span id="mock-note"></span><span style="margin-left:auto"><a href="#/suites">Suites</a> · <a href="#/suites/new">New suite</a> · <a href="#/suites/ckweb-3366">Suite detail</a> · <a href="#/survey">Survey</a> · <a href="#/runs">Runs</a> · <a href="#/runs/run-booking-1119">Run detail</a> · <a href="#/scenarios">Login scenarios</a></span></div>
+  <header class="top">
+    <a class="yh-logo" href="#/suites">TESTIGN <small>console</small></a>
+    <div class="top-tools">
+      <span class="agent"><span class="dot"></span><span id="agent-text"></span></span>
+      <span class="yh-select-wrap"><select class="yh-select yh-input--sm" id="lang" aria-label="Language" style="min-width:132px"><option value="en">English</option><option value="ja">日本語</option></select></span>
+    </div>
+  </header>
+  <div class="frame">
+    <nav class="nav" id="nav" aria-label="Main menu"></nav>
+    <div class="scroll"><main class="content" id="view"></main></div>
+  </div>
+</div>
+<div class="yh-scrim lab-scrim" id="scrim" hidden><div class="yh-dialog" id="dlg" role="dialog" aria-modal="true"></div></div>
+
+<script>
+// ============================================================ i18n (English default, Japanese supported)
+const I18N = {
+  en: {
+    mock: 'Three groups: Test case design · Test runs · Settings. Sample data.',
+    agent: 'Agent listening',
+    g_design: 'Test case design', g_run: 'Test runs', g_config: 'Settings',
+    n_suites: 'Test suites', n_survey: 'Ticket survey', n_runs: 'Runs', n_agent: 'Agent & jobs',
+    n_projects: 'Projects & hosts', n_scenarios: 'Login scenarios', n_templates: 'Templates', n_cache: 'Scout cache', n_settings: 'Preferences',
+    search: 'Search', all: 'All', cases: 'Cases', source: 'Source', state: 'Status', runs: 'Runs', updated: 'Updated', project: 'Project',
+    suites_title: 'Test suites', suites_sub: 'A suite is a list of test cases taken from one source. Edit, add or delete cases here, then run the suite from Test runs.',
+    new_suite: 'New suite', search_suites: 'Search suites, tickets, nodes…', f_needs: 'Needs you', f_gen: 'Generating', f_ready: 'Ready',
+    st_generating: 'Agent generating', st_review: 'Needs your review', st_ready: 'Ready',
+    src_figma: 'Figma', src_backlog: 'Backlog', src_excel: 'Excel', src_manual: 'Manual',
+    n_runs_v: '{n} runs', none: '—',
+    wiz_title: 'New test suite', wiz_sub: 'Four steps. Only step 2 depends on the source; the others are the same for every source.',
+    step_source: 'Source', step_input: 'Input', step_info: 'Suite details', step_review: 'Review',
+    s_figma_t: 'Figma change table', s_figma_d: 'Each row of the design change table becomes a case. The agent reads the captures and guesses the screen.',
+    s_backlog_t: 'Backlog ticket', s_backlog_d: 'The agent writes cases from the ticket\'s survey report (B* and R* rows). Run a ticket survey first.',
+    s_excel_t: 'Existing Excel file', s_excel_d: 'Import test cases you already wrote, using a registered template. No agent needed.',
+    s_manual_t: 'Empty suite', s_manual_d: 'Create an empty suite and add cases by hand.',
+    figma_link: 'Figma link (with node-id)', figma_help: 'The design change table. Imported once; later runs make no Figma call.',
+    excel_file: 'Excel file', excel_help: 'Columns are read with a test case template from Settings › Templates.', excel_tpl: 'Template to read the file',
+    manual_t: 'No input needed', manual_d: 'The suite is created empty; add cases on the suite page.',
+    ticket_sel: 'Ticket with a survey report', ticket_help: 'Only tickets that have a report are listed. No report yet?', open_survey: 'Open Ticket survey',
+    ticket_meta: 'survey r2 · 24/11 · 10 B rows · 3 R rows',
+    suite_name: 'Suite name', project_help: 'Used to guess screens and login scenarios.', case_lang: 'Case language',
+    next_title: 'What happens next', next_gen: 'The agent writes and classifies the cases in one job. The suite stays in “Needs your review” until you confirm it.',
+    next_excel: 'The file is read right away; no agent job.', next_manual: 'The empty suite is created right away.',
+    back: 'Back', cancel: 'Cancel', next: 'Next', create: 'Create suite', queue_gen: 'Queue generation job',
+    input: 'Input',
+    export_xlsx: 'Export Excel', new_run: 'New run', more: 'Rename, duplicate, delete',
+    confirm_first: 'Confirm the suite first',
+    review_banner_t: 'The agent wrote 18 cases from 13 rows of survey r2.', review_banner_d: 'Check and edit them, then confirm the suite to run it.', confirm_suite: 'Confirm suite',
+    tab_cases: 'Cases', tab_source: 'Source & coverage', tab_runs: 'Runs',
+    search_cases: 'Search cases…', f_choice: 'Needs your choice', f_notweb: 'Not on the web', add_case: 'Add case',
+    c_trace: 'Trace', c_content: 'Case', c_screen: 'Screen', c_class: 'Class', c_runner: 'Runner', c_scenario: 'Login scenario',
+    bulk_hint: 'Select several rows to change class, runner or scenario at once, or delete them.',
+    edit_case: 'Edit case', f_content: 'Case', f_pre: 'Preconditions', f_steps: 'Steps', f_expected: 'Expected result', f_screen: 'Screen (path)', f_viewport: 'Viewport',
+    gen_note: 'Written by the agent from survey r2 · B4. Editing it here removes the “agent” mark.',
+    delete_case: 'Delete', duplicate: 'Duplicate', save: 'Save', close: 'Close',
+    cls_sure: 'Sure', cls_choice: 'Needs your choice', 'cls_not-web': 'Not on the web',
+    run_agent: 'Agent', run_tester: 'I run it', run_none: 'Manual',
+    regen: 'Regenerate from a newer report', cov_row: 'Row', cov_text: 'Text in the report', cov_note: '13 of 13 rows have at least one case. A row whose cases are all deleted shows as missing.',
+    no_runs_t: 'This suite has not run yet', no_runs_d: 'Confirm the suite, then create a run.',
+    survey_title: 'Ticket survey', survey_sub: 'Survey a Backlog ticket against the source (master and develop), answer the open questions, then use the report as the source of a test suite.',
+    new_survey: 'New survey', c_ticket: 'Ticket', c_report: 'Report', c_fresh: 'Source', c_open_q: 'Open questions', c_suites: 'Suites',
+    fr_ok: 'Report hashes match develop', fr_changed: 'develop changed since this report: survey again', fr_busy: 'The agent is surveying this ticket', fr_q: 'Open questions wait for an answer',
+    make_suite: 'Create suite', answer: 'Answer questions', resurvey: 'Survey again', surveying: 'Surveying…',
+    survey_note: 'Open a ticket to read its report (B*, R*, findings), close its answers and trace Excel test cases, as today.',
+    runs_title: 'Runs', runs_sub: 'A run takes one confirmed suite onto one test environment. The agent checks each case in your own Chrome.',
+    needs_t: '3 things need you', needs_1: '2 questions in Booking header fix', needs_2: '1 sign-in in Login regression', handle: 'Handle',
+    c_run: 'Run', c_suite: 'Suite', c_env: 'Environment', c_result: 'Result', c_when: 'When', c_tester: 'Tester',
+    rs_done: 'Finished', rs_needs: 'Needs you', rs_running: 'Agent running',
+    resume: 'Resume', finish: 'Finish', export: 'Export', progress: 'Progress', signed_in: 'Signed in as client',
+    agent_needs: 'The agent needs you', ask_text: 'The list has no booking in the キャンセル待ち state, so the badge cannot be seen.',
+    design: 'Design', current: 'Current page', a_delegate: 'Hand back to the agent, with preconditions:', a_pre_ph: 'For example: booking #1024 is キャンセル待ち', a_self: 'I run it myself', a_skip: 'Skip', send: 'Send answer',
+    pass: 'Pass', parked: 'Needs you',
+    agent_title: 'Agent & jobs', agent_sub: 'The Claude Code session attached to the console works the jobs in order. Everything the agent does (generate, survey, run, export) is listed here.',
+    agent_line: 'session a3f2 · last heartbeat 8 s ago', cap_chrome: 'Claude in Chrome', cap_figma: 'Figma MCP', cap_backlog: 'Backlog MCP',
+    c_job: 'Job', c_for: 'For', c_progress: 'Progress', j_run: 'Run', j_gen: 'Generate cases', j_survey: 'Survey', j_export: 'Export',
+    js_running: 'Running', js_queued: 'Queued', js_done: 'Done', p_run: 'r04 · 3 of 8 done', p_gen: 'Reading report r1 · B6 of B9', p_gen_done: '18 cases · waiting for your review',
+    proj_title: 'Projects & hosts', proj_sub: 'A project is one system under test: the hosts the agent may open and the sign-in hosts. Only you edit hosts.', add_project: 'Add project',
+    c_hosts: 'Allowed hosts', c_signin: 'Sign-in hosts', c_scen: 'Scenarios',
+    scen_title: 'Login scenarios', scen_sub: 'Each scenario describes how one role signs in on one project. The agent only knows the scenario name, never the account; you sign in yourself in Chrome.', add_scen: 'Add scenario',
+    search_scen: 'Search scenarios, projects or URLs', c_login: 'Login page', c_check: 'Signed-in check', approve: 'Approve',
+    sc_ok: 'Approved', sc_wait: 'Waiting for approval', sc_rej: 'Rejected',
+    tpl_title: 'Templates', tpl_sub: 'Your customer\'s Excel files. “Test case” templates export and import suites; “Web test” templates export run results.', add_tpl: 'Register template',
+    c_tpl: 'Template', c_use: 'Used for', c_sheet: 'Sheet · columns', default: 'Default', u_tc: 'Test case', u_web: 'Web test', view: 'View',
+    cache_title: 'Scout cache', cache_sub: 'The production (master) brief of each feature, reused while its source files are unchanged.', clear_cache: 'Clear cache',
+    c_feature: 'Feature', c_repo: 'Repository', c_files: 'Files', c_model: 'Model',
+    pref_title: 'Preferences', pref_sub: 'Stored in ~/.testign-kit/config.json.', p_general: 'General', p_out: 'Output folder', p_lang: 'Report language', p_git: 'Git', p_branches: 'Production / phase branches', p_regex: 'Ticket ID pattern', p_backlog: 'Backlog', p_space: 'Space · project', p_prefix: 'Decisions log prefix', p_console: 'Console', p_port: 'Port', p_idle: 'Stops after (minutes idle)',
+    dlg_title: 'New run', dlg_suite: 'Test suite', dlg_suite_help: 'Confirmed suites only. The run keeps a snapshot; editing the suite later does not change this run.',
+    dlg_url: 'Test environment URL', dlg_tpl: 'Result template', dlg_hosts: 'Allowed hosts:', dlg_need: 'Scenario needed: client (approved)', dlg_go: 'Create and run',
+  },
+  ja: {
+    mock: '3つのグループ：テストケース設計・テスト実行・設定。サンプルデータです。',
+    agent: 'エージェント接続中',
+    g_design: 'テストケース設計', g_run: 'テスト実行', g_config: '設定',
+    n_suites: 'テストスイート', n_survey: 'チケット調査', n_runs: '実行', n_agent: 'エージェントとジョブ',
+    n_projects: 'プロジェクトとホスト', n_scenarios: 'ログインシナリオ', n_templates: 'テンプレート', n_cache: 'Scout キャッシュ', n_settings: '環境設定',
+    search: '検索', all: 'すべて', cases: 'ケース', source: 'ソース', state: '状態', runs: '実行', updated: '更新', project: 'プロジェクト',
+    suites_title: 'テストスイート', suites_sub: 'スイートは1つのソースから作ったテストケースの一覧です。ここでケースを編集・追加・削除し、テスト実行から実行します。',
+    new_suite: '新規スイート', search_suites: 'スイート名・チケット・ノードで検索…', f_needs: '要対応', f_gen: '生成中', f_ready: '準備完了',
+    st_generating: 'エージェント生成中', st_review: '確認待ち', st_ready: '準備完了',
+    src_figma: 'Figma', src_backlog: 'Backlog', src_excel: 'Excel', src_manual: '手動',
+    n_runs_v: '{n} 回', none: '—',
+    wiz_title: '新規テストスイート', wiz_sub: '4ステップです。ソースによって変わるのはステップ2だけで、他はどのソースでも同じです。',
+    step_source: 'ソース', step_input: '入力', step_info: 'スイート情報', step_review: '確認',
+    s_figma_t: 'Figma 変更表', s_figma_d: 'デザイン変更表の1行が1ケースになります。エージェントがキャプチャを読み、画面を推定します。',
+    s_backlog_t: 'Backlog チケット', s_backlog_d: 'チケットの調査レポート（B*・R* 行）からエージェントがケースを作成します。先にチケット調査が必要です。',
+    s_excel_t: '既存の Excel', s_excel_d: '登録済みテンプレートで、作成済みのテストケースを取り込みます。エージェントは不要です。',
+    s_manual_t: '空のスイート', s_manual_d: '空のスイートを作り、ケースを手で追加します。',
+    figma_link: 'Figma リンク（node-id 付き）', figma_help: 'デザイン変更表。一度取り込めば、以降は Figma を呼びません。',
+    excel_file: 'Excel ファイル', excel_help: '設定 › テンプレートのテストケース用テンプレートで列を読み取ります。', excel_tpl: '読み取りに使うテンプレート',
+    manual_t: '入力は不要です', manual_d: '空のスイートを作成します。ケースはスイート画面で追加します。',
+    ticket_sel: '調査レポートのあるチケット', ticket_help: 'レポートのあるチケットだけを表示します。まだない場合：', open_survey: 'チケット調査を開く',
+    ticket_meta: '調査 r2・24/11・B 10行・R 3行',
+    suite_name: 'スイート名', project_help: '画面とログインシナリオの推定に使います。', case_lang: 'ケースの言語',
+    next_title: '次に起きること', next_gen: 'エージェントが1つのジョブでケースを作成・分類します。確認するまでスイートは「確認待ち」のままです。',
+    next_excel: 'ファイルはすぐに読み込まれます。ジョブは不要です。', next_manual: '空のスイートがすぐに作成されます。',
+    back: '戻る', cancel: 'キャンセル', next: '次へ', create: 'スイートを作成', queue_gen: '生成ジョブを登録',
+    input: '入力',
+    export_xlsx: 'Excel 出力', new_run: '新規実行', more: '名前変更・複製・削除',
+    confirm_first: '先にスイートを確定してください',
+    review_banner_t: 'エージェントが調査 r2 の13行から18ケースを作成しました。', review_banner_d: '確認・修正してからスイートを確定すると実行できます。', confirm_suite: 'スイートを確定',
+    tab_cases: 'ケース', tab_source: 'ソースとカバレッジ', tab_runs: '実行',
+    search_cases: 'ケースを検索…', f_choice: '選択が必要', f_notweb: 'Web 対象外', add_case: 'ケースを追加',
+    c_trace: 'トレース', c_content: 'ケース', c_screen: '画面', c_class: '分類', c_runner: '実行者', c_scenario: 'ログインシナリオ',
+    bulk_hint: '複数行を選ぶと、分類・実行者・シナリオの一括変更や削除ができます。',
+    edit_case: 'ケースを編集', f_content: 'ケース', f_pre: '前提条件', f_steps: '手順', f_expected: '期待結果', f_screen: '画面（パス）', f_viewport: '画面幅',
+    gen_note: '調査 r2・B4 からエージェントが作成。ここで編集すると「エージェント作成」の印が外れます。',
+    delete_case: '削除', duplicate: '複製', save: '保存', close: '閉じる',
+    cls_sure: '確実', cls_choice: '選択が必要', 'cls_not-web': 'Web 対象外',
+    run_agent: 'エージェント', run_tester: '自分で実行', run_none: '手動',
+    regen: '新しいレポートから再生成', cov_row: '行', cov_text: 'レポートの記述', cov_note: '13行すべてに1件以上のケースがあります。ケースをすべて削除した行は不足として表示されます。',
+    no_runs_t: 'このスイートはまだ実行されていません', no_runs_d: 'スイートを確定してから実行を作成してください。',
+    survey_title: 'チケット調査', survey_sub: 'Backlog チケットをソース（master と develop）と照らして調査し、質問に回答して、レポートをテストスイートのソースにします。',
+    new_survey: '新規調査', c_ticket: 'チケット', c_report: 'レポート', c_fresh: 'ソース', c_open_q: '未回答の質問', c_suites: 'スイート',
+    fr_ok: 'レポートのハッシュが develop と一致', fr_changed: 'このレポート以降に develop が変更されました。再調査してください', fr_busy: 'エージェントが調査中です', fr_q: '回答待ちの質問があります',
+    make_suite: 'スイートを作成', answer: '質問に回答', resurvey: '再調査', surveying: '調査中…',
+    survey_note: 'チケットを開くと、これまで通りレポート（B*・R*・指摘）の確認、回答のクローズ、Excel テストケースのトレースができます。',
+    runs_title: '実行', runs_sub: '確定済みのスイートを1つのテスト環境で実行します。エージェントがあなたの Chrome で1ケースずつ確認します。',
+    needs_t: '対応が必要な項目が3件', needs_1: 'Booking header fix に質問2件', needs_2: 'Login regression にログイン1件', handle: '対応する',
+    c_run: '実行', c_suite: 'スイート', c_env: '環境', c_result: '結果', c_when: '日時', c_tester: 'テスター',
+    rs_done: '完了', rs_needs: '要対応', rs_running: 'エージェント実行中',
+    resume: '再開', finish: '終了', export: '出力', progress: '進捗', signed_in: 'client でログイン中',
+    agent_needs: 'エージェントから確認', ask_text: '一覧にキャンセル待ちの予約がないため、バッジを確認できません。',
+    design: 'デザイン', current: '現在の画面', a_delegate: '前提条件を添えてエージェントに戻す：', a_pre_ph: '例：予約 #1024 がキャンセル待ち', a_self: '自分で実行する', a_skip: 'スキップ', send: '回答を送信',
+    pass: '合格', parked: '要対応',
+    agent_title: 'エージェントとジョブ', agent_sub: 'コンソールに接続した Claude Code セッションがジョブを順に処理します。エージェントの作業（生成・調査・実行・出力）はすべてここに表示されます。',
+    agent_line: 'セッション a3f2・最終応答 8 秒前', cap_chrome: 'Claude in Chrome', cap_figma: 'Figma MCP', cap_backlog: 'Backlog MCP',
+    c_job: 'ジョブ', c_for: '対象', c_progress: '進捗', j_run: '実行', j_gen: 'ケース生成', j_survey: '調査', j_export: '出力',
+    js_running: '実行中', js_queued: '待機中', js_done: '完了', p_run: 'r04・8件中3件完了', p_gen: 'レポート r1 を読み込み中・B6/B9', p_gen_done: '18ケース・確認待ち',
+    proj_title: 'プロジェクトとホスト', proj_sub: 'プロジェクトはテスト対象のシステムです。エージェントが開けるホストとログイン用ホストを登録します。ホストを編集できるのはあなただけです。', add_project: 'プロジェクトを追加',
+    c_hosts: '許可ホスト', c_signin: 'ログイン用ホスト', c_scen: 'シナリオ',
+    scen_title: 'ログインシナリオ', scen_sub: '1つのシナリオは、1つのプロジェクトで1つのロールがログインする方法です。エージェントが知るのはシナリオ名だけで、アカウントは知りません。ログインは Chrome であなたが行います。', add_scen: 'シナリオを追加',
+    search_scen: 'シナリオ・プロジェクト・URL で検索', c_login: 'ログインページ', c_check: 'ログイン確認', approve: '承認',
+    sc_ok: '承認済み', sc_wait: '承認待ち', sc_rej: '却下',
+    tpl_title: 'テンプレート', tpl_sub: 'お客様の Excel ファイルです。「テストケース」はスイートの出力・取込に、「Web テスト」は実行結果の出力に使います。', add_tpl: 'テンプレートを登録',
+    c_tpl: 'テンプレート', c_use: '用途', c_sheet: 'シート・列', default: '既定', u_tc: 'テストケース', u_web: 'Web テスト', view: '表示',
+    cache_title: 'Scout キャッシュ', cache_sub: '機能ごとの本番（master）ブリーフ。ソースファイルが変わらない間は再利用します。', clear_cache: 'キャッシュを削除',
+    c_feature: '機能', c_repo: 'リポジトリ', c_files: 'ファイル', c_model: 'モデル',
+    pref_title: '環境設定', pref_sub: '~/.testign-kit/config.json に保存されます。', p_general: '全般', p_out: '出力フォルダ', p_lang: 'レポートの言語', p_git: 'Git', p_branches: '本番 / フェーズのブランチ', p_regex: 'チケット ID のパターン', p_backlog: 'Backlog', p_space: 'スペース・プロジェクト', p_prefix: '決定ログの接頭辞', p_console: 'コンソール', p_port: 'ポート', p_idle: '無操作で停止（分）',
+    dlg_title: '新規実行', dlg_suite: 'テストスイート', dlg_suite_help: '確定済みのスイートのみ。実行はスナップショットを保持するため、後でスイートを編集してもこの実行は変わりません。',
+    dlg_url: 'テスト環境の URL', dlg_tpl: '結果のテンプレート', dlg_hosts: '許可ホスト：', dlg_need: '必要なシナリオ：client（承認済み）', dlg_go: '作成して実行',
+  },
+};
+let lang = 'en';
+const t = (k, v = {}) => String((I18N[lang][k] ?? I18N.en[k] ?? k)).replace(/\{(\w+)\}/g, (_, x) => v[x] ?? '');
+
+// ============================================================ icons (16px grid, Yohaku stroke)
+const P = {
+  design: '<path d="M3 13l2.5-.5L12 6 10 4 3.5 10.5 3 13Z"/><path d="M9 5l2 2"/>', run: '<path d="M5 3.5v9l7-4.5-7-4.5Z"/>',
+  config: '<circle cx="8" cy="8" r="2"/><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.8 3.8l1 1M11.2 11.2l1 1M3.8 12.2l1-1M11.2 4.8l1-1"/>',
+  suite: '<rect x="2.5" y="3" width="11" height="10"/><path d="M5 6h6M5 8.5h6M5 11h3"/>', survey: '<circle cx="7" cy="7" r="4.5"/><path d="m13 13-2.6-2.6"/>',
+  runs: '<path d="M13 8A5 5 0 0 1 4.3 11.3M3 8a5 5 0 0 1 8.7-3.3"/><path d="M11.7 2.5v2.2h-2.2M4.3 13.5v-2.2h2.2"/>', agent: '<rect x="3" y="4.5" width="10" height="8" rx="2"/><path d="M8 2v2.5M6 8v1M10 8v1"/>',
+  project: '<path d="M2.5 4.5a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-7.5Z"/>', key: '<circle cx="5.5" cy="10.5" r="2.5"/><path d="m7.3 8.7 5.2-5.2M10.5 5.5l1.5 1.5M11.8 4.2l1.2 1.2"/>',
+  layers: '<path d="m8 2.5 5.5 3L8 8.5l-5.5-3Z"/><path d="m2.5 8.5 5.5 3 5.5-3"/><path d="m2.5 11 5.5 3 5.5-3"/>', cache: '<ellipse cx="8" cy="4" rx="5" ry="1.8"/><path d="M3 4v8c0 1 2.2 1.8 5 1.8s5-.8 5-1.8V4M3 8c0 1 2.2 1.8 5 1.8s5-.8 5-1.8"/>',
+  settings: '<path d="M3 4h10M3 8h10M3 12h10"/><circle cx="6" cy="4" r="1.2"/><circle cx="10" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/>',
+  caret: '<path d="m4 6 4 4 4-4"/>', plus: '<path d="M8 3v10M3 8h10"/>', check: '<path d="m3.5 8.5 3 3 6-7"/>',
+  warn: '<path d="M7.1 3 2.2 11.5a1 1 0 0 0 .9 1.5h9.8a1 1 0 0 0 .9-1.5L8.9 3a1 1 0 0 0-1.8 0Z"/><path d="M8 6.5v3M8 11.5v.1"/>', info: '<circle cx="8" cy="8" r="5.5"/><path d="M8 7v4M8 5.2v.1"/>',
+  more: '<circle cx="4" cy="8" r=".8"/><circle cx="8" cy="8" r=".8"/><circle cx="12" cy="8" r=".8"/>', trash: '<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5"/>',
+  copy: '<rect x="5.5" y="5.5" width="8" height="8"/><path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/>', down: '<path d="M8 3v8M4.5 7.5 8 11l3.5-3.5M3 13.5h10"/>',
+  close: '<path d="m4 4 8 8M12 4l-8 8"/>', search: '<circle cx="7" cy="7" r="4.5"/><path d="m13 13-2.6-2.6"/>', refresh: '<path d="M13 8A5 5 0 0 1 4.3 11.3M3 8a5 5 0 0 1 8.7-3.3"/><path d="M11.7 2.5v2.2h-2.2"/>',
+  chat: '<path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2Z"/>', clock: '<circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/>',
+};
+const ic = (n, cls = '') => `<svg class="yh-icon ${cls}" viewBox="0 0 16 16" aria-hidden="true">${P[n] || ''}</svg>`;
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const badge = (label, kind = 'neutral') => `<span class="yh-badge yh-badge--${kind}">${esc(label)}</span>`;
+const srcB = (k) => `<span class="yh-badge yh-badge--outline">${t('src_' + k)}</span>`;
+/** A status shown as an icon; its meaning is the hover tooltip and the screen-reader text. */
+const st = (kind, iconName, tip) => `<span class="yh-tip-anchor st st--${kind}" tabindex="0" aria-label="${esc(tip)}">${ic(iconName)}<span class="yh-tip" role="tooltip">${esc(tip)}</span></span>`;
+const btn = (label, kind = '', extra = '') => `<button type="button" class="yh-btn ${kind ? 'yh-btn--' + kind : ''}" ${extra}>${label}</button>`;
+const abtn = (label, href, kind = '') => `<a class="yh-btn ${kind ? 'yh-btn--' + kind : ''}" href="${href}">${label}</a>`;
+const crumbs = (...parts) => `<nav class="yh-crumbs" aria-label="Breadcrumb">${parts.map((p, i) => (i < parts.length - 1 ? (p[1] ? `<a href="${p[1]}">${p[0]}</a>` : `<span class="yh-muted">${p[0]}</span>`) + '<span class="yh-chevron" aria-hidden="true"></span>' : `<span aria-current="page">${p[0]}</span>`)).join('')}</nav>`;
+const head = (title, sub, actions = '', meta = '') => `<div class="page-head"><div><h1>${title}</h1>${sub ? `<p>${sub}</p>` : ''}${meta ? `<div class="meta">${meta}</div>` : ''}</div>${actions ? `<div class="actions">${actions}</div>` : ''}</div>`;
+const sel = (opts, cur, cls = '') => `<span class="yh-select-wrap"><select class="yh-select ${cls}">${opts.map(([v, l]) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></span>`;
+const seg = (items) => `<div class="seg" role="group">${items.map((x, i) => `<button type="button" class="yh-tag" aria-pressed="${i === 0}">${x}</button>`).join('')}</div>`;
+const searchBox = (ph) => `<div class="yh-input-wrap">${ic('search')}<input class="yh-input yh-input--sm" type="search" placeholder="${esc(ph)}" style="padding-left:40px"></div>`;
+const field = (label, input, help = '') => `<div class="yh-field"><label class="yh-field__label">${label}</label>${input}${help ? `<span class="yh-field__help">${help}</span>` : ''}</div>`;
+
+// ============================================================ sample data
+const SUITES = [
+  { id: 'ckweb-3366', name: 'CKWEB-3366 · 小多機 チェックシート 共通', source: 'backlog', ref: 'CKWEB-3366 · survey r2', cases: 18, state: 'review', project: 'carekarte', updated: '25/11 15:04', runs: 0 },
+  { id: 'ckweb-3003', name: 'CKWEB-3003 · 訪問チェックシート', source: 'backlog', ref: 'CKWEB-3003 · survey r1', cases: null, state: 'generating', project: 'carekarte', updated: '25/11 15:10', runs: 0 },
+  { id: 'usupp-summary', name: 'USUPP Update Summary', source: 'figma', ref: 'node 6647:118148', cases: 45, state: 'ready', project: 'usupp', updated: '20/11', runs: 1 },
+  { id: 'booking-header', name: 'Booking header fix', source: 'figma', ref: 'node 812:4401', cases: 12, state: 'ready', project: 'usupp', updated: '19/11', runs: 1 },
+  { id: 'login-regression', name: 'Login regression', source: 'manual', ref: '—', cases: 8, state: 'ready', project: 'usupp', updated: '15/11', runs: 3 },
+  { id: 'carekarte-v118', name: 'Ver1.18 test cases', source: 'excel', ref: 'v118-testcase.xlsx', cases: 64, state: 'ready', project: 'carekarte', updated: '02/11', runs: 0 },
+];
+const STATE = { generating: 'neutral', review: '', ready: 'success' };
+const CASES = [
+  ['B1', 'サービス種別のプルダウンに「4:小多機系」がある', '/office/new', 'sure', 'agent', 'ccj-admin'],
+  ['B1', '事業所編集でも「4:小多機系」が選べる', '/office/edit', 'sure', 'agent', 'ccj-admin'],
+  ['B2', '保存後に内部値「5」で保存される', '', 'not-web', 'none', ''],
+  ['B3', '事業所一覧の種別列に「小多機系」と表示', '/office', 'sure', 'agent', 'ccj-admin'],
+  ['B4', '1件変更で「小多機系」に変更し保存できる', '/office/edit', 'choice', 'agent', 'ccj-admin'],
+  ['B4', '一括登録CSVで種別4を取込できる', '/office/bulk', 'choice', 'agent', 'ccj-admin'],
+  ['B5', '「通い」「宿泊」「短期」の予定欄が別々にある', '/title-link', 'sure', 'agent', 'facility-admin'],
+  ['B6', '朝食・昼食・夕食の予定項目を選べる', '/title-link', 'sure', 'agent', 'facility-admin'],
+  ['B7', '記録設定に体温・食事・入浴・服薬・排泄が出る', '/title-link/records', 'sure', 'agent', 'facility-admin'],
+  ['B7', '連絡・口腔・機能訓練・中止理由が出ない', '/title-link/records', 'sure', 'agent', 'facility-admin'],
+  ['B8', '一括読込で空欄だけ補われる', '/title-link', 'sure', 'agent', 'facility-admin'],
+  ['B9', 'ケアモニにチェックシートが表示される', '', 'not-web', 'none', ''],
+  ['B10', 'メニューに「チェックシート（通い）」アイコン', '/menu', 'sure', 'agent', 'facility-admin'],
+  ['B10', 'メニューに「チェックシート（宿泊）」アイコン', '/menu', 'sure', 'agent', 'facility-admin'],
+  ['R1', '種別1〜3の事業所登録が従来通り', '/office/new', 'sure', 'agent', 'ccj-admin'],
+  ['R1', '一覧で既存種別の表示が変わらない', '/office', 'sure', 'agent', 'ccj-admin'],
+  ['R2', '既存事業所のタイトル連携設定が変わらない', '/title-link', 'sure', 'agent', 'facility-admin'],
+  ['R3', 'CK-SV2 の事業所で標準設定が切り替わる', '/title-link', 'sure', 'agent', 'facility-admin'],
+].map((c, i) => ({ row: `c${String(i + 1).padStart(2, '0')}`, trace: c[0], content: c[1], screen: c[2], cls: c[3], runner: c[4], scenario: c[5] }));
+const CLS_KIND = { sure: 'outline', choice: '', 'not-web': 'neutral' };
+const RUNS = [
+  { id: 'run-usupp-1120', suite: 'usupp-summary', env: 'stg.usupp.test', tester: 'Kien', state: 'done', res: [31, 3, 9, 2], when: '20/11' },
+  { id: 'run-booking-1119', suite: 'booking-header', env: 'stg.usupp.test', tester: 'Kien', state: 'needs', res: [10, 0, 0, 0], needs: 2, when: '19/11 17:20' },
+  { id: 'run-login-1125', suite: 'login-regression', env: 'stg.usupp.test', tester: 'Kien', state: 'running', res: [3, 0, 0, 0], queued: 5, when: '25/11 14:58' },
+];
+const RUN_KIND = { done: 'success', needs: '', running: 'neutral' };
+const suiteOf = (id) => SUITES.find((s) => s.id === id);
+const resultIcons = (r) => `<span class="st-row">${st('ok', 'check', `${t('pass')} ${r.res[0]}`)}<span class="yh-num">${r.res[0]}</span>
+  ${r.res[1] ? `${st('bad', 'close', `Fail ${r.res[1]}`)}<span class="yh-num">${r.res[1]}</span>` : ''}
+  ${r.needs ? `${st('warn', 'chat', `${t('parked')} ${r.needs}`)}<span class="yh-num">${r.needs}</span>` : ''}
+  ${r.queued ? `${st('busy', 'clock', `${t('js_queued')} ${r.queued}`)}<span class="yh-num">${r.queued}</span>` : ''}</span>`;
+
+// ============================================================ navigation
+const NAV = [
+  { id: 'design', icon: 'design', items: [['suites', 'suite', SUITES.length], ['survey', 'survey', 4]] },
+  { id: 'run', icon: 'run', items: [['runs', 'runs', 3], ['agent', 'agent', 2]] },
+  { id: 'config', icon: 'config', items: [['projects', 'project', 2], ['scenarios', 'key', 4], ['templates', 'layers', 3], ['cache', 'cache'], ['settings', 'settings']] },
+];
+const openG = { design: true, run: true, config: true };
+function renderNav(section) {
+  document.getElementById('nav').innerHTML = NAV.map((g) => `
+    <button class="nav-row nav-group" type="button" aria-expanded="${openG[g.id]}" data-group="${g.id}">${ic(g.icon)}<span>${t('g_' + g.id)}</span>${ic('caret', 'yh-icon--sm caret')}</button>
+    <div class="nav-sub" ${openG[g.id] ? '' : 'hidden'}>${g.items.map(([id, icon, n]) => `<a class="nav-row ${section === id ? 'is-active' : ''}" href="#/${id}" ${section === id ? 'aria-current="page"' : ''}>${ic(icon)}<span>${t('n_' + id)}</span>${n !== undefined ? `<span class="n">${n}</span>` : ''}</a>`).join('')}</div>`).join('');
+}
+
+// ============================================================ views
+const V = {};
+V.suites = () => `${crumbs([t('g_design')], [t('n_suites')])}
+  ${head(t('suites_title'), t('suites_sub'), abtn(`${ic('plus')}${t('new_suite')}`, '#/suites/new', 'primary'))}
+  <div class="toolbar">${searchBox(t('search_suites'))}${seg([`${t('all')} 6`, `${t('f_needs')} 1`, `${t('f_gen')} 1`, `${t('f_ready')} 4`])}</div>
+  <div class="tbl-box"><table class="yh-table">
+    <thead><tr><th>${t('n_suites')}</th><th>${t('source')}</th><th class="is-num">${t('cases')}</th><th>${t('state')}</th><th>${t('runs')}</th><th>${t('project')}</th><th>${t('updated')}</th><th></th></tr></thead>
+    <tbody>${SUITES.map((s) => `<tr class="click" data-href="#/suites/${s.id}">
+      <td><a class="lnk" href="#/suites/${s.id}" lang="ja">${esc(s.name)}</a></td>
+      <td><span class="st-row">${srcB(s.source)}<span class="yh-muted mono">${esc(s.ref)}</span></span></td>
+      <td class="is-num">${s.cases ?? '…'}</td>
+      <td>${badge(t('st_' + s.state), STATE[s.state])}</td>
+      <td>${s.runs ? `<a class="lnk" href="#/runs">${t('n_runs_v', { n: s.runs })}</a>` : `<span class="yh-muted">${t('none')}</span>`}</td>
+      <td>${s.project}</td><td class="yh-num yh-muted">${s.updated}</td>
+      <td><button class="yh-tool" type="button" aria-label="${t('more')}">${ic('more')}</button></td></tr>`).join('')}</tbody>
+  </table></div>`;
+
+let wiz = { step: 1, source: 'backlog' };
+const SRC_KEYS = ['figma', 'backlog', 'excel', 'manual'];
+function wizInput() {
+  if (wiz.source === 'figma') return field(t('figma_link'), '<input class="yh-input" placeholder="https://www.figma.com/design/…?node-id=…">', t('figma_help'));
+  if (wiz.source === 'excel') return field(t('excel_file'), '<input class="yh-input" type="file" accept=".xlsx,.xlsm" style="padding-top:8px">', t('excel_help')) + field(t('excel_tpl'), sel([['a', 'carekarte-testcase']], 'a'));
+  if (wiz.source === 'manual') return `<div class="yh-alert">${ic('info')}<div class="yh-alert__body"><div class="yh-alert__title">${t('manual_t')}</div>${t('manual_d')}</div></div>`;
+  return field(t('ticket_sel'), sel([['a', 'CKWEB-3366 · 小多機 チェックシート 共通 · r2'], ['b', 'CKWEB-3003 · 訪問チェックシート · r1'], ['c', 'CKWEB-2992 · 宿泊チェックシート · r3']], 'a'),
+    `${t('ticket_help')} <a class="lnk" href="#/survey">${t('open_survey')}</a>`) +
+    `<div class="yh-card yh-card--sunken"><div class="yh-card__body"><div class="st-row">${badge('In Progress', 'neutral')}<span class="yh-caption yh-muted">${t('ticket_meta')}</span>${st('ok', 'check', t('fr_ok'))}</div>
+      <div class="yh-card__title" lang="ja">【ケアモニ】小規模多機能用の申し送りチェックシートを作成する（共通部分）</div></div></div>`;
+}
+V.wizard = () => {
+  const steps = ['step_source', 'step_input', 'step_info', 'step_review'];
+  let body = '';
+  if (wiz.step === 1) body = `<div class="picks" role="radiogroup">${SRC_KEYS.map((k) => `<button type="button" class="yh-card pick ${wiz.source === k ? 'is-selected' : ''}" role="radio" aria-checked="${wiz.source === k}" data-src="${k}">${srcB(k)}<span class="yh-card__title">${t(`s_${k}_t`)}</span><span class="yh-card__text">${t(`s_${k}_d`)}</span></button>`).join('')}</div>`;
+  if (wiz.step === 2) body = `<div class="yh-stack">${wizInput()}</div>`;
+  if (wiz.step === 3) body = `<div class="yh-stack">${field(t('suite_name'), `<input class="yh-input" lang="ja" value="${wiz.source === 'backlog' ? 'CKWEB-3366 · 小多機 チェックシート 共通' : ''}">`)}
+    <div class="grid2">${field(t('project'), sel([['a', 'carekarte'], ['b', 'usupp']], 'a'), t('project_help'))}${field(t('case_lang'), sel([['ja', '日本語'], ['en', 'English']], 'ja'))}</div></div>`;
+  if (wiz.step === 4) body = `<dl class="kv"><dt>${t('source')}</dt><dd>${srcB(wiz.source)} ${t(`s_${wiz.source}_t`)}</dd><dt>${t('input')}</dt><dd>${wiz.source === 'backlog' ? 'CKWEB-3366 · survey r2 · 13 rows' : wiz.source === 'figma' ? 'node 6647:118148' : wiz.source === 'excel' ? 'v119-testcase.xlsx' : t('none')}</dd>
+      <dt>${t('suite_name')}</dt><dd lang="ja">CKWEB-3366 · 小多機 チェックシート 共通</dd><dt>${t('project')}</dt><dd>carekarte</dd></dl>
+    <div class="yh-alert">${ic('info')}<div class="yh-alert__body"><div class="yh-alert__title">${t('next_title')}</div>${t(wiz.source === 'manual' ? 'next_manual' : wiz.source === 'excel' ? 'next_excel' : 'next_gen')}</div></div>`;
+  const last = wiz.source === 'manual' || wiz.source === 'excel' ? t('create') : t('queue_gen');
+  return `${crumbs([t('g_design')], [t('n_suites'), '#/suites'], [t('new_suite')])}<div class="narrow">
+    ${head(t('wiz_title'), t('wiz_sub'))}
+    <ol class="steps">${steps.map((k, i) => `<li class="${i + 1 < wiz.step ? 'is-done' : i + 1 === wiz.step ? 'is-current' : ''}">${t(k)}${i === 1 && wiz.step > 1 ? ` · ${t('src_' + wiz.source)}` : ''}</li>`).join('')}</ol>
+    ${body}
+    <div class="foot">${wiz.step > 1 ? btn(t('back'), '', 'data-wiz="back"') : abtn(t('cancel'), '#/suites')}<span class="push"></span>${btn(wiz.step < 4 ? t('next') : last, 'primary', `data-wiz="${wiz.step < 4 ? 'next' : 'done'}"`)}</div></div>`;
+};
+
+let selCase = 'c05';
+let suiteTab = 'cases';
+function caseForm(c) {
+  const opt = (pfx, keys) => keys.map((k) => [k, t(pfx + k)]);
+  return `<section class="panel sticky">
+    <div class="panel-head"><span class="id">${c.row} · ${c.trace}</span><span class="yh-h3">${t('edit_case')}</span><button class="yh-tool" type="button" aria-label="${t('close')}">${ic('close')}</button></div>
+    ${field(t('f_content'), `<textarea class="yh-textarea sm" rows="2" lang="ja">${esc(c.content)}</textarea>`)}
+    ${field(t('f_pre'), '<textarea class="yh-textarea sm" rows="2" lang="ja">対象事業所（テスト用）が存在する</textarea>')}
+    ${field(t('f_steps'), '<textarea class="yh-textarea sm" rows="3" lang="ja">1. 事業所編集を開く\n2. サービス種別を「4:小多機系」に変更\n3. 保存</textarea>')}
+    ${field(t('f_expected'), '<textarea class="yh-textarea sm" rows="2" lang="ja">一覧で種別が「小多機系」と表示される</textarea>')}
+    <div class="grid2">
+      ${field(t('f_screen'), `<input class="yh-input yh-input--sm mono" value="${c.screen}">`)}
+      ${field(t('c_trace'), `<input class="yh-input yh-input--sm mono" value="${c.trace}">`)}
+      ${field(t('c_class'), sel(opt('cls_', ['sure', 'choice', 'not-web']), c.cls, 'yh-input--sm'))}
+      ${field(t('c_runner'), sel(opt('run_', ['agent', 'tester', 'none']), c.runner, 'yh-input--sm'))}
+      ${field(t('c_scenario'), sel([['ccj-admin', 'ccj-admin'], ['facility-admin', 'facility-admin'], ['', t('none')]], c.scenario, 'yh-input--sm'))}
+      ${field(t('f_viewport'), sel([['pc', 'PC'], ['mobile', 'Mobile']], 'pc', 'yh-input--sm'))}
+    </div>
+    <p class="yh-caption yh-muted" style="margin:0">${t('gen_note')}</p>
+    <div class="foot">${btn(`${ic('trash')}${t('delete_case')}`, 'ghost yh-btn--sm')}${btn(`${ic('copy')}${t('duplicate')}`, 'ghost yh-btn--sm')}<span class="push"></span>${btn(t('save'), 'primary yh-btn--sm')}</div>
+  </section>`;
+}
+V.suite = (id) => {
+  const s = suiteOf(id) || SUITES[0];
+  const c = CASES.find((x) => x.row === selCase) || CASES[0];
+  const banner = s.state === 'review' ? `<div class="yh-alert yh-alert--warning">${ic('warn')}<div class="yh-alert__body"><div class="yh-alert__title">${t('review_banner_t')}</div>${t('review_banner_d')}</div>${btn(t('confirm_suite'), 'primary')}</div>` : '';
+  const tabs = `<div class="yh-tabs" role="tablist">${[['cases', t('tab_cases'), s.cases ?? 0], ['source', t('tab_source')], ['runs', t('tab_runs'), s.runs]].map(([k, l, n]) => `<button type="button" class="yh-tab" role="tab" aria-selected="${suiteTab === k}" data-tab="${k}">${l}${n !== undefined ? `<span class="yh-tab__count">${n}</span>` : ''}</button>`).join('')}</div>`;
+  let content = '';
+  if (suiteTab === 'cases') content = `<div class="split"><div class="yh-stack">
+      <div class="toolbar">${searchBox(t('search_cases'))}${seg([t('all'), `${t('f_choice')} 2`, `${t('f_notweb')} 2`])}<span style="margin-left:auto"></span>${btn(`${ic('plus')}${t('add_case')}`, 'yh-btn--sm')}</div>
+      <div class="tbl-box"><table class="yh-table">
+        <thead><tr><th class="is-check"><label class="yh-check"><input type="checkbox"><span class="yh-check__box"></span></label></th><th>#</th><th>${t('c_trace')}</th><th>${t('c_content')}</th><th>${t('c_screen')}</th><th>${t('c_class')}</th><th>${t('c_runner')}</th><th>${t('c_scenario')}</th></tr></thead>
+        <tbody>${CASES.map((x) => `<tr class="click ${x.row === selCase ? 'is-sel' : ''}" data-case="${x.row}">
+          <td class="is-check"><label class="yh-check"><input type="checkbox"><span class="yh-check__box"></span></label></td><td class="id">${x.row}</td><td class="id">${x.trace}</td>
+          <td lang="ja">${esc(x.content)}</td><td class="mono yh-muted">${x.screen || t('none')}</td>
+          <td>${badge(t('cls_' + x.cls), CLS_KIND[x.cls])}</td><td>${t('run_' + x.runner)}</td><td class="mono">${x.scenario || t('none')}</td></tr>`).join('')}</tbody>
+      </table></div>
+      <p class="yh-caption yh-muted" style="margin:0">${t('bulk_hint')}</p></div>${caseForm(c)}</div>`;
+  if (suiteTab === 'source') content = `<div class="yh-stack"><div class="toolbar">${srcB('backlog')}<strong>CKWEB-3366 · survey r2</strong><span class="yh-caption yh-muted mono">develop a91c3e2 · master 5d07b1f</span>${st('ok', 'check', t('fr_ok'))}<span style="margin-left:auto"></span>${btn(`${ic('refresh')}${t('regen')}`)}</div>
+    <div class="tbl-box"><table class="yh-table"><thead><tr><th>${t('cov_row')}</th><th>${t('cov_text')}</th><th class="is-num">${t('cases')}</th></tr></thead><tbody>
+    ${[['B1', 'サービス種別に「4:小多機系」を表示・選択できる', 2], ['B2', '「4:小多機系」を保存すると内部値「5」', 1], ['B3', '事業所管理の一覧で「小多機系」と表示', 1], ['B4', '1件変更・一括登録変更でも保存できる', 2], ['B5', '予定を「通い」「宿泊」「短期」に分けて設定', 1], ['R3', 'CK／CK-SV2 で標準設定が切り替わる', 1]].map((r) => `<tr><td class="id">${r[0]}</td><td lang="ja">${r[1]}</td><td class="is-num">${r[2]}</td></tr>`).join('')}
+    </tbody></table></div><p class="yh-caption yh-muted" style="margin:0">${t('cov_note')}</p></div>`;
+  if (suiteTab === 'runs') content = `<div class="yh-empty"><div class="yh-empty__title">${t('no_runs_t')}</div><div class="yh-empty__text">${t('no_runs_d')}</div></div>`;
+  return `${crumbs([t('g_design')], [t('n_suites'), '#/suites'], [`<span lang="ja">${esc(s.name)}</span>`])}
+    ${head(`<span lang="ja">${esc(s.name)}</span>`, '', `${btn(`${ic('down')}${t('export_xlsx')}`)}${btn(`${ic('run')}${t('new_run')}`, 'primary', `data-dlg="newrun" ${s.state !== 'ready' ? `disabled title="${t('confirm_first')}"` : ''}`)}<button class="yh-btn yh-btn--icon yh-btn--ghost" type="button" aria-label="${t('more')}">${ic('more')}</button>`,
+      `${srcB(s.source)}<span class="mono">${esc(s.ref)}</span><span>·</span><span>${s.project}</span>${badge(t('st_' + s.state), STATE[s.state])}`)}
+    ${banner}${tabs}${content}`;
+};
+
+V.survey = () => `${crumbs([t('g_design')], [t('n_survey')])}
+  ${head(t('survey_title'), t('survey_sub'), btn(`${ic('plus')}${t('new_survey')}`, 'primary'))}
+  <div class="tbl-box"><table class="yh-table"><thead><tr><th>${t('c_ticket')}</th><th>${t('c_report')}</th><th>${t('c_fresh')}</th><th class="is-num">${t('c_open_q')}</th><th>${t('c_suites')}</th><th></th></tr></thead><tbody>
+    <tr><td><strong>CKWEB-3366</strong><span class="sub" lang="ja">小規模多機能用の申し送りチェックシート（共通部分）</span></td><td class="yh-num">r2 · 24/11</td><td>${st('ok', 'check', t('fr_ok'))}</td><td class="is-num">0</td><td><a class="lnk" href="#/suites/ckweb-3366">1</a></td><td>${abtn(t('make_suite'), '#/suites/new', 'sm')}</td></tr>
+    <tr><td><strong>CKWEB-3003</strong><span class="sub" lang="ja">訪問チェックシート</span></td><td class="yh-num">r1 · 22/11</td><td><span class="st-row">${st('ok', 'check', t('fr_ok'))}${st('warn', 'chat', t('fr_q'))}</span></td><td class="is-num">2</td><td><a class="lnk" href="#/suites/ckweb-3003">1</a></td><td>${abtn(t('answer'), '#', 'sm')}</td></tr>
+    <tr><td><strong>CKWEB-2992</strong><span class="sub" lang="ja">宿泊チェックシート</span></td><td class="yh-num">r3 · 18/11</td><td>${st('warn', 'warn', t('fr_changed'))}</td><td class="is-num">0</td><td><span class="yh-muted">${t('none')}</span></td><td>${abtn(t('resurvey'), '#', 'sm')}</td></tr>
+    <tr><td><strong>CKWEB-689</strong><span class="sub" lang="ja">通値チェックシート</span></td><td class="yh-muted">${t('surveying')}</td><td>${st('busy', 'clock', t('fr_busy'))}</td><td class="is-num yh-muted">${t('none')}</td><td><span class="yh-muted">${t('none')}</span></td><td></td></tr>
+  </tbody></table></div>
+  <p class="yh-caption yh-muted" style="margin:0">${t('survey_note')}</p>`;
+
+V.runs = () => `${crumbs([t('g_run')], [t('n_runs')])}
+  ${head(t('runs_title'), t('runs_sub'), btn(`${ic('plus')}${t('new_run')}`, 'primary', 'data-dlg="newrun"'))}
+  <div class="yh-alert yh-alert--warning">${ic('chat')}<div class="yh-alert__body"><div class="yh-alert__title">${t('needs_t')}</div>${t('needs_1')} · ${t('needs_2')}</div>${abtn(t('handle'), '#/runs/run-booking-1119')}</div>
+  <div class="tbl-box"><table class="yh-table"><thead><tr><th>${t('c_run')}</th><th>${t('c_suite')}</th><th>${t('source')}</th><th>${t('c_env')}</th><th>${t('c_result')}</th><th>${t('state')}</th><th>${t('c_tester')}</th><th>${t('c_when')}</th></tr></thead><tbody>
+    ${RUNS.map((r) => { const s = suiteOf(r.suite); return `<tr class="click" data-href="#/runs/${r.id}">
+      <td><a class="lnk mono" href="#/runs/${r.id}">${r.id}</a></td><td><a class="lnk" href="#/suites/${s.id}">${esc(s.name)}</a><span class="sub">${s.cases} ${t('cases').toLowerCase()}</span></td>
+      <td>${srcB(s.source)}</td><td class="mono yh-muted">${r.env}</td><td>${resultIcons(r)}</td><td>${badge(t('rs_' + r.state), RUN_KIND[r.state])}</td><td>${r.tester}</td><td class="yh-num yh-muted">${r.when}</td></tr>`; }).join('')}
+  </tbody></table></div>`;
+
+V.run = (id) => {
+  const r = RUNS.find((x) => x.id === id) || RUNS[1];
+  const s = suiteOf(r.suite);
+  const rows = [['r01', 'Logo in the header uses the new artwork', 'pass'], ['r02', '“Reset” button uses the primary colour', 'pass'], ['r03', 'キャンセル待ち badge shows in the list', 'parked'], ['r04', 'Header stays fixed on scroll', 'parked'], ['r05', 'New footer link', 'pass']];
+  return `${crumbs([t('g_run')], [t('n_runs'), '#/runs'], [r.id])}
+    ${head(`<span class="mono" style="font-size:inherit">${r.id}</span>`, '', `${btn(`${ic('run')}${t('resume')}`, 'primary')}${btn(t('finish'))}${btn(`${ic('down')}${t('export')}`)}`,
+      `<a class="lnk" href="#/suites/${s.id}">${esc(s.name)}</a><span>·</span><span class="mono">${r.env}</span><span>·</span><span>${r.tester}</span><span>·</span><span>${t('signed_in')}</span>`)}
+    <div class="toolbar"><span class="yh-caption yh-muted">${t('progress')}</span><span class="progress"><span style="width:83%"></span></span><span class="yh-num">10 / 12</span>${resultIcons(r)}</div>
+    <div class="split"><div class="tbl-box"><table class="yh-table" style="min-width:560px"><thead><tr><th>#</th><th>${t('c_content')}</th><th>${t('state')}</th></tr></thead><tbody>
+      ${rows.map(([k, x, stt]) => `<tr class="click ${k === 'r03' ? 'is-sel' : ''}"><td class="id">${k}</td><td>${x}</td><td>${stt === 'pass' ? st('ok', 'check', t('pass')) : st('warn', 'chat', t('parked'))}</td></tr>`).join('')}</tbody></table></div>
+      <section class="panel sticky"><div class="panel-head"><span class="id">r03</span><span class="yh-h3">${t('agent_needs')}</span></div>
+        <p class="quote">${t('ask_text')}</p>
+        <div class="grid2"><figure style="margin:0" class="yh-stack yh-stack--tight"><figcaption class="yh-caption yh-muted">${t('design')}</figcaption><div class="shot">source/r03.png</div></figure><figure style="margin:0" class="yh-stack yh-stack--tight"><figcaption class="yh-caption yh-muted">${t('current')}</figcaption><div class="shot">r03-a1-1.png</div></figure></div>
+        <div class="yh-choices"><label class="yh-radio"><input type="radio" name="ans" checked><span class="yh-radio__dot"></span>${t('a_delegate')}</label>
+          <textarea class="yh-textarea sm" rows="2" placeholder="${esc(t('a_pre_ph'))}"></textarea>
+          <label class="yh-radio"><input type="radio" name="ans"><span class="yh-radio__dot"></span>${t('a_self')}</label><label class="yh-radio"><input type="radio" name="ans"><span class="yh-radio__dot"></span>${t('a_skip')}</label></div>
+        <div class="foot"><span class="push"></span>${btn(t('send'), 'primary')}</div></section></div>`;
+};
+
+V.agent = () => `${crumbs([t('g_run')], [t('n_agent')])}
+  ${head(t('agent_title'), t('agent_sub'))}
+  <div class="yh-alert yh-alert--success">${ic('check')}<div class="yh-alert__body"><div class="yh-alert__title">${t('agent')}</div>${t('agent_line')}</div>
+    <span class="st-row">${st('ok', 'check', t('cap_chrome'))}${st('ok', 'check', t('cap_figma'))}${st('ok', 'check', t('cap_backlog'))}</span></div>
+  <div class="tbl-box"><table class="yh-table"><thead><tr><th>${t('c_job')}</th><th>${t('c_for')}</th><th>${t('state')}</th><th>${t('c_progress')}</th><th>${t('c_when')}</th></tr></thead><tbody>
+    <tr><td>${t('j_run')}</td><td><a class="lnk mono" href="#/runs/run-login-1125">run-login-1125</a></td><td>${badge(t('js_running'), 'neutral')}</td><td>${t('p_run')}</td><td class="yh-num yh-muted">14:58</td></tr>
+    <tr><td>${t('j_gen')}</td><td><a class="lnk" href="#/suites/ckweb-3003">CKWEB-3003</a></td><td>${badge(t('js_running'), 'neutral')}</td><td>${t('p_gen')}</td><td class="yh-num yh-muted">15:10</td></tr>
+    <tr><td>${t('j_survey')}</td><td>CKWEB-689</td><td>${badge(t('js_queued'), 'outline')}</td><td class="yh-muted">${t('none')}</td><td class="yh-num yh-muted">15:11</td></tr>
+    <tr><td class="yh-muted">${t('j_gen')}</td><td class="yh-muted">CKWEB-3366</td><td>${badge(t('js_done'), 'success')}</td><td class="yh-muted">${t('p_gen_done')}</td><td class="yh-num yh-muted">15:04</td></tr>
+    <tr><td class="yh-muted">${t('j_export')}</td><td class="yh-muted mono">run-usupp-1120</td><td>${badge(t('js_done'), 'success')}</td><td class="yh-muted mono">usupp-webtest-r1.xlsx</td><td class="yh-num yh-muted">20/11</td></tr>
+  </tbody></table></div>`;
+
+V.projects = () => `${crumbs([t('g_config')], [t('n_projects')])}
+  ${head(t('proj_title'), t('proj_sub'), btn(`${ic('plus')}${t('add_project')}`, 'primary'))}
+  <div class="tbl-box"><table class="yh-table"><thead><tr><th>${t('project')}</th><th>${t('c_hosts')}</th><th>${t('c_signin')}</th><th class="is-num">${t('c_scen')}</th><th class="is-num">${t('c_suites')}</th></tr></thead><tbody>
+    <tr><td><strong>carekarte</strong></td><td class="mono">stg-console.carekarte.test, stg-caremoni.carekarte.test</td><td class="mono">auth.carekarte.test</td><td class="is-num"><a class="lnk" href="#/scenarios">2</a></td><td class="is-num">3</td></tr>
+    <tr><td><strong>usupp</strong></td><td class="mono">stg.usupp.test</td><td class="mono yh-muted">${t('none')}</td><td class="is-num"><a class="lnk" href="#/scenarios">2</a></td><td class="is-num">3</td></tr>
+  </tbody></table></div>`;
+
+V.scenarios = () => {
+  const SC = { ok: ['ok', 'check', 'sc_ok'], wait: ['warn', 'clock', 'sc_wait'], rej: ['bad', 'close', 'sc_rej'] };
+  const data = [['carekarte', [['ccj-admin', 'CCJ admin', 'https://stg-console.carekarte.test/login', 'ok', 'Header: CCJコンソール'], ['facility-admin', 'Facility admin', 'https://stg-caremoni.carekarte.test/login', 'wait', 'Menu: タイトル連携設定']]],
+    ['usupp', [['client', 'Client account', 'https://stg.usupp.test/login', 'ok', 'Text: 予約履歴'], ['staff', 'Staff', 'https://stg.usupp.test/staff/login', 'rej', 'Wrong sign-out URL']]]];
+  return `${crumbs([t('g_config')], [t('n_scenarios')])}
+    ${head(t('scen_title'), t('scen_sub'), btn(`${ic('plus')}${t('add_scen')}`, 'primary'))}
+    <div class="toolbar">${searchBox(t('search_scen'))}</div>
+    ${data.map(([p, list]) => `<section class="yh-stack"><div class="toolbar"><span class="yh-h3">${p}</span><span class="yh-caption yh-muted">${list.length} ${t('c_scen').toLowerCase()}</span></div>
+    <div class="tbl-box"><table class="yh-table"><thead><tr><th>${t('c_scen')}</th><th>${t('c_login')}</th><th>${t('c_check')}</th><th>${t('state')}</th><th></th></tr></thead><tbody>
+    ${list.map(([n, l, u, s, chk]) => `<tr class="click"><td><span class="mono">${n}</span><span class="sub">${l}</span></td><td class="mono yh-muted">${u}</td><td lang="ja">${chk}</td><td>${st(SC[s][0], SC[s][1], t(SC[s][2]))}</td>
+      <td style="text-align:right">${s === 'wait' ? btn(t('approve'), 'sm') : ''} <button class="yh-tool" type="button" aria-label="${t('more')}">${ic('more')}</button></td></tr>`).join('')}
+    </tbody></table></div></section>`).join('')}`;
+};
+
+V.templates = () => `${crumbs([t('g_config')], [t('n_templates')])}
+  ${head(t('tpl_title'), t('tpl_sub'), btn(`${ic('plus')}${t('add_tpl')}`, 'primary'))}
+  <div class="tbl-box"><table class="yh-table"><thead><tr><th>${t('c_tpl')}</th><th>${t('c_use')}</th><th>${t('c_sheet')}</th><th></th></tr></thead><tbody>
+    <tr><td><strong>carekarte-testcase</strong> ${badge(t('default'))}</td><td>${t('u_tc')}</td><td class="yh-muted" lang="ja">テストケース · No, 確認項目, 手順, 期待結果, 備考</td><td>${btn(t('view'), 'ghost yh-btn--sm')}</td></tr>
+    <tr><td><strong>carekarte-web</strong></td><td>${t('u_web')}</td><td class="yh-muted" lang="ja">結果 · No, 確認項目, 結果, エビデンス</td><td>${btn(t('view'), 'ghost yh-btn--sm')}</td></tr>
+    <tr><td><strong>usupp-web</strong> ${badge(t('default'))}</td><td>${t('u_web')}</td><td class="yh-muted">Result · No, Content, Verdict, Evidence</td><td>${btn(t('view'), 'ghost yh-btn--sm')}</td></tr>
+  </tbody></table></div>`;
+
+V.cache = () => `${crumbs([t('g_config')], [t('n_cache')])}
+  ${head(t('cache_title'), t('cache_sub'), btn(t('clear_cache')))}
+  <div class="tbl-box"><table class="yh-table"><thead><tr><th>${t('c_feature')}</th><th>${t('c_repo')}</th><th class="is-num">${t('c_files')}</th><th>${t('c_model')}</th><th>${t('updated')}</th></tr></thead><tbody>
+    <tr><td>office-management</td><td class="mono">carekarte-web</td><td class="is-num">23</td><td>sonnet</td><td class="yh-num yh-muted">24/11</td></tr>
+    <tr><td>title-link-setting</td><td class="mono">carekarte-web</td><td class="is-num">31</td><td>sonnet</td><td class="yh-num yh-muted">24/11</td></tr>
+  </tbody></table></div>`;
+
+V.settings = () => `${crumbs([t('g_config')], [t('n_settings')])}
+  ${head(t('pref_title'), t('pref_sub'))}
+  <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
+    ${[['p_general', [['p_out', '~/Downloads'], ['p_lang', '日本語']]], ['p_git', [['p_branches', 'master / develop'], ['p_regex', '[A-Z]+-\\d+']]], ['p_backlog', [['p_space', 'fds-ssc · CKWEB'], ['p_prefix', 'QA/Decisions']]], ['p_console', [['p_port', '4791'], ['p_idle', '30']]]]
+      .map(([h, fs]) => `<section class="panel"><span class="yh-h3">${t(h)}</span>${fs.map(([k, v]) => field(t(k), `<input class="yh-input" value="${esc(v)}">`)).join('')}</section>`).join('')}
+  </div>`;
+
+const DLG = {
+  newrun: () => `<div class="yh-dialog__head"><div class="yh-dialog__title">${t('dlg_title')}</div><button class="yh-tool" type="button" data-close aria-label="${t('close')}">${ic('close')}</button></div>
+    <div class="yh-dialog__body">
+      ${field(t('dlg_suite'), sel(SUITES.filter((s) => s.state === 'ready').map((s) => [s.id, `${s.name} · ${s.cases}`]), 'usupp-summary'), t('dlg_suite_help'))}
+      <div class="grid2">${field(t('project'), sel([['u', 'usupp'], ['c', 'carekarte']], 'u'))}${field(t('dlg_url'), '<input class="yh-input" value="https://stg.usupp.test/">')}
+        ${field(t('c_tester'), '<input class="yh-input" value="Kien">')}${field(t('dlg_tpl'), sel([['w', 'usupp-web']], 'w'))}</div>
+      <p class="yh-caption yh-muted" style="margin:0">${t('dlg_hosts')} <span class="mono">stg.usupp.test</span> · ${t('dlg_need')}</p></div>
+    <div class="yh-dialog__actions">${btn(t('cancel'), '', 'data-close')}${btn(`${ic('run')}${t('dlg_go')}`, 'primary')}</div>`,
+};
+
+// ============================================================ router
+const route = () => location.hash.replace(/^#\/?/, '') || 'suites';
+function render() {
+  const [a, b] = route().split('/');
+  let html;
+  if (a === 'suites' && b === 'new') html = V.wizard();
+  else if (a === 'suites' && b) html = V.suite(b);
+  else if (a === 'runs' && b) html = V.run(b);
+  else html = (V[a] || V.suites)();
+  document.documentElement.lang = lang;
+  document.getElementById('view').innerHTML = html;
+  document.getElementById('agent-text').textContent = t('agent');
+  document.getElementById('mock-note').textContent = t('mock');
+  renderNav(V[a] ? a : 'suites');
+}
+window.addEventListener('hashchange', () => { render(); document.querySelector('.scroll').scrollTo(0, 0); });
+document.getElementById('lang').addEventListener('change', (e) => { lang = e.target.value; render(); });
+document.addEventListener('click', (e) => {
+  const x = e.target;
+  const g = x.closest('[data-group]'); if (g) { openG[g.dataset.group] = !openG[g.dataset.group]; render(); return; }
+  const pick = x.closest('[data-src]'); if (pick) { wiz.source = pick.dataset.src; render(); return; }
+  const w = x.closest('[data-wiz]'); if (w) { const a = w.dataset.wiz; if (a === 'next') wiz.step++; if (a === 'back') wiz.step--; if (a === 'done') { wiz.step = 1; location.hash = '#/suites/ckweb-3366'; return; } render(); return; }
+  const tab = x.closest('[data-tab]'); if (tab) { suiteTab = tab.dataset.tab; render(); return; }
+  const cs = x.closest('[data-case]'); if (cs && !x.closest('label,input')) { selCase = cs.dataset.case; render(); return; }
+  const tg = x.closest('.seg .yh-tag'); if (tg) { tg.parentElement.querySelectorAll('.yh-tag').forEach((b) => b.setAttribute('aria-pressed', String(b === tg))); return; }
+  const d = x.closest('[data-dlg]'); if (d && !d.disabled) { document.getElementById('dlg').innerHTML = DLG[d.dataset.dlg](); document.getElementById('scrim').hidden = false; return; }
+  if (x.closest('[data-close]') || x.id === 'scrim') { document.getElementById('scrim').hidden = true; return; }
+  const tr = x.closest('tr[data-href]'); if (tr && !x.closest('a,button,input,label')) location.hash = tr.dataset.href;
+});
+render();
+</script>
+</body>
+</html>
