@@ -66,7 +66,8 @@ STATES = ("draft", "queued", "running", "parked", "awaiting-tester",
           "pass", "fail", "manual", "not-applicable", "self-run", "not-run")
 OPEN_STATES = ("queued", "running", "parked", "awaiting-tester")
 FINAL_STATES = ("pass", "fail", "manual", "not-applicable", "self-run", "not-run")
-REASONS = ("unanswered", "no-result", "no-scenario", "off-site", "no-screen", "stopped", "skipped")
+REASONS = ("unanswered", "no-result", "no-scenario", "off-site", "no-screen", "stopped", "skipped",
+           "spec-error", "session-expired")
 ACTIONS = ("delegate", "self-run", "skip")
 NO_SCENARIO = "none"  # public pages: no sign-in needed
 HALT_AFTER = 3
@@ -741,6 +742,53 @@ def add_evidence(folder: Path, row: str, data: bytes, source: str) -> dict:
     case.setdefault("evidence", []).append({"file": f"evidence/{name}", "attempt": attempt, "source": source})
     save(folder, run)
     return {"row": row, "file": f"evidence/{name}", "attempt": attempt}
+
+
+def replay_result(folder: Path, row: str, *, job: str | None, verdict: str, actual: str, url: str,
+                  screenshot: bytes | None, by: str) -> dict:
+    """A queued agent row run from the suite's spec (``by`` is ``record`` or ``replay``): pass or fail
+    with the page's screenshot, ``not-run: off-site`` when the page ended outside the run's hosts."""
+    if verdict not in ("pass", "fail"):
+        raise WebtestError('the verdict must be "pass" or "fail"')
+    run = load(folder)
+    case = case_of(run, row)
+    if case["state"] != "queued":
+        raise WebtestError(f"{row} is {case['state']}; only a queued row is replayed")
+    case["attempt"] = int(case.get("attempt") or 0) + 1
+    move(case, "running", owner_job=job, started_at=now_iso())
+    out = {"verdict": verdict, "actual": _text(actual, "actual"), "url": _text(url, "url", 2000), "evidence": [],
+           "executed_at": now_iso(), "by": by}
+    if not url_on_hosts(out["url"], run["hosts"]):
+        case["result"] = {**out, "verdict": "off-site"}
+        not_run(case, "off-site")
+        save(folder, run)
+        return {"row": row, "state": "not-run", "reason": "off-site"}
+    ext = _image_ext(screenshot) if screenshot else None
+    if ext is not None and len(screenshot) <= IMAGE_CAP:
+        name = f"{row}-a{case['attempt']}-1{ext}"
+        (folder / "evidence").mkdir(exist_ok=True)
+        fsutil.atomic_write_bytes(folder / "evidence" / name, screenshot)
+        case.setdefault("evidence", []).append({"file": f"evidence/{name}", "attempt": case["attempt"], "source": by})
+        out["evidence"] = [f"evidence/{name}"]
+    case["result"] = out
+    move(case, verdict, owner_job=None)
+    save(folder, run)
+    return {"row": row, "state": verdict, "evidence": out["evidence"]}
+
+
+def replay_not_run(folder: Path, row: str, reason: str, note: str = "") -> dict:
+    """A queued row the spec could not decide: ``spec-error`` or ``session-expired``."""
+    if reason not in ("spec-error", "session-expired"):
+        raise WebtestError("a replay leaves a row not run only for spec-error or session-expired")
+    run = load(folder)
+    case = case_of(run, row)
+    if case["state"] != "queued":
+        raise WebtestError(f"{row} is {case['state']}; only a queued row is replayed")
+    case["result"] = {"verdict": "not-run", "actual": _text(note, "actual"), "url": "", "evidence": [],
+                      "executed_at": now_iso(), "by": "replay"}
+    not_run(case, reason)
+    save(folder, run)
+    return {"row": row, "state": "not-run", "reason": reason}
 
 
 def requeue(folder: Path, row: str, reason: str, signed_out: bool = False) -> dict:

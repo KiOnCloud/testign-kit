@@ -53,6 +53,7 @@ export function jobErrorText(t, err) {
   if (key === 'job_err_bad_columns') return t(key, { message: err.message || '' });
   if (key) return t(key);
   if (err && err.code === 'bad-request') return t('job_err_bad_request', { message: err.message || '' });
+  if (err && (err.code === 'spec-not-ready' || err.code === 'recipe-not-ready') && err.message) return err.message;
   return errorText(t, err);
 }
 

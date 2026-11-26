@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import config, fsutil, login_scenarios, templates, webtest, webtest_defects, webtest_export, webtest_history
+from .. import webtest_record, webtest_spec, webtest_suite
 from .server import ApiError, Response
 
 ANSWER_CAP = 2000
@@ -211,7 +212,24 @@ def run_view(state, run_id: Any, session: str | None = None) -> dict:
     return {**{k: run.get(k) for k in keep}, "counts": webtest.counts(run), "open": webtest.open_rows(run),
             "cases": cases, "jobs": jobs, "finish": answers["finish"], "can_act": can_act,
             "defect_counts": webtest_defects.counts(defects),
+            "replay": _replay_view(folder, run),
             "waiting_on_tester": _waiting_on_tester(run, answers)}
+
+
+def _replay_view(folder: Path, run: dict) -> dict:
+    """What the Record and Replay buttons need: the suite's spec status and how many queued rows each
+    mode would take."""
+    suite_id = (run.get("suite") or {}).get("id")
+    if not suite_id:
+        return {"spec": None, "recordable": 0, "replayable": 0}
+    try:
+        spec = webtest_spec.load(webtest_suite.find_suite(folder.parent, suite_id))
+    except webtest.WebtestError:
+        spec = None
+    replayable = sum(1 for c in run["cases"] if c["state"] == "queued"
+                     and webtest_spec.replayable(spec, c, webtest_spec.row_case_id(c["row"])))
+    return {"spec": "reviewed" if webtest_spec.is_reviewed(spec) else ("draft" if spec else "missing"),
+            "recordable": len(webtest_record.eligible_rows(run)), "replayable": replayable}
 
 
 def save_defect(state, run_id: Any, row: Any, body: Any, session: str | None) -> dict:

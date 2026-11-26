@@ -1,7 +1,7 @@
 ---
 name: webtest
 argument-hint: <figma-url> [--name <n>] [--project <p>] | --ticket <T> [--name <n>] | --run <run-id> [--tester <name>]
-description: Web UI test suites and runs. Writes the cases of a test suite from a Figma change table or a Backlog survey report (suite-generate job), runs a run made from a confirmed suite one row at a time in the tester's own Chrome through a worker agent, parks what cannot continue, and exports an Excel workbook and a Markdown report (webtest-run job). Used by /testign:webtest and by the console skill for these job kinds.
+description: Web UI test suites and runs. Writes the cases of a test suite from a Figma change table or a Backlog survey report (suite-generate job), runs a run made from a confirmed suite one row at a time in the tester's own Chrome through a worker agent, parks what cannot continue, and exports an Excel workbook and a Markdown report (webtest-run job). Records Playwright steps for sure cases once (mode record) and replays the reviewed steps in later runs without a worker (mode replay), signing in with a tester-approved Login Recipe. Used by /testign:webtest and by the console skill for these job kinds.
 ---
 
 # webtest
@@ -27,8 +27,13 @@ Arguments: `$ARGUMENTS`
 3. `<run> config` gives `output_dir`; a run's folder is `<output_dir>/webtest/<r>/` and a suite's
    `<output_dir>/webtest/suites/<S>/`. Never write `run.json` or `suite.json`: only the `webtest-*`
    and `suite-*` commands change them.
-4. Claude never signs in, reads, types or stores an account value. The tester signs in by hand in
-   their own Chrome. Rows run only on the run's hosts, which only the tester sets.
+4. Claude never signs in, reads, types or stores an account value. In run mode the tester signs in
+   by hand in their own Chrome. In record and replay mode the Playwright engine signs in with the
+   scenario's Login Recipe: the recipe holds `{{placeholders}}`, and only the tester types the values
+   with `profile-set` in their own terminal (a dedicated staging test account only). Never run
+   `profile-set` or `profile-remove`, never read `~/.testign-kit/webtest/profiles/` or `sessions/`,
+   and never call the recipe approve route: the secret guard hook blocks them. Rows run only on the
+   run's hosts, which only the tester sets.
 5. Questions, option labels, progress lines, park questions, scenario drafts and job summaries are
    in the job's `ui_lang`. Steps, expected values and `actual` are report content in `report_lang`;
    Japanese UI labels stay verbatim.
@@ -49,7 +54,9 @@ Arguments: `$ARGUMENTS`
      `{"kind": "suite-generate", "ui_lang": "en", "suite": "<S>"}`.
    - `--ticket <T>`: the same with `<run> suite-new --kind backlog --name "<--name, else T>" --ticket
      <T>`. `no-report`: tell the tester to survey the ticket first (`/testign:survey`), and stop.
-   - `--run <r>`: `{"kind": "webtest-run", "ui_lang": "en", "run": "<r>", "tester": "<name>", "mode": "run"}`.
+   - `--run <r>`: `{"kind": "webtest-run", "ui_lang": "en", "run": "<r>", "tester": "<name>", "mode": "run"}`
+     (`"mode": "record"` or `"replay"` when the tester asks for those; the console's Record and
+     Replay buttons queue them too).
      The name is `--tester`, else ask the tester for it once in the chat. A run is made from a ready
      suite on the console's Runs screen, or with `<run> webtest-new --suite <S> --base-url <url>
      --project <p> --tester <name> [--template <t>] [--name <n>]`.
@@ -251,6 +258,84 @@ screen or `/testign:webtest --run <r>`); "Finish the run" → **Finish**.
 - **End**: `<run> webtest-close --run <r>` (skip when Finish closed it), `<run> webtest-export
   --run <r>` → `{workbook, report, counts}`. Close the job with the paths, the counts and the
   `visual` rows the tester may want to spot-check. `open-rows` on `done`: see the bridge's "Errors".
+
+## Login Recipe
+
+Record and replay sign in without the tester. For each scenario they need (not `none`):
+
+1. `<run> login-recipe-show --project <p> --scenario <name>`. `usable: true` → done.
+2. No recipe, or the sign-in page changed: draft the steps from the scenario's checklist (its
+   `login_url` and steps from `login-scenario-list`) and save them with `<run> login-recipe-save
+   --project <p> --scenario <name> --file <file>`, where the file is `{"profile": "<name>",
+   "login_url": "<url>", "steps": [...]}`. Actions: `goto`, `fill`, `click`, `press`, `wait_url`,
+   `wait_visible`, with locators as in the replay spec (below); `goto`
+   takes a URL on the project's hosts or sign-in hosts; `fill` takes a placeholder such as
+   `{{username}}`, never a value; the last step is `wait_url` or `wait_visible` that proves the
+   sign-in worked. A refusal lists every problem: fix them all, then save again.
+3. `missing_values` or `profile_set: false`: ask the tester (a `questions` ask) to run, in their own
+   terminal, `<run> profile-set --project <p> --profile <profile> --key <k> ...` with every missing
+   key, using a dedicated staging test account; options "Done" and "Stop". Never run it yourself.
+4. `<run> login-recipe-test --project <p> --scenario <name>` signs in in Playwright and keeps the
+   session. `ok: false` → its `error` and `failed_step` (values redacted) say what to fix; go to 2.
+5. `tested: true, approved: false`: ask the tester to check the steps and press "Approve recipe" in
+   the scenario's dialog on the Login scenarios screen; options "Approved" and "Stop". Saving the
+   recipe again clears its test and approval.
+
+## Replay spec
+
+A suite's replay spec (`spec.json` in the suite folder) holds Playwright steps per case. Only a
+`sure` case run by the agent on PC, of kind label, element or behaviour, may have one. Steps:
+`goto` (a path, never a host), `click`, `dblclick`, `fill`, `press`, `select`, `check`,
+`wait_visible`, `expect_visible`, `expect_hidden`, `expect_text`, `expect_value`, `expect_url`; each takes a
+`locator` with exactly one of `role` (with `name`), `label`, `placeholder`, `text`, `test_id`, `css`
+and optional `exact` / `nth`, and a `value` where the action needs one. Every case needs at least one
+`expect_` step that checks the expected result, and no `{{placeholder}}`. A spec is used for replay only after the tester
+marks it reviewed on the suite's Replay spec tab, which needs a check where every step ran; any
+edit of a case or a step clears the review. `<run> webtest-spec-show --suite <S>` shows it with
+warnings (a locator on live data such as a date or a count, a checked value not in the expected
+result, no value check): fix what they point at before the tester reviews.
+
+## Record job (`webtest-run`, `mode: record`)
+
+The agent walks each eligible queued row in the Playwright engine, one step at a time; every step
+replays the row from a fresh page, so what passes is what replay will do.
+
+1. `<run> webtest-recover …` and `<run> webtest-resolve …` as in a run job. Make every scenario's
+   recipe usable (**Login Recipe**).
+2. `<run> webtest-record-start --run <r> --job <j> --session <s>` signs in once per scenario and
+   lists `rows`. Resuming after a compaction prints the same list with each row's status.
+3. For each open row: `<run> webtest-record-open --run <r> --row <row>` gives the case (content,
+   steps, expected), the steps so far, the page URL and an accessibility snapshot. Then
+   `<run> webtest-record-step --run <r> --row <row> --step <file>` for one step at a time:
+   - `result: ok` → recorded; the new snapshot shows the page after it.
+   - `result: fail` → an `expect_` step did not hold: recorded, and the row is closed as a failure
+     (a defect). Do not change the check to make it pass.
+   - `result: spec_error` → the step could not run (no element, two elements, timeout): not
+     recorded; try another locator from the snapshot.
+   - `session_expired` / `off_site` → stop the row: give up with the reason.
+   - `this_step_sent` lists data-changing requests the app received; their replies are kept, so the
+     app sees each submit only once while you record.
+4. Close the row: `<run> webtest-record-done --run <r> --row <row>` (needs an `expect_` step), or
+   `<run> webtest-record-give-up --run <r> --row <row> --reason "<why>"` when no working locator is
+   found (the row stays queued for a Chrome run). `--restart` on open drops the row's steps.
+   Send `console progress` after each row.
+5. `<run> webtest-record-finish --run <r> --job <j> --session <s>` saves the spec as a draft with
+   its check, replays each recorded row once more with a screenshot and writes its result (`pass`,
+   `fail`, `not-run: spec-error` or `session-expired`). Close the job with the counts, say the
+   spec waits for the tester's review on the suite's Replay spec tab, and list the given-up rows.
+
+## Replay job (`webtest-run`, `mode: replay`)
+
+No worker and no Chrome. `<run> webtest-recover …`, `<run> webtest-resolve …`, then
+`<run> webtest-replay-plan --run <r>` (which rows replay, and why not the others), then
+`<run> webtest-replay --run <r> --job <j> --session <s>`. Each queued row whose case has an
+unchanged, reviewed spec entry runs; a failed expect is `fail` with a screenshot, a step that cannot
+run is `not-run: spec-error` (the spec needs fixing, not the app), a failed sign-in is
+`not-run: session-expired` for that scenario's rows. Rows without a spec stay queued for a run job.
+Close the job with the counts and those reasons; do not export unless the tester asked.
+
+`<run> webtest-spec-check --run <r>` replays the whole spec on the run's environment and stores the
+check the review needs, without writing any row result.
 
 ## Export job (`webtest-run`, `mode: export`)
 

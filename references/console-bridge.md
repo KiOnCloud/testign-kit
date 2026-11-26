@@ -130,14 +130,15 @@ call while this question is open.
   `POST /agent/suites/:suite/generated` (`<run> suite-generated`); a call from any other job or
   session is refused with `conflict`. When the job ends without `suite-generated`, the server keeps
   what was staged and hands the suite to the tester (`review`).
-- `webtest-run` parameters: `run` (a run whose plan is confirmed), `tester`, `mode: run | export`.
+- `webtest-run` parameters: `run` (a run whose plan is confirmed), `tester`, `mode: run | export | record | replay`.
+  `webtest-record-start`, `webtest-record-finish` and `webtest-replay` need an open job of the matching mode for that run.
 - The tester answers parked rows (`delegate` with preconditions, `self-run`, `skip`) and enters
   results for rows they run on the run screen. Those answers live on the server, keyed by
   `<row>-a<attempt>` (answers) and `<row>-r<attempt>` (results), and outlive the job. `<run> webtest-resolve --run <r> --job <j> --session <s>`
   applies them to `run.json` and marks them applied; `--wait` holds until one arrives or the tester
   presses "Finish".
 - `console done --result done` on a `webtest-run` job is refused with `open-rows` while the run has
-  an open row and the tester has not finished it. Close the run (`webtest-close`) first.
+  an open row and the tester has not finished it. Close the run (`webtest-close`) first. Record and replay jobs are exempt: rows they cannot take stay queued for a run job.
 - Call `console progress` at least every two minutes while a worker runs: a web job's silence counts
   from its last progress line, and after two minutes the console tells the tester the agent may be
   waiting for a browser permission in the terminal.

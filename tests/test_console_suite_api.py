@@ -266,3 +266,24 @@ def test_run_columns_are_edited_on_the_run_page_while_no_job_works_on_it(console
     status, _, data = browser(console, "PUT", f"/api/webtest/runs/{run['run']}/columns",
                               {"columns": plan["columns"], "verdict_labels": plan["verdict_labels"]})
     assert status == 409 and data["error"]["code"] == "run-busy"
+
+
+def test_spec_review_needs_a_passing_check_and_the_hash_the_tester_saw(console, home):
+    from testign import webtest_spec  # noqa: PLC0415
+
+    sid = new_manual(console, "Spec")
+    status, _, made = browser(console, "POST", f"/api/webtest/suites/{sid}/cases", case(kind="label", expected="Reads 確定"))
+    assert status == 200, made
+    status, _, view = browser(console, "GET", f"/api/webtest/suites/{sid}")
+    assert view["spec"]["status"] == "missing" and view["spec"]["eligible"] == 1
+    folder = webtest_suite.find_suite(webtest.runs_root({"output_dir": str(home / "Downloads")}), sid)
+    steps = [{"action": "goto", "value": "/"}, {"action": "expect_text", "locator": {"css": "body"}, "value": "確定"}]
+    spec = webtest_spec.save(folder, webtest_suite.load(folder), {"c1": {"steps": steps}})
+    digest = webtest_spec.content_hash(spec)
+    status, _, data = browser(console, "POST", f"/api/webtest/suites/{sid}/spec/review", {"hash": digest})
+    assert status == 409 and data["error"]["code"] == "spec-not-ready"
+    webtest_spec.store_check(folder, {"c1": {"result": "ok"}}, "check", digest)
+    status, _, data = browser(console, "POST", f"/api/webtest/suites/{sid}/spec/review", {"hash": digest})
+    assert status == 200 and data["status"] == "reviewed"
+    status, _, data = browser(console, "POST", f"/api/webtest/suites/{sid}/spec/remove", {"cases": ["c1"]})
+    assert status == 200 and data["recorded"] == 0

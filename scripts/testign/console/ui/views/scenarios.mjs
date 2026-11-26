@@ -9,6 +9,7 @@ import { href } from '../router.mjs';
 import { jobErrorText } from './job-actions.mjs';
 import { alertBox, breadcrumb, emptyState, errorState, field, loading, openDialog, pageHead, searchBox, tableBox, ybadge } from './shell.mjs';
 import { urlLink } from './sign-in-card.mjs';
+import { stepList } from './spec-steps.mjs';
 
 /** A scenario's status: approved, rejected (with the tester's note) or waiting for approval. */
 export function scenarioStatus(s) {
@@ -36,6 +37,41 @@ export function filterScenarios(groups, text) {
       return words.every((w) => hay.includes(w));
     }),
   })).filter((g) => g.scenarios.length);
+}
+
+/** A Login Recipe's state in one word: usable, needs approval, needs a test, needs values, or none. */
+export function recipeState(recipe) {
+  if (!recipe || !recipe.exists) return 'none';
+  if (!recipe.profile_set || (recipe.missing_values || []).length) return 'values';
+  if (!recipe.tested) return 'test';
+  if (!recipe.approved) return 'approve';
+  return 'usable';
+}
+
+const RECIPE_STATES = { usable: ['ok', 'check'], approve: ['warn', 'clock'], test: ['warn', 'clock'], values: ['warn', 'warning'], none: ['', 'info'] };
+
+/** The recipe the agent drafted: its steps and placeholders, the profile, the last test. Never a value. */
+export function recipeSection(t, recipe) {
+  const state = recipeState(recipe);
+  const [kind, name] = RECIPE_STATES[state];
+  const head = h('div.st-row', [h('h3.yh-h3.m-0', t('recipe_title')), statusIcon(kind || 'ok', name, t(`recipe_state_${state}`)),
+    h('span', { dataset: { recipeState: state } }, t(`recipe_state_${state}`))]);
+  if (!recipe) return h('div.yh-stack', [head, h('p.yh-caption.yh-muted.m-0', t('recipe_none_hint'))]);
+  const test = recipe.test || null;
+  return h('div.yh-stack', [head,
+    h('dl.kv', [
+      h('dt', t('recipe_profile')), h('dd.mono', [recipe.profile || NONE, ' · ',
+        recipe.profile_set ? t('recipe_profile_set') : t('recipe_profile_missing')]),
+      h('dt', t('recipe_placeholders')), h('dd.mono', (recipe.placeholders || []).join(', ') || NONE),
+      (recipe.missing_values || []).length ? [h('dt', t('recipe_missing')), h('dd.mono.text-danger', recipe.missing_values.join(', '))] : null,
+      h('dt', t('recipe_test')), h('dd', test ? [test.ok ? t('recipe_test_ok') : t('recipe_test_failed'),
+        test.at ? [' · ', timeOrDay(test.at)] : null, !test.ok && test.error ? [' · ', String(test.error)] : null] : t('recipe_test_none')),
+      recipe.approved ? [h('dt', t('recipe_approved_by')), h('dd.mono', recipe.approved_by || NONE)] : null,
+    ]),
+    stepList(recipe.steps),
+    state === 'values' ? h('p.yh-caption.m-0', [t('recipe_values_how'), ' ', h('code.mono', `profile-set --project <project> --profile ${recipe.profile || '<profile>'} --key <key>`)]) : null,
+    h('p.yh-caption.yh-muted.m-0', t('recipe_staging_only')),
+  ]);
 }
 
 /** One scenario in a dialog: its checklist, and approve, reject (needs a note) or remove. */
@@ -79,7 +115,14 @@ export function openScenario(ctx, project, s, after) {
     }
     act(remove, () => ctx.api.removeScenario(project, s.name), t('login_removed_toast'));
   });
+  const recipe = s.recipe && s.recipe.exists ? s.recipe : null;
+  let approveRecipe = null;
+  if (recipe && recipe.tested && !recipe.approved) {
+    approveRecipe = h('button.yh-btn', { type: 'button', dataset: { approveRecipe: s.name } }, t('recipe_approve'));
+    approveRecipe.addEventListener('click', () => act(approveRecipe, () => ctx.api.approveRecipe(project, s.name, recipe.fingerprint), t('recipe_approved_toast')));
+  }
   buttons.push(approve, reject, remove);
+  if (approveRecipe) buttons.push(approveRecipe);
   const check = s.signed_in_check || {};
   const status = scenarioStatus(s);
   const dlg = openDialog({
@@ -97,11 +140,12 @@ export function openScenario(ctx, project, s, after) {
       h('div.yh-stack', [h('h3.yh-h3.m-0', t('login_steps')),
         (s.steps || []).length ? h('ol.signin-steps', s.steps.map((x) => h('li', x))) : h('p.yh-muted.m-0', NONE),
         h('p.yh-caption.yh-muted.m-0', t('login_steps_readonly'))]),
+      recipeSection(t, recipe),
       field([t('login_note'), ' ', h('span.yh-muted', t('login_note_when'))], note),
       h('p.yh-caption.yh-muted.m-0', t('login_no_values')),
       errorBox,
     ]),
-    footer: [remove, h('span.push'), reject, s.approved ? null : approve],
+    footer: [remove, h('span.push'), approveRecipe, reject, s.approved ? null : approve],
   });
   return dlg;
 }

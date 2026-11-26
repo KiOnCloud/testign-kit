@@ -12,6 +12,16 @@
         ]
       },
       {
+        "matcher": "Bash|Read|Write|Edit|MultiEdit|NotebookEdit|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/run-python.sh\" fail-closed-secrets \"${CLAUDE_PLUGIN_ROOT}/hooks/secret_guard.py\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": "AskUserQuestion",
         "hooks": [
           {

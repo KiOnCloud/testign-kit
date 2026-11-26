@@ -1,6 +1,6 @@
 {
   "name": "testign",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Survey a Backlog ticket against a legacy repo (master at merge-base and git diff master...develop), route QA questions, keep a shared decisions log, fill the customer's Excel test case template, and run web UI tests in the tester's own Chrome from test suites built from Figma, survey reports, Excel or manual entry.",
   "author": { "name": "KiOnCloud" },
   "homepage": "https://github.com/KiOnCloud/testign-kit",

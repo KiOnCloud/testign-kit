@@ -445,8 +445,8 @@ def _check_webtest_run(ctx: Context, body: dict) -> dict:
     if not isinstance(tester, str) or not tester.strip() or len(tester) > 100 or _CONTROL.search(tester):
         raise bad("tester must be a name of 1 to 100 characters (set it in Settings)", "tester-required")
     mode = body.get("mode") or "run"
-    if mode not in ("run", "export"):
-        raise bad("mode must be run or export")
+    if mode not in ("run", "export", "record", "replay"):
+        raise bad("mode must be run, export, record or replay")
     return {"ticket": info.get("ticket"), "base_revision": None,
             "params": {"run": run, "tester": tester.strip(), "mode": mode},
             "report_lang": info.get("report_lang") or _report_lang(ctx, body)}
@@ -1159,7 +1159,9 @@ class Bridge:
                 job["summary"] = text
                 self._save(job)
                 return {"ok": True}
-            if result == "done" and job["kind"] == "webtest-run":
+            # A record or replay job leaves the rows it cannot run queued for a run in Chrome.
+            if result == "done" and job["kind"] == "webtest-run" and \
+                    (job.get("params") or {}).get("mode") not in ("record", "replay"):
                 info = self.ctx.run_info(job.get("run")) or {}
                 if info.get("open") and not self.ctx.run_finish(job.get("run")):
                     raise ApiError(409, "open-rows", "the run still has open rows; wait for the tester or "

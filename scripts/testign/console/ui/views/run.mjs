@@ -119,6 +119,15 @@ export function render(ctx) {
       actions.push(h('button.yh-btn', { type: 'button', dataset: { runAction: 'finish' }, on: { click: () => finishRun(run) } },
         t('run_finish')));
     }
+    const replay = run.replay || {};
+    if (run.confirmed && !active && !run.closed && replay.recordable > 0) {
+      actions.push(h('button.yh-btn', { type: 'button', dataset: { runAction: 'record' }, title: t('run_record_hint', { n: replay.recordable }),
+        on: { click: () => queue('record') } }, [icon('play'), t('run_record')]));
+    }
+    if (run.confirmed && !active && !run.closed && replay.replayable > 0) {
+      actions.push(h('button.yh-btn', { type: 'button', dataset: { runAction: 'replay' }, title: t('run_replay_hint', { n: replay.replayable }),
+        on: { click: () => queue('replay') } }, [icon('refresh'), t('run_replay', { n: replay.replayable })]));
+    }
     if (run.confirmed && !active && !run.closed) {
       actions.push(h('button.yh-btn.yh-btn--primary', { type: 'button', dataset: { runAction: 'run' }, on: { click: () => queue('run') } },
         [icon('play'), t('run_run')]));
