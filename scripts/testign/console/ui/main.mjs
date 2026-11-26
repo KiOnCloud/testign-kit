@@ -18,6 +18,7 @@ import * as report from './views/report.mjs';
 import * as trace from './views/trace.mjs';
 import * as runs from './views/runs.mjs';
 import * as run from './views/run.mjs';
+import * as defects from './views/defects.mjs';
 import * as agent from './views/jobs.mjs';
 import * as projects from './views/projects.mjs';
 import * as scenarios from './views/scenarios.mjs';
@@ -26,7 +27,7 @@ import * as cache from './views/cache.mjs';
 import * as settings from './views/settings.mjs';
 
 const VIEWS = {
-  suites, suiteNew, suite, survey, report, trace, runs, run, agent, projects, scenarios, templates, cache, settings,
+  suites, suiteNew, suite, survey, report, trace, runs, run, defects, agent, projects, scenarios, templates, cache, settings,
 };
 const SESSIONS_KEY = 'testign.knownSessions';
 const store = createStore({
@@ -105,6 +106,7 @@ function loadCounts() {
     setCount('survey', d.tickets.length);
   }, () => {});
   memo('count:runs', () => api.runs()).then((d) => setCount('runs', d.runs.length), () => {});
+  memo('count:defects', () => api.defects()).then((d) => setCount('defects', d.counts.draft), () => {});
   memo('count:projects', () => api.projects()).then((d) => {
     setCount('projects', d.projects.length);
     setCount('scenarios', d.projects.reduce((n, p) => n + (Number(p.scenarios) || 0), 0));
@@ -117,7 +119,7 @@ function paletteItems() {
   const t = app.t;
   const go = (hash) => () => { location.hash = hash; };
   const screens = [
-    ['suites', 'suite'], ['survey', 'search'], ['runs', 'refresh'], ['agent', 'agent'], ['projects', 'folder'],
+    ['suites', 'suite'], ['survey', 'search'], ['runs', 'refresh'], ['defects', 'warning'], ['agent', 'agent'], ['projects', 'folder'],
     ['scenarios', 'key'], ['templates', 'layers'], ['cache', 'database'], ['settings', 'sliders'],
   ].map(([name, ic]) => ({ group: t('palette_screens'), label: t(`nav_${name}`), icon: ic, run: go(href([name])) }));
   screens.splice(1, 0, { group: t('palette_screens'), label: t('new_suite'), icon: 'plus', run: go(href(['suites', 'new'])) });

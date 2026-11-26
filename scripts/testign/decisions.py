@@ -446,3 +446,68 @@ def approval_hash(writes: list[tuple[str, str | None, str]]) -> str:
 
     return hashlib.sha256(json.dumps([[n, updated, new] for n, updated, new in writes],
                                      ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+# Quotes ------------------------------------------------------------------------------------------
+# A decision's Quote must be verbatim (qa-close: whole sentences may be cut from the start or the end,
+# never in the middle, never translated). When its Source is a comment of the configured Backlog space,
+# the comment is read and the quote must appear in it as one piece. Whitespace and character width
+# (full-width / half-width, NFKC) do not count; anything else does.
+_COMMENT_URL = re.compile(r"^https?://[^/\s]+/view/([A-Z][A-Z0-9_]*-\d+)#comment-(\d+)$")
+
+
+def comment_ref(source: str, host: str) -> tuple[str, str] | None:
+    """(issue key, comment id) when ``source`` links a comment on ``host``, else None."""
+    from urllib.parse import urlsplit  # noqa: PLC0415
+
+    text = str(source or "").strip()
+    m = _COMMENT_URL.match(text)
+    if not m or not host or (urlsplit(text).hostname or "").lower() != host.lower():
+        return None
+    return m.group(1), m.group(2)
+
+
+def _flat(text: str) -> str:
+    import unicodedata  # noqa: PLC0415
+
+    # Japanese text has no spaces between words, so a line break in a copied quote must not turn into one.
+    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(text or "")))
+
+
+def quote_in(quote: str, text: str) -> bool:
+    want = _flat(quote)
+    return bool(want) and want in _flat(text)
+
+
+def check_quotes(rows: list[dict], host: str, read_comment) -> list[dict]:
+    """One line per row: ``verified``, ``mismatch``, ``missing`` (the comment does not exist) or
+    ``unchecked`` (the source is not a comment of the configured space). ``read_comment(key, id)``
+    returns the comment text or None."""
+    out = []
+    cache: dict[tuple[str, str], str | None] = {}
+    for row in rows:
+        ref = comment_ref(row.get("source", ""), host)
+        entry = {"ticket": row.get("ticket"), "q": row.get("q"), "source": row.get("source")}
+        if ref is None:
+            out.append({**entry, "status": "unchecked"})
+            continue
+        if ref not in cache:
+            cache[ref] = read_comment(*ref)
+        text = cache[ref]
+        if text is None:
+            out.append({**entry, "status": "missing"})
+        else:
+            out.append({**entry, "status": "verified" if quote_in(row.get("quote", ""), text) else "mismatch"})
+    return out
+
+
+def refuse_bad_quotes(checked: list[dict]) -> None:
+    bad = [c for c in checked if c["status"] in ("mismatch", "missing")]
+    if bad:
+        where = "; ".join(f"{c['ticket']} {c['q']}: "
+                          + ("the quote is not in the linked comment" if c["status"] == "mismatch"
+                             else "the linked comment does not exist") for c in bad[:10])
+        raise DecisionsError(
+            f"{where}. Copy the quote word for word from the comment (whole sentences may be cut from the start or "
+            "the end, never in the middle, never translated), or fix the Source link, then preview again."
+        )

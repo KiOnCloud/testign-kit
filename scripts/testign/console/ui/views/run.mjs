@@ -10,6 +10,8 @@ import { askBody } from '../markdown.mjs';
 import { href } from '../router.mjs';
 import { askTesterName, jobErrorText, queueJob, tooNewNotice } from './job-actions.mjs';
 import { openColumnsEditor } from './columns.mjs';
+import { checkDefect, defectBadge, defectText, STATUSES as DEFECT_STATUSES } from './defects.mjs';
+import { copyToClipboard } from './paste-pages.mjs';
 import { mobileMethod } from './mobile-method.mjs';
 import {
   activeJob, classBadge, fromChat, NEEDS_YOU, resultIcons, rowStateBadge, rowStateIcon, rowStateLabel,
@@ -181,6 +183,7 @@ export function render(ctx) {
       h('td.mono', c.scenario || NONE),
       h('td', h('span.st-row', [rowStateIcon(t, c.state, c.not_run_reason),
         h('span.yh-caption', rowStateLabel(t, c.state, c.not_run_reason)),
+        c.fixed ? ybadge(t('run_fixed'), 'success', { dataset: { fixed: c.row } }) : null,
         c.answer || c.tester_result ? h('span.yh-caption.yh-muted', t('run_answer_pending')) : null])),
     ]))) : emptyState(filter === 'all' ? t('run_no_rows') : t('run_no_rows_filter'));
     const current = (run.cases || []).find((c) => c.row === selected);
@@ -289,6 +292,10 @@ export function rowPanel(ctx, run, c, onSent, onClose) {
       h('dt', t('run_viewport')), h('dd', c.viewport ? t(`wt_viewport_${c.viewport}`) : NONE),
       method ? h('dt', t('wt_field_mobile_method')) : null, method ? h('dd', t(`wt_mobile_${method}`)) : null,
       h('dt', t('run_col_scenario')), h('dd', c.scenario || NONE),
+      c.previous ? h('dt', t('run_previous')) : null,
+      c.previous ? h('dd', h('span.row-4', [h('a.lnk', { href: href(['runs', c.previous.run], { row: c.row }) }, c.previous.name),
+        badge(t(`wt_verdict_${c.previous.verdict}`), c.previous.verdict === 'pass' ? 'success' : 'danger'),
+        c.fixed ? ybadge(t('run_fixed'), 'success') : null])) : null,
     ]),
     textBlock(t('run_expected'), c.expected),
     textBlock(t('run_steps'), c.steps),
@@ -303,6 +310,7 @@ export function rowPanel(ctx, run, c, onSent, onClose) {
       r.actual ? h('p.pre-wrap.panel-text', r.actual) : null]));
   }
   if (c.state === 'not-run' && c.not_run_reason) parts.push(h('p.k-note', rowStateBadge(t, c.state, c.not_run_reason)));
+  if (c.defect) parts.push(defectForm(ctx, run, c, onSent));
   if (c.state === 'parked' && c.question) parts.push(parkForm(ctx, run, c, onSent));
   if (c.state === 'awaiting-tester' && method) parts.push(h('p.k-note', t(`run_howto_${method}`)));
   if (c.state === 'awaiting-tester') parts.push(resultForm(ctx, run, c, onSent));
@@ -420,5 +428,71 @@ function resultForm(ctx, run, c, onSent) {
     h('div.k-field', [h('label.k-field__label', { for: actual.id }, t('run_actual')), actual]),
     h('div.k-field', [h('label.k-field__label', { for: file.id }, [t('run_image'), ' ', h('span.k-muted', t('runform_optional'))]), file]),
     errorBox, h('div.row-8', save),
+  ]);
+}
+
+/** The body the defect form sends: status and the fields it needs. */
+export function defectBody(status, fields) {
+  const body = { status, title: String(fields.title || '').trim() };
+  for (const k of ['steps', 'expected', 'actual']) body[k] = String(fields[k] || '').trim();
+  body.tracker = status === 'not-a-defect' ? '' : String(fields.tracker || '').trim();
+  body.reason = status === 'not-a-defect' ? String(fields.reason || '').trim() : '';
+  return body;
+}
+
+function defectForm(ctx, run, c, onSaved) {
+  const { t } = ctx;
+  const d = c.defect;
+  const id = `defect-${c.row}`;
+  let status = d.status || 'draft';
+  const input = (key, value, rows) => (rows
+    ? h('textarea.k-textarea', { id: `${id}-${key}`, rows: String(rows), maxlength: '4000' }, value || '')
+    : h('input.k-input', { id: `${id}-${key}`, type: 'text', value: value || '', maxlength: key === 'title' ? '200' : '100' }));
+  const fields = {
+    title: input('title', d.title), steps: input('steps', d.steps, 3), expected: input('expected', d.expected, 2),
+    actual: input('actual', d.actual, 2), tracker: input('tracker', d.tracker), reason: input('reason', d.reason, 2),
+  };
+  const field = (key, label, help) => h('div.k-field', { dataset: { defectField: key } }, [
+    h('label.k-field__label', { for: fields[key].id }, label), fields[key], help ? h('span.k-field__help', help) : null]);
+  const trackerField = field('tracker', t('defect_tracker'), t('defect_tracker_help'));
+  const reasonField = field('reason', t('defect_reason'), null);
+  const show = () => { trackerField.hidden = status === 'not-a-defect'; reasonField.hidden = status !== 'not-a-defect'; };
+  const statuses = DEFECT_STATUSES.map((v, i) => {
+    const radio = h('input', { type: 'radio', name: `${id}-status`, id: `${id}-s${i}`, value: v, checked: v === status ? true : undefined,
+      on: { change: () => { status = v; show(); } } });
+    return h('label.k-radio', { for: radio.id }, [radio, h('span.k-radio__dot'), h('span', t(`defect_status_${v.replace(/-/g, '_')}`))]);
+  });
+  show();
+  const values = () => Object.fromEntries(Object.entries(fields).map(([k, el]) => [k, el.value]));
+  const errorBox = h('div', { role: 'alert' });
+  const save = h('button.k-btn.k-btn--primary', { type: 'button', dataset: { defectSave: c.row } }, t('defect_save'));
+  save.addEventListener('click', async () => {
+    const body = defectBody(status, values());
+    const problem = checkDefect(body);
+    mount(errorBox, problem ? h('p.k-field__error', [icon('warning'), t(problem)]) : null);
+    if (problem) return;
+    save.disabled = true;
+    try {
+      await ctx.api.saveDefect(run.id, c.row, body);
+      ctx.invalidate('defects');
+      ctx.toast(t('defect_saved'));
+      onSaved();
+    } catch (err) {
+      save.disabled = false;
+      mount(errorBox, h('p.k-field__error', [icon('warning'), jobErrorText(t, err)]));
+    }
+  });
+  const copy = h('button.k-btn', { type: 'button', dataset: { defectCopy: c.row },
+    on: { click: () => copyToClipboard(ctx, defectText(t, { ...d, ...values(), row: c.row }, run)) } }, [icon('copy'), t('defect_copy')]);
+  return h('section.ask-form.stack-12', { dataset: { defect: c.row } }, [
+    h('div.row-8', [h('span.k-section-label', t('defect_title')), defectBadge(t, d.status),
+      d.saved ? null : h('span.k-note', t('defect_unsaved'))]),
+    d.stale ? h('p.k-note', t('defect_stale_body')) : null,
+    field('title', t('defect_col_title'), null), field('steps', t('run_steps'), null), field('expected', t('run_expected'), null),
+    field('actual', t('run_actual'), null),
+    h('fieldset.row-16.plain-fieldset', [h('legend.k-field__label', t('defect_col_status')), ...statuses]),
+    trackerField, reasonField,
+    h('p.k-note', t('defect_note')),
+    errorBox, h('div.row-8', [save, copy]),
   ]);
 }

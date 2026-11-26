@@ -9,7 +9,7 @@ test('the screens of the three menu groups parse from the hash; the home is Test
   assert.deepEqual(parseRoute(''), { name: 'suites', params: {}, query: {} });
   assert.deepEqual(parseRoute('#/'), { name: 'suites', params: {}, query: {} });
   for (const name of SCREENS) assert.deepEqual(parseRoute(`#/${name}`), { name, params: {}, query: {} });
-  assert.deepEqual(SCREENS, ['suites', 'survey', 'runs', 'agent', 'projects', 'scenarios', 'templates', 'cache', 'settings']);
+  assert.deepEqual(SCREENS, ['suites', 'survey', 'runs', 'defects', 'agent', 'projects', 'scenarios', 'templates', 'cache', 'settings']);
 });
 
 test('detail routes carry their id', () => {

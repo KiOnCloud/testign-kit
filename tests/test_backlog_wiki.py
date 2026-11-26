@@ -51,6 +51,7 @@ class Stub:
         }
         self.requests = []
         self.next_id = 100
+        self.comments = {"5": {"id": 5, "content": "ポイントは  使えます。\n詳細は後日お知らせします。"}}
 
     def writes(self):
         return [r for r in self.requests if r[0] in ("PATCH", "POST")]
@@ -91,6 +92,9 @@ class Stub:
                 if path.startswith("/api/v2/wikis/"):
                     page = stub.pages.get(int(path.rsplit("/", 1)[1]))
                     return self._send(200, page) if page else self._send(404, {"errors": [{"message": "No wiki."}]})
+                if path.startswith("/api/v2/issues/") and "/comments/" in path:
+                    comment = stub.comments.get(path.rsplit("/", 1)[1])
+                    return self._send(200, comment) if comment else self._send(404, {"errors": [{"message": "No comment."}]})
                 if path == "/api/v2/projects/DEMO":
                     return self._send(200, {"id": 4242, "projectKey": "DEMO"})
                 return self._send(404, {"errors": [{"message": "Not found."}]})
@@ -352,3 +356,28 @@ def test_api_preview_carries_page_contents_the_console_can_verify(server, tmp_pa
     ask = jobs.validate_ask(client.ask_from_preview(shown))
     assert ask["type"] == "confirm-diff" and ask["preview"]["approval"] == shown["approval"]
     assert [p["diff"] for p in ask["preview"]["pages"]] == [p["diff"] for p in shown["pages"]]
+
+
+def _comment_row(server_port: int, quote: str, comment: str = "5") -> dict:
+    return {**ROW_POINT, "quote": quote, "source": f"http://127.0.0.1:{server_port}/view/DEMO-15#comment-{comment}"}
+
+
+def test_cli_preview_checks_a_quote_against_its_backlog_comment(server, tmp_path, monkeypatch):
+    home = home_with_config(tmp_path)
+    port = int(os.environ["BACKLOG_DOMAIN"].rsplit(":", 1)[1])
+    rows = write_json(tmp_path, "rows.json", [_comment_row(port, "ポイントは使えます。 詳細は後日お知らせします。"), ROW_DUP])
+    res = run_cli("wiki-append-preview", "--rows", str(rows), home=home)
+    assert res.returncode == 0, res.stderr
+    quotes = json.loads(res.stdout)["quotes"]
+    assert [q["status"] for q in quotes] == ["verified", "unchecked"]
+
+    rows = write_json(tmp_path, "rows.json", [_comment_row(port, "ポイントは使えません。")])
+    res = run_cli("wiki-append-preview", "--rows", str(rows), home=home)
+    assert res.returncode == 2 and "not in the linked comment" in res.stderr
+    res = run_cli("wiki-update", "--rows", str(rows), "--approval", "x", home=home)
+    assert res.returncode == 2 and "not in the linked comment" in res.stderr
+    assert server.writes() == []
+
+    rows = write_json(tmp_path, "rows.json", [_comment_row(port, "ポイントは使えます。", comment="404")])
+    res = run_cli("wiki-append-preview", "--rows", str(rows), home=home)
+    assert res.returncode == 2 and "does not exist" in res.stderr

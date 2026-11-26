@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -63,8 +64,23 @@ def wait(session: str, timeout: float | None = None, home: Path | None = None) -
                 timeout=_held_timeout(timeout), home=home)
 
 
-def claim(job: str, session: str, home: Path | None = None) -> dict:
-    return call("POST", f"/agent/jobs/{job}/claim", {"session": session}, home=home)
+def claude_session_id(env: dict | None = None) -> str | None:
+    """The Claude Code session running this command (Claude Code sets it for every Bash call)."""
+    env = os.environ if env is None else env
+    value = str(env.get("CLAUDE_CODE_SESSION_ID") or "").strip()
+    return value or None
+
+
+def claim(job: str, session: str, home: Path | None = None, claude_session: str | None = None) -> dict:
+    body = {"session": session}
+    claude_session = claude_session or claude_session_id()
+    if claude_session:
+        body["claude_session"] = claude_session
+    return call("POST", f"/agent/jobs/{job}/claim", body, home=home)
+
+
+def claimed(claude_session: str, home: Path | None = None, timeout: float = 3.0) -> dict:
+    return call("GET", f"/agent/claimed?claude_session={quote(claude_session, safe='')}", timeout=timeout, home=home)
 
 
 def progress(job: str, session: str, message: str, home: Path | None = None) -> dict:

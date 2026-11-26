@@ -11,7 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import (
-    __version__, backlog_wiki, cache, config, decisions, figma_table, gitscope, hashcheck, login_scenarios, report,
+    __version__, backlog_wiki, cache, config, decisions, figma_table, git_guard, gitscope, hashcheck, login_scenarios,
+    report,
     templates, trace, webtest, webtest_export, webtest_sources, webtest_suite, xlsx,
 )
 from .console import client as console_client
@@ -355,7 +356,15 @@ def _plan_wiki(backlog: dict, rows: list[dict]) -> dict:
     if new_index != index:
         writes.append((index_name, index, new_index))  # the index is written last
     approval = decisions.approval_hash([(n, listing.get(n, {}).get("updated"), new) for n, _old, new in writes])
+    quotes = decisions.check_quotes(rows, backlog_wiki.domain_host(), _comment_text)
+    decisions.refuse_bad_quotes(quotes)
+    result = {**result, "quotes": quotes}
     return {"listing": listing, "writes": writes, "result": result, "approval": approval, "project": project}
+
+
+def _comment_text(issue_key: str, comment_id: str) -> str | None:
+    comment = backlog_wiki.get_comment(issue_key, comment_id)
+    return None if comment is None else comment["content"]
 
 
 def _cmd_wiki_append_preview(args: argparse.Namespace) -> int:
@@ -1014,6 +1023,14 @@ def _add_console_parser(sub) -> None:
     sv.set_defaults(func=_cmd_console_serve)
 
 
+def _cmd_guard(args: argparse.Namespace) -> int:
+    if args.guard_command == "enable":
+        return _emit(git_guard.enable(args.repo))
+    if args.guard_command == "disable":
+        return _emit(git_guard.disable(args.repo))
+    return _emit(git_guard.status(args.repo))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="testign")
     parser.add_argument("--version", action="version", version=__version__)
@@ -1150,6 +1167,15 @@ def build_parser() -> argparse.ArgumentParser:
     cr.add_argument("--report", required=True)
     cr.add_argument("--by", required=True, help="tester name")
     cr.set_defaults(func=_cmd_cache_review)
+
+    gd = sub.add_parser("guard", help="the git write guard for customer repositories (enable, disable, status)")
+    gsub = gd.add_subparsers(dest="guard_command", required=True)
+    for name, text in (("enable", "put the repository holding --repo on the guard list"),
+                       ("disable", "take the repository off the guard list"),
+                       ("status", "show the guard list; with --repo, whether that repository is on it")):
+        g = gsub.add_parser(name, help=text)
+        g.add_argument("--repo", required=name != "status", help="a folder inside the customer repository")
+        g.set_defaults(func=_cmd_guard)
 
     _add_webtest_parser(sub)
     _add_console_parser(sub)

@@ -26,13 +26,14 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .. import config, fsutil, login_scenarios, templates, webtest, webtest_export
+from .. import config, fsutil, login_scenarios, templates, webtest, webtest_defects, webtest_export, webtest_history
 from .server import ApiError, Response
 
 ANSWER_CAP = 2000
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 _cache: dict[str, tuple[tuple, int]] = {}
 COLUMNS_LOCK = threading.Lock()
+DEFECTS_LOCK = threading.Lock()
 
 
 def now_iso() -> str:
@@ -178,9 +179,16 @@ def run_view(state, run_id: Any, session: str | None = None) -> dict:
     folder = run_folder(state, run_id)
     run = load_run(folder)
     answers = read_answers(state.home, run["id"])
+    marks = webtest_history.run_marks(folder.parent, run)
+    defects = webtest_defects.for_run(run, webtest_defects.read(server_dir(state.home, run["id"])))
     cases = []
     for case in run["cases"]:
         view = {k: case.get(k) for k in CASE_VIEW if k in case}
+        if case["row"] in marks:
+            view["previous"] = marks[case["row"]]["previous"]
+            view["fixed"] = marks[case["row"]]["fixed"]
+        if case["row"] in defects:
+            view["defect"] = defects[case["row"]]
         qid = (case.get("question") or {}).get("id")
         if case["state"] == "parked" and qid in answers["answers"]:
             view["answer"] = answers["answers"][qid]  # stored, not yet applied by the agent
@@ -202,7 +210,42 @@ def run_view(state, run_id: Any, session: str | None = None) -> dict:
             "report_lang", "confirmed", "columns", "signed_in", "halted", "closed", "exports", "import")
     return {**{k: run.get(k) for k in keep}, "counts": webtest.counts(run), "open": webtest.open_rows(run),
             "cases": cases, "jobs": jobs, "finish": answers["finish"], "can_act": can_act,
+            "defect_counts": webtest_defects.counts(defects),
             "waiting_on_tester": _waiting_on_tester(run, answers)}
+
+
+def save_defect(state, run_id: Any, row: Any, body: Any, session: str | None) -> dict:
+    """The tester edits a failed row's defect, marks it sent with a tracker key, or not a defect."""
+    folder = run_folder(state, run_id)
+    with DEFECTS_LOCK:
+        run = load_run(folder)
+        store = server_dir(state.home, run["id"], create=True)
+        try:
+            entry = webtest_defects.save(store, run, row, body, at=now_iso(), by=_by(session))
+        except webtest_defects.DefectError as exc:
+            raise ApiError(400, "bad-request", str(exc)) from None
+    return {"ok": True, "row": row, "defect": entry}
+
+
+def list_defects(state) -> dict:
+    """Every run's defects, newest run first, with counts by status for the menu."""
+    out = []
+    for run_id, folder in sorted(webtest.list_runs(runs_root(state)).items(), reverse=True):
+        try:
+            run = webtest.load(folder)
+        except webtest.WebtestError:
+            continue
+        defects = webtest_defects.for_run(run, webtest_defects.read(webtest_defects.store_folder(state.home, run_id)))
+        content = {c["row"]: c.get("content") or "" for c in run["cases"]}
+        for row, d in defects.items():
+            out.append({"run": run_id, "run_name": run.get("name") or run_id, "project": run.get("project"),
+                        "row": row, "content": content.get(row, ""), "title": d.get("title"),
+                        "status": d.get("status"), "tracker": d.get("tracker") or "", "saved": bool(d.get("saved")),
+                        "stale": bool(d.get("stale")), "at": d.get("at")})
+    counts = {s: 0 for s in webtest_defects.STATUSES}
+    for d in out:
+        counts[d["status"] if d["status"] in counts else "draft"] += 1
+    return {"defects": out, "counts": counts}
 
 
 def _file(folder: Path, sub: str, name: Any) -> Response:
@@ -437,6 +480,9 @@ def install(state) -> None:
           max_body=webtest.IMAGE_CAP + 1)
     r.add("POST", "/api/webtest/runs/:run/finish", "browser", lambda q: finish(state, q.params["run"], q.session))
     r.add("GET", "/api/webtest/runs/:run/columns", "browser", lambda q: columns(state, q.params["run"]))
+    r.add("PUT", "/api/webtest/runs/:run/defects/:row", "browser",
+          lambda q: save_defect(state, q.params["run"], q.params["row"], q.body, q.session))
+    r.add("GET", "/api/webtest/defects", "browser", lambda q: list_defects(state))
     r.add("PUT", "/api/webtest/runs/:run/columns", "browser", lambda q: put_columns(state, q.params["run"], q.body))
     r.add("POST", "/agent/webtest/runs/:run/pending", "agent", held(lambda q: pending(state, q.params["run"], q.body)))
     r.add("POST", "/agent/webtest/runs/:run/applied", "agent", lambda q: applied(state, q.params["run"], q.body))

@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .. import config, templates, webtest, webtest_sources, webtest_suite
+from .. import config, templates, webtest, webtest_history, webtest_sources, webtest_suite
 from . import templates_api
 from .server import ApiError, Response
 
@@ -138,6 +138,7 @@ def suite_view(state, suite_id: Any) -> dict:
     return {**webtest_suite.summary(suite), "cases": suite["cases"], "suite_digest": suite.get("suite_digest"),
             "coverage": webtest_suite.coverage(suite, env(state), folder),
             "runs": webtest_suite.runs_of(runs_root(state), suite["id"]),
+            "results": webtest_history.suite_results(runs_root(state), suite["id"], suite["cases"]),
             "generate": _generate_view(state, suite)}
 
 
