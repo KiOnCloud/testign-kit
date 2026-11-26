@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -100,7 +101,9 @@ def test_claim_reads_the_claude_session_from_the_environment(server, home, monke
 
 
 def test_hook_process_fails_open(tmp_path):
-    env = {"HOME": str(tmp_path), "USERPROFILE": str(tmp_path), "PATH": ""}
+    # Windows Python needs SYSTEMROOT to start at all; nothing else of the caller's environment is kept.
+    env = {"HOME": str(tmp_path), "USERPROFILE": str(tmp_path), "PATH": "",
+           **{k: os.environ[k] for k in ("SYSTEMROOT",) if k in os.environ}}
     result = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload()), text=True,
                             capture_output=True, env=env)
     assert result.returncode == 0 and result.stdout == ""
