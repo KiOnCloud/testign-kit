@@ -242,12 +242,16 @@ def test_subfolders_of_a_guarded_repo_are_guarded(repo: Path) -> None:
     assert bash("git commit -m x", repo / "src", [str(repo)]) is not None
 
 
+# Paths are written as a shell would get them: forward slashes, or quoted (an unquoted Windows path
+# loses its backslashes in bash itself, so the guard reads it the same way bash does).
 def test_follows_cd_into_a_repo(plain_dir: Path, repo: Path) -> None:
-    assert bash(f"cd {repo} && git commit -m x", plain_dir, [str(repo)]) is not None
+    assert bash(f"cd {repo.as_posix()} && git commit -m x", plain_dir, [str(repo)]) is not None
+    assert bash(f'cd "{repo}" && git commit -m x', plain_dir, [str(repo)]) is not None
 
 
 def test_follows_git_dash_c_into_a_repo(plain_dir: Path, repo: Path) -> None:
-    assert bash(f"git -C {repo} push", plain_dir, [str(repo)]) is not None
+    assert bash(f"git -C {repo.as_posix()} push", plain_dir, [str(repo)]) is not None
+    assert bash(f'git -C "{repo}" push', plain_dir, [str(repo)]) is not None
 
 
 def test_explicit_git_dir_counts_as_repo(plain_dir: Path) -> None:
