@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -44,8 +45,21 @@ def site():
     s.close()
 
 
+def browsers_path() -> str:
+    """Playwright's browser folder under the real home: the tests point HOME at a temporary folder, and
+    on macOS and Linux Playwright looks for its browsers under HOME."""
+    home = Path.home()
+    if sys.platform == "darwin":
+        return str(home / "Library" / "Caches" / "ms-playwright")
+    if os.name == "nt":
+        return str(Path(os.environ.get("LOCALAPPDATA") or home / "AppData" / "Local") / "ms-playwright")
+    return str(Path(os.environ.get("XDG_CACHE_HOME") or home / ".cache") / "ms-playwright")
+
+
 @pytest.fixture
 def env(tmp_path, monkeypatch, site):
+    if not os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+        monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", browsers_path())
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     (tmp_path / ".testign-kit").mkdir()
