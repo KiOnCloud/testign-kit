@@ -68,8 +68,17 @@ Save the approved rows as `<output_dir>/<TICKET>/<TICKET>-approved-decisions.jso
 
 The preview lists one diff per page that will change: feature/common pages first (a page that does
 not exist yet shows `exists: false` and will be created), the index last. Show every diff and the
-`added` / `skipped` (already in the log) / `superseded` / `index_repaired` lists. Write only after the
-tester approves all of them in the same run:
+`added` / `skipped` (already in the log) / `superseded` / `index_repaired` lists.
+
+The preview (and the update) also checks each row whose `source` links a comment on this Backlog
+space (`https://<space>/view/<KEY>#comment-<id>`): the `quote` must appear in that comment's text,
+ignoring whitespace and full-width/half-width differences. `quotes` lists each row as `verified`,
+`unchecked` (another source) or the problem. A quote that is not in the comment, or a comment that
+does not exist, stops the preview: copy the quote again from the comment (or fix the link) and run
+the preview again. Never paraphrase a quote to get past the check. The `--pages-dir` fallback below
+makes no API call and checks no quote; say so to the tester.
+
+Write only after the tester approves all of them in the same run:
 
 ```bash
 <run> wiki-update --rows "<approved json>" --approval "<approval from the preview>"

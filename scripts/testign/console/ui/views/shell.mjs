@@ -81,7 +81,7 @@ export function radioGroup({ label, labelledBy, options, value, onChange, name }
 // The menu: three groups, each a bold row with a caret over its screens. Counts sit on the rows.
 export const NAV = Object.freeze([
   { id: 'design', icon: 'design', items: [['suites', 'suite'], ['survey', 'search']] },
-  { id: 'run', icon: 'play', items: [['runs', 'refresh'], ['agent', 'agent']] },
+  { id: 'run', icon: 'play', items: [['runs', 'refresh'], ['defects', 'warning'], ['agent', 'agent']] },
   { id: 'config', icon: 'settings', items: [['projects', 'folder'], ['scenarios', 'key'], ['templates', 'layers'], ['cache', 'database'],
     ['settings', 'sliders']] },
 ]);

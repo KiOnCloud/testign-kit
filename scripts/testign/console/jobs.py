@@ -1031,7 +1031,7 @@ class Bridge:
                 if self.held.get(session) == token:
                     self.held.pop(session, None)
 
-    def claim(self, job_id: str, session: Any) -> dict:
+    def claim(self, job_id: str, session: Any, claude_session: Any = None) -> dict:
         with self.cond:
             session = self._agent(session)
             job = self._owned(job_id, session)
@@ -1040,7 +1040,23 @@ class Bridge:
                 if moved:
                     return moved
             self.refuse_without_older_tab(job, answer_cutoff(job))
+            if isinstance(claude_session, str) and _SESSION.match(claude_session):
+                # The Claude Code session that works on the job: the AskUserQuestion hook finds the job by it.
+                job["claude_session"] = claude_session
+                self._save(job)
             return {"ok": True}
+
+    def claimed(self, claude_session: Any) -> dict:
+        """The open job the Claude Code session ``claude_session`` claimed, with its console session."""
+        if not isinstance(claude_session, str) or not _SESSION.match(claude_session):
+            raise bad("claude_session is missing or malformed")
+        with self.cond:
+            job = self.open_job()
+            if (job is None or job["state"] not in ("running", "needs-input")
+                    or job.get("claude_session") != claude_session):
+                return {"job": None}
+            return {"job": job["id"], "session": job["session"], "kind": job["kind"],
+                    "ui_lang": job.get("ui_lang") or "en"}
 
     def _running(self, job_id: str, session: Any) -> tuple[str, dict]:
         session = self._agent(session)
@@ -1388,7 +1404,9 @@ def install(state, store=None) -> Bridge:
 
     r = state.router
     r.add("POST", "/agent/wait", "agent", held(lambda q: bridge.wait(body(q).get("session"), body(q).get("timeout"))))
-    r.add("POST", "/agent/jobs/:id/claim", "agent", lambda q: bridge.claim(q.params["id"], body(q).get("session")))
+    r.add("POST", "/agent/jobs/:id/claim", "agent",
+          lambda q: bridge.claim(q.params["id"], body(q).get("session"), body(q).get("claude_session")))
+    r.add("GET", "/agent/claimed", "agent", lambda q: bridge.claimed(q.arg("claude_session")))
     r.add("POST", "/agent/jobs/:id/progress", "agent",
           lambda q: bridge.progress(q.params["id"], body(q).get("session"), body(q).get("message")))
     r.add("POST", "/agent/jobs/:id/ask", "agent",

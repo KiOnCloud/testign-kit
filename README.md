@@ -37,6 +37,7 @@ testign-kit makes that investigation an automatic step for every ticket, and tur
 | Shared rules | [`references/rules.md`](references/rules.md): language, source labels, fact/intent routing, F1–F5 |
 | Survey report template | [`templates/survey-report-template.md`](templates/survey-report-template.md) |
 | Local scout cache | Reuse the `master` brief per feature (`~/.testign-kit/cache/`), validated by file blob hashes. The `develop` diff always runs fresh |
+| Hooks ([`hooks/hooks.json`](hooks/hooks.json)) | Block git writes in the customer repositories you put on the guard list, and send a console job's questions to the console instead of the terminal |
 
 ## Installation
 
@@ -165,6 +166,33 @@ If you have no template yet, a basic made-up one ships with the plugin: [`templa
 
 The report defaults to Vietnamese (falling back to Japanese, then English), and Japanese UI labels are kept verbatim so testers can match them against the screen.
 
+When `/testign:close` previews the decisions log, it checks every quote whose source links a Backlog
+comment (`https://<your space>/view/PROJ-123#comment-<id>`) against that comment's text, ignoring
+whitespace and full-width/half-width differences. A quote that is not in the comment, or a link to a
+comment that does not exist, stops the preview; quotes from other sources are listed as unchecked.
+
+### Guard a customer repository
+
+The survey only reads the customer's repository. To make sure nothing in a Claude Code session
+writes to it, put the clone on the guard list:
+
+```bash
+python "<plugin root>/scripts/run.py" guard enable --repo <path to your clone>
+python "<plugin root>/scripts/run.py" guard status --repo <path to your clone>
+python "<plugin root>/scripts/run.py" guard disable --repo <path to your clone>
+```
+
+While a repository is on the list, the plugin's `PreToolUse` hook blocks commands that change it
+(commit, push, merge, rebase, reset, checkout, switch, new branches, tags, stash, worktree removal,
+`gh pr` writes …), writes into its `.git` folder, and any change to the guard list itself, from Bash
+and from the file tools. Read-only commands (`status`, `log`, `diff`, `show`, `fetch`, `gh pr view` …)
+still work. The list lives in `~/.testign-kit/guarded_repos.json`, so nothing is written into the
+customer repository. Only you enable or disable a repository: the hook blocks the agent from running
+`guard disable`. When the list is empty the hook does nothing, and when it cannot find Python 3.10 it
+blocks only while the list has repositories on it. The guard catches accidental and habitual
+source-control changes; it is not a security boundary, since a script file or another interpreter
+can still reach git.
+
 ## Console
 
 `/testign:console` opens a local web page on `127.0.0.1` (port 4791 by default) and keeps the Claude
@@ -260,12 +288,22 @@ session tells the console which of these tools it has, and *Agent & jobs* shows 
    stops at a sign-in card when the scenario changes; you sign in yourself and press "Signed in". It
    parks cases it should not decide (you delegate them with preconditions, run them yourself, or
    skip them), and cases you run yourself wait for your result and an optional image.
-6. **Export:** the run's workbook (a copy of your template) and a report, written next to the run.
+6. **Defects:** every failed row (the agent's fail or your own) has a defect draft built from the
+   row: title, steps, expected, actual, page URL and evidence. Edit it in the row's panel, copy it
+   as text into Backlog or any tracker, file it there yourself, then mark it *Sent* with the
+   tracker key, or *Not a defect* with the reason. testign posts nothing anywhere. The *Defects*
+   screen lists the defects of every run, drafts first. A saved defect stays when the row passes
+   later and is marked as written for an earlier failure.
+7. **Results across runs:** a row that failed in the previous run of the same suite on the same
+   project, with the case unchanged, and passes now is marked *Fixed*; the row panel shows the
+   previous run's result. The suite's Runs tab has a case-by-run table of its newest eight runs.
+8. **Export:** the run's workbook (a copy of your template) and a report, written next to the run.
    The cover placeholders `<project>`, `<TICKET-ID>`, `<tester>`, `<YYYY-MM-DD>` and `<suite>` are
    filled from the run where the template has them, a run from a survey suite adds a `Trace` column
    with the `B*`/`R*` rows each case covers, and each Figma row's `No` cell (its content cell when the
    column plan has no `No` column) links to its capture. The links point into the run folder, so keep
-   the workbook next to its `source` folder.
+   the workbook next to its `source` folder. The report also lists the rows fixed since the
+   previous run and the run's defects with their status and tracker key.
 
 Runs made before suites existed (run file version 1, imported straight from a Figma table) still
 open, run and export; the old import job (`webtest-plan`) is retired, and a queued one fails with
@@ -294,7 +332,7 @@ Where things live:
   and the exports. The agent's commands write there; the console only creates `run.json` from a
   suite and changes its export columns.
 - `~/.testign-kit/webtest/` holds the projects, login scenarios, your answers to parked rows, your
-  results and the images you upload. It is created readable by you only (mode 700 on macOS and
+  results, your saved defects and the images you upload. It is created readable by you only (mode 700 on macOS and
   Linux). On Windows, mode bits do nothing: the folder takes the ACL of your user profile, which by
   default lets only you and administrators read it.
 - No screen takes or stores an account name or password, and the agent never types into a sign-in
@@ -326,6 +364,7 @@ Limits:
 ├── commands/                       # /testign:survey, /testign:close, /testign:console, /testign:webtest
 ├── skills/                         # scout (internal), spec-qa, qa-close, testcase (/testign:testcase), console, webtest
 ├── agents/                         # web test workers that check one case in Chrome
+├── hooks/                          # PreToolUse hooks: git guard, console questions
 ├── references/
 │   ├── rules.md                    # shared rules every skill reads
 │   ├── decisions-log-format.md     # Backlog wiki decisions log format
@@ -339,6 +378,9 @@ Limits:
 │       ├── webtest_sources.py      # where suite cases come from (figma, backlog, excel, manual)
 │       ├── webtest_suite.py        # test suites: cases, review and confirmation
 │       ├── webtest.py              # web test runs, copied from a suite
+│       ├── webtest_history.py      # results across runs and the Fixed mark
+│       ├── webtest_defects.py      # defect drafts for failed rows
+│       ├── git_guard.py            # guard list and the git write guard hook
 │       └── console/                # console server, read API, job queue, suite API
 │           └── ui/                 # browser UI: ES modules, no build step, Yohaku styles, en/ja
 ├── tests/                          # pytest

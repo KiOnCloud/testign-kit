@@ -21,6 +21,12 @@ Below, `<run>` means `<python> "${CLAUDE_PLUGIN_ROOT}/scripts/run.py"`.
 A job given to you and not claimed within 60 seconds goes back to the queue. `progress`, `ask` and
 `done` also claim an offered job, but claim first anyway.
 
+`console claim` also records this Claude Code session (`CLAUDE_CODE_SESSION_ID`) on the job. While
+that job is open, the plugin's hook turns an `AskUserQuestion` call from this session into a denial
+whose message holds a ready `console ask` command and a saved ask file
+(`~/.testign-kit/console/asks/`): run that command instead, so the question reaches the tester on the
+console. Outside a console job, or when the console is not running, `AskUserQuestion` works as usual.
+
 ## Held calls
 
 `console wait` and `console ask` hold the HTTP call until something happens or `--timeout` seconds

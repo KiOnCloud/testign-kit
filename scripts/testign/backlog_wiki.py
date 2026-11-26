@@ -86,6 +86,28 @@ def get(wiki_id: int | str) -> dict:
     return {"id": page["id"], "name": page["name"], "content": page.get("content") or "", "updated": page.get("updated")}
 
 
+def domain_host() -> str:
+    """The host of ``BACKLOG_DOMAIN`` (lower case), or "" when it is not set."""
+    domain = os.environ.get("BACKLOG_DOMAIN", "").strip()
+    if not domain:
+        return ""
+    base = domain if domain.startswith(("http://", "https://")) else f"https://{domain}"
+    return (urllib.parse.urlsplit(base).hostname or "").lower()
+
+
+def get_comment(issue_key: str, comment_id: int | str) -> dict | None:
+    """A comment's ``content``, or None when Backlog says the issue or the comment does not exist."""
+    if not re.fullmatch(r"[A-Z][A-Z0-9_]*-\d+", issue_key or "") or not re.fullmatch(r"\d+", str(comment_id)):
+        raise BacklogError("an issue key and a numeric comment ID are needed to read a comment")
+    try:
+        data = _call("GET", f"/issues/{issue_key}/comments/{comment_id}")
+    except BacklogError as exc:
+        if " returned 404" in str(exc):
+            return None
+        raise
+    return {"id": data.get("id"), "content": data.get("content") or ""}
+
+
 def list_pages(project_key: str, prefix: str = "") -> dict[str, dict]:
     """Wiki pages of a project whose name starts with ``prefix``: name -> {id, updated}. Metadata only."""
     pages = _call("GET", "/wikis", {"projectIdOrKey": project_key, **({"keyword": prefix} if prefix else {})})

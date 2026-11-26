@@ -15,7 +15,7 @@ import { classBadge, resultIcons, runStateBadge } from './runs.mjs';
 import { openSuiteMenu, sourceRef, suiteErrorText, suiteStateBadge } from './suites.mjs';
 import {
   alertBox, breadcrumb, emptyState, errorState, field, loading, openDialog, pageHead, pushEscape, searchBox, segFilter, selectEl,
-  selectWrap, srcBadge, tableBox,
+  selectWrap, srcBadge, tableBox, ybadge,
 } from './shell.mjs';
 
 export const CLASSES = ['sure', 'choice', 'not-web'];
@@ -385,7 +385,7 @@ export function render(ctx) {
     if (!list.length) {
       return h('div.yh-empty', [h('div.yh-empty__title', t('suite_no_runs_t')), h('div.yh-empty__text', t('suite_no_runs_d'))]);
     }
-    return tableBox([h('th', t('col_run')), h('th', t('col_env')), h('th', t('col_result')), h('th', t('col_state')), h('th', t('col_when'))],
+    const runsTable = tableBox([h('th', t('col_run')), h('th', t('col_env')), h('th', t('col_result')), h('th', t('col_state')), h('th', t('col_when'))],
       list.map((r) => h('tr', { dataset: { run: r.id } }, [
         h('td', [h('a.lnk.mono', { href: href(['runs', r.id]) }, r.id), r.name ? h('span.sub', r.name) : null,
           suite.suite_digest && r.suite_digest && r.suite_digest !== suite.suite_digest ? h('span.sub', t('suite_run_older')) : null]),
@@ -394,6 +394,7 @@ export function render(ctx) {
         h('td', runStateBadge(t, r.closed ? 'done' : 'open')),
         h('td.yh-num.yh-muted', timeOrDay(r.created_at)),
       ])));
+    return h('div.stack-16', [runsTable, resultsMatrix(t, suite.results)]);
   }
 
   load();
@@ -599,5 +600,34 @@ export function caseForm(ctx, { suite, c, scenarios, onClose, onSaved, onDeleted
     traceLabel ? h('p.yh-caption.yh-muted.m-0', [t('case_source'), ' ', h('span.mono', traceLabel)]) : null,
     formError,
     h('div.foot', [del, dup, h('span.push'), save]),
+  ]);
+}
+
+/** The label and badge kind of one matrix cell: a verdict, or a row state without one. */
+export function cellView(cell) {
+  if (!cell) return null;
+  if (cell.verdict === 'pass') return { key: cell.fixed ? 'run_fixed' : 'wt_verdict_pass', kind: 'success' };
+  if (cell.verdict === 'fail') return { key: 'wt_verdict_fail', kind: 'danger' };
+  return { key: `wt_state_${String(cell.verdict || '').replace(/-/g, '_')}`, kind: 'outline' };
+}
+
+/** Case by run: each case's result in the suite's newest runs, newest run first. */
+function resultsMatrix(t, results) {
+  const runs = (results && results.runs) || [];
+  if (!runs.length) return null;
+  return h('section.stack-8', { dataset: { results: '1' } }, [
+    h('h3.yh-h4.m-0', t('suite_results_title')),
+    h('p.yh-caption.yh-muted.m-0', t('suite_results_note')),
+    tableBox([h('th', '#'), h('th', t('run_col_content')), ...runs.map((r) => h('th', { title: r.id }, [
+      h('a.lnk', { href: href(['runs', r.id]) }, r.name || r.id), h('span.sub', timeOrDay(r.created_at))]))],
+    results.cases.map((c) => h('tr', { dataset: { case: c.case } }, [
+      h('td.id', c.case), h('td.wrap', c.content || NONE),
+      ...runs.map((r) => {
+        const view = cellView(c.cells[r.id]);
+        return h('td', view ? h('span.row-4', [h('a', { href: href(['runs', r.id], { row: c.row }) },
+          ybadge(t(view.key), view.kind)), c.cells[r.id].changed ? h('span.sub', t('suite_results_changed')) : null])
+          : h('span.yh-muted', NONE));
+      }),
+    ]))),
   ]);
 }

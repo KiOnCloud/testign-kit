@@ -15,7 +15,7 @@ function memoryStore() {
 test('the menu has three groups in order, each with its screens', () => {
   assert.deepEqual(NAV.map((g) => [g.id, g.items.map(([id]) => id)]), [
     ['design', ['suites', 'survey']],
-    ['run', ['runs', 'agent']],
+    ['run', ['runs', 'defects', 'agent']],
     ['config', ['projects', 'scenarios', 'templates', 'cache', 'settings']],
   ]);
   assert.equal(groupOf('survey'), 'design');

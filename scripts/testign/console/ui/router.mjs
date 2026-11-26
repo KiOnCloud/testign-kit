@@ -1,10 +1,10 @@
 // Routes live in location.hash, each with an optional ?query. The screens of the three menu groups:
 //   Test case design  #/suites, #/suites/new, #/suites/<suite>, #/survey, #/survey/<ticket>, #/survey/<ticket>/trace
-//   Test runs         #/runs, #/runs/<run>, #/agent, #/agent/<job>
+//   Test runs         #/runs, #/runs/<run>, #/defects, #/agent, #/agent/<job>
 //   Settings          #/projects, #/scenarios, #/templates, #/cache, #/settings
 
 export const HOME = 'suites';
-export const SCREENS = ['suites', 'survey', 'runs', 'agent', 'projects', 'scenarios', 'templates', 'cache', 'settings'];
+export const SCREENS = ['suites', 'survey', 'runs', 'defects', 'agent', 'projects', 'scenarios', 'templates', 'cache', 'settings'];
 
 // Redirect table: links written before the redesign keep working.
 //   #/  (and #c=<code> after sign-in, see api.mjs)    → #/suites

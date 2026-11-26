@@ -190,3 +190,28 @@ def test_inserted_block_is_separated_from_next_heading():
     page = page.replace("- Status: active\n\n## Ghi chú khác", "- Status: active\n## Ghi chú khác")
     new, _ = decisions.append(page, [row()], RX)
     assert "- Status: active\n\n## Ghi chú khác" in new
+
+
+def test_quote_check_statuses():
+    from testign import decisions as d  # noqa: PLC0415
+
+    rows = [{"ticket": "DEMO-1", "q": "Q1", "quote": "請求書にも\n適用します。", "source": "https://demo.backlog.com/view/DEMO-1#comment-7"},
+            {"ticket": "DEMO-1", "q": "Q2", "quote": "全然違う", "source": "https://demo.backlog.com/view/DEMO-1#comment-7"},
+            {"ticket": "DEMO-1", "q": "Q3", "quote": "x", "source": "https://other.backlog.com/view/DEMO-1#comment-7"},
+            {"ticket": "DEMO-1", "q": "Q4", "quote": "x", "source": "meeting note 2026-11-20"},
+            {"ticket": "DEMO-1", "q": "Q5", "quote": "x", "source": "https://demo.backlog.com/view/DEMO-1#comment-8"}]
+    calls = []
+
+    def read(key, cid):
+        calls.append((key, cid))
+        return "はい。請求書にも適用します。以上" if cid == "7" else None
+
+    out = d.check_quotes(rows, "demo.backlog.com", read)
+    assert [o["status"] for o in out] == ["verified", "mismatch", "unchecked", "unchecked", "missing"]
+    assert calls == [("DEMO-1", "7"), ("DEMO-1", "8")]  # one read per comment
+    assert d.quote_in("ＡＢＣ　です", "abc ABC です")  # width and spacing do not count
+    assert not d.quote_in("", "anything")
+    import pytest  # noqa: PLC0415
+    with pytest.raises(d.DecisionsError, match="Q2: the quote is not in the linked comment; DEMO-1 Q5"):
+        d.refuse_bad_quotes(out)
+    d.refuse_bad_quotes([o for o in out if o["status"] in ("verified", "unchecked")])

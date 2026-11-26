@@ -21,6 +21,9 @@ Inputs from `/testign:survey`: `ticket`, and optionally `repo`, `lang`, `master_
    `<output_dir>/<TICKET>/` (get the paths with `<run> report-path --ticket <TICKET>`).
 4. If `repo` was not given, ask the tester for the path of their local clone once, and remember it in
    the report frontmatter.
+5. `<run> guard status --repo <repo>`. When `guarded` is false, tell the tester once, in one line, that
+   `<run> guard enable --repo <repo>` makes the plugin block git commands that would change this
+   repository (commit, push, checkout, reset, …). Never run `guard enable` or `guard disable` yourself.
 
 ## Steps
 

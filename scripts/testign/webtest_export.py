@@ -351,6 +351,7 @@ REPORT = {
            "state": "State", "count": "Rows", "fail": "Failed rows", "notrun": "Rows not run", "reason": "Reason",
            "self": "Rows run by the tester", "changed": "Rows whose class changed during the run",
            "visual": "Visual rows", "visual_note": "compared by the agent with the capture; spot-check them",
+           "fixed": "Fixed since the previous run", "previous": "Previous run", "defects": "Defects", "dstatus": "Status", "tracker": "Tracker", "dtitle": "Title",
            "all": "All rows", "none": "None.", "draft": "Results are a draft for the tester to review.",
            "expected": "Expected", "actual": "Actual", "evidence": "Evidence", "verdict": "Result",
            "from": "From", "to": "To", "content": "Content", "scenario": "Scenario", "screen": "Screen",
@@ -362,6 +363,7 @@ REPORT = {
            "state": "状態", "count": "件数", "fail": "NGの行", "notrun": "未実施の行", "reason": "理由",
            "self": "テスターが実施した行", "changed": "実施中に分類が変わった行", "visual": "見た目の行",
            "visual_note": "エージェントがキャプチャと見比べた結果です。抜き取りで確認してください",
+           "fixed": "前回のNGから修正された行", "previous": "前回の実施", "defects": "不具合", "dstatus": "状態", "tracker": "チケット", "dtitle": "タイトル",
            "all": "全行", "none": "なし。", "draft": "結果はテスターが確認するための下書きです。",
            "expected": "期待結果", "actual": "実際の結果", "evidence": "エビデンス", "verdict": "結果",
            "from": "変更前", "to": "変更後", "content": "内容", "scenario": "シナリオ", "screen": "画面",
@@ -373,6 +375,7 @@ REPORT = {
            "state": "Trạng thái", "count": "Số dòng", "fail": "Các dòng fail", "notrun": "Các dòng không chạy",
            "reason": "Lý do", "self": "Các dòng tester tự chạy", "changed": "Các dòng đổi phân loại khi chạy",
            "visual": "Các dòng giao diện", "visual_note": "do agent so với ảnh chụp; hãy kiểm tra lại vài dòng",
+           "fixed": "Các dòng đã sửa so với lần chạy trước", "previous": "Lần chạy trước", "defects": "Lỗi", "dstatus": "Trạng thái", "tracker": "Mã ticket", "dtitle": "Tiêu đề",
            "all": "Tất cả các dòng", "none": "Không có.", "draft": "Kết quả là bản nháp để tester xem lại.",
            "expected": "Mong đợi", "actual": "Thực tế", "evidence": "Bằng chứng", "verdict": "Kết quả",
            "from": "Từ", "to": "Sang", "content": "Nội dung", "scenario": "Kịch bản", "screen": "Màn hình",
@@ -402,8 +405,12 @@ def capture_links(folder: Path, run: dict) -> dict[str, str]:
     return out
 
 
-def report_markdown(run: dict, workbook_name: str, captures: dict[str, str] | None = None) -> str:
+def report_markdown(run: dict, workbook_name: str, captures: dict[str, str] | None = None,
+                    marks: dict[str, dict] | None = None, defects: dict[str, dict] | None = None) -> str:
+    """``marks`` from ``webtest_history.run_marks``; ``defects`` from ``webtest_defects.for_run``."""
     captures = captures or {}
+    marks = marks or {}
+    defects = defects or {}
     t = REPORT.get(run.get("report_lang") or "en", REPORT["en"])
     cases = run["cases"]
     src = run.get("source") or {}
@@ -425,6 +432,17 @@ def report_markdown(run: dict, workbook_name: str, captures: dict[str, str] | No
                     [[c["row"], value_for(c, "no", {}), c.get("content"), c.get("expected"),
                       (c.get("result") or {}).get("actual"), ", ".join((c.get("result") or {}).get("evidence") or [])]
                      for c in fails]) if fails else [t["none"]]
+    fixed = [c for c in cases if (marks.get(c["row"]) or {}).get("fixed")]
+    lines += ["", f"## {t['fixed']}", ""]
+    lines += _table(["Row", "No", t["content"], t["previous"]],
+                    [[c["row"], value_for(c, "no", {}), c.get("content"), marks[c["row"]]["previous"].get("name")]
+                     for c in fixed]) if fixed else [t["none"]]
+    listed = [c for c in cases if c["row"] in defects]
+    lines += ["", f"## {t['defects']}", ""]
+    lines += _table(["Row", "No", t["dtitle"], t["dstatus"], t["tracker"], t["reason"]],
+                    [[c["row"], value_for(c, "no", {}), defects[c["row"]].get("title"), defects[c["row"]].get("status"),
+                      defects[c["row"]].get("tracker"), defects[c["row"]].get("reason")]
+                     for c in listed]) if listed else [t["none"]]
     notrun = [c for c in cases if c["state"] == "not-run"]
     lines += ["", f"## {t['notrun']}", ""]
     lines += _table(["Row", "No", t["content"], t["reason"]],
@@ -483,7 +501,11 @@ def export(folder: Path, run: dict) -> dict:
                                 link_key="no" if "no" in columns else "content")
     workbook = Path(written["path"])
     report_path = xlsx._unique(folder / f"{run['id']}-report.md")
-    report_path.write_text(report_markdown(run, workbook.name, captures), encoding="utf-8")
+    from . import webtest_defects, webtest_history  # noqa: PLC0415
+
+    marks = webtest_history.run_marks(folder.parent, run)
+    defects = webtest_defects.for_run(run, webtest_defects.read(webtest_defects.store_folder(None, run["id"])))
+    report_path.write_text(report_markdown(run, workbook.name, captures, marks, defects), encoding="utf-8")
     run.setdefault("exports", []).append({"workbook": workbook.name, "report": report_path.name,
                                           "at": webtest.now_iso()})
     webtest.save(folder, run)
