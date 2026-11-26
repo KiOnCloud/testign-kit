@@ -69,6 +69,10 @@ def _openpyxl():
     return openpyxl
 
 
+VERSION_KEYS = ("file", "source_name", "sheet", "header_row", "columns", "purpose", "registered_at")
+MAX_VERSIONS = 10
+
+
 def templates_dir(home: Path | None = None) -> Path:
     return config.config_dir(home) / "templates"
 
@@ -287,6 +291,16 @@ def register(
     old = data["templates"].get(name)
     if stored.exists() and (not old or old["file"] != stored.name):
         raise TemplateFileClash(f"{stored} already exists for another template; choose another name")
+    # A replaced template keeps its earlier versions: runs pinned to one still export with it.
+    versions = list(old.get("versions") or []) if old else []
+    if old:
+        old_version = int(old.get("version") or 1)
+        kept = folder / f"{_slug(name)}.v{old_version}{Path(old['file']).suffix}"
+        current = folder / old["file"]
+        if current.exists():
+            fsutil.replace_retry(current, kept)
+        versions.append({"version": old_version, "file": kept.name,
+                         **{k: old.get(k) for k in VERSION_KEYS if k != "file"}})
     # Copy to a temporary sibling and replace in one step, so a replaced template is never half written.
     tmp = fsutil.temp_sibling(stored)
     try:
@@ -294,6 +308,8 @@ def register(
         fsutil.replace_retry(tmp, stored)
     except BaseException:
         tmp.unlink(missing_ok=True)
+        if old and versions and not (folder / old["file"]).exists():
+            fsutil.replace_retry(folder / versions[-1]["file"], folder / old["file"])
         raise
 
     entry = {
@@ -304,7 +320,12 @@ def register(
         "columns": {r: columns[r] for r in ROLES if r in columns},
         "purpose": purpose,
         "registered_at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
+        "version": (int(old.get("version") or 1) + 1) if old else 1,
     }
+    if versions:
+        entry["versions"] = versions[-MAX_VERSIONS:]
+        for dropped in versions[:-MAX_VERSIONS]:
+            (folder / dropped["file"]).unlink(missing_ok=True)
     data["templates"][name] = entry
     if make_default or not data["default"]:
         data["default"] = name
@@ -312,8 +333,12 @@ def register(
     return {"name": name, "default": data["default"] == name, **entry, "path": str(stored)}
 
 
-def resolve(name: str | None = None, home: Path | None = None) -> dict[str, Any]:
-    """Return a registered template (the default when ``name`` is None) with its absolute path."""
+def resolve(name: str | None = None, home: Path | None = None, version: int | None = None) -> dict[str, Any]:
+    """Return a registered template (the default when ``name`` is None) with its absolute path.
+
+    ``version`` picks an earlier version kept when the template was registered again; the current
+    version when it is None or current.
+    """
     data = load_index(home)
     if not data["templates"]:
         raise TemplateError("no template registered yet; register one with template-register")
@@ -321,10 +346,18 @@ def resolve(name: str | None = None, home: Path | None = None) -> dict[str, Any]
     if key not in data["templates"]:
         raise TemplateError(f"template '{key}' is not registered; registered: {', '.join(data['templates'])}")
     entry = data["templates"][key]
+    current = int(entry.get("version") or 1)
+    if version is not None and int(version) != current:
+        kept = next((v for v in entry.get("versions") or [] if int(v.get("version") or 0) == int(version)), None)
+        if kept is None:
+            raise TemplateError(f"template '{key}' has no version {version} any more (current: {current})")
+        entry = {**entry, **kept}
+    entry = {k: v for k, v in entry.items() if k != "versions"}
     path = templates_dir(home) / entry["file"]
     if not path.exists():
         raise TemplateError(f"registered file for '{key}' is missing: {path}")
-    return {"name": key, **entry, "purpose": purpose_of(entry), "path": str(path)}
+    return {"name": key, **entry, "version": int(entry.get("version") or current), "current_version": current,
+            "purpose": purpose_of(entry), "path": str(path)}
 
 
 def list_templates(home: Path | None = None) -> dict[str, Any]:
@@ -353,6 +386,8 @@ def remove(name: str, home: Path | None = None) -> dict[str, Any]:
     if entry is None:
         raise TemplateError(f"template '{name}' is not registered")
     (templates_dir(home) / entry["file"]).unlink(missing_ok=True)
+    for kept in entry.get("versions") or []:
+        (templates_dir(home) / kept["file"]).unlink(missing_ok=True)
     if data["default"] == name:
         data["default"] = next(iter(data["templates"]), None)
     _save_index(data, home)

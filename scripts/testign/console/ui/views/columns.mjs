@@ -8,8 +8,9 @@ import { NONE } from '../format.mjs';
 import { jobErrorText } from './job-actions.mjs';
 import { badge, errorState, field, loading, openDialog, selectEl, selectWrap } from './shell.mjs';
 
-export const RESULT_FIELDS = ['verdict', 'actual', 'evidence', 'executed_at', 'by'];
-export const LABEL_KEYS = ['pass', 'fail', 'not-run', 'not-applicable', 'manual'];
+export const RESULT_FIELDS = ['verdict', 'actual', 'evidence', 'executed_at', 'by', 'flaky',
+  'verdict_chromium', 'verdict_msedge', 'verdict_firefox', 'verdict_webkit'];
+export const LABEL_KEYS = ['pass', 'fail', 'not-run', 'not-applicable', 'manual', 'pending'];
 
 export function colIndex(letter) {
   let n = 0;

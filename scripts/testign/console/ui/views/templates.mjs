@@ -133,7 +133,8 @@ function draw(ctx, head, data) {
           keydown: (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); pick(x.name); } },
         },
       }, [
-        h('td', [h('strong', x.name), h('span.sub', x.source_name || x.file || NONE)]),
+        h('td', [h('strong', x.name), ' ', h('span.yh-caption.yh-muted', { dataset: { tplVersion: String(x.version || 1) } }, t('tpl_version', { n: x.version || 1 })),
+          h('span.sub', x.source_name || x.file || NONE)]),
         h('td', ybadge(t(`tpl_purpose_${x.purpose || 'testcase'}`), x.purpose === 'webtest' ? '' : 'outline')),
         h('td', [h('span', x.sheet || NONE), h('span.sub', `${t('tpl_header_row', { n: x.header_row ?? NONE })} · ${t('tpl_columns', { n: cols })}`)]),
         h('td', x.default ? statusIcon('ok', 'check', t('templates_default')) : h('span.yh-muted', NONE)),
@@ -165,6 +166,8 @@ function draw(ctx, head, data) {
         h('dt', t('tpl_sheet')), h('dd', x.sheet || NONE),
         h('dt', t('tpl_header')), h('dd', t('tpl_header_row', { n: x.header_row ?? NONE })),
         h('dt', t('tpl_registered')), h('dd.yh-num', isoDate(x.registered_at)),
+        h('dt', t('tpl_versions')), h('dd', [t('tpl_version', { n: x.version || 1 }),
+          (x.versions || []).length ? [' · ', t('tpl_versions_kept', { list: x.versions.map((v) => `v${v.version}`).join(', ') })] : null]),
         h('dt', t('tpl_roles')), h('dd.break', ROLES.filter((r) => (x.columns || {})[r]).map((r) => `${r} ${x.columns[r]}`).join(' · ') || NONE),
       ]),
       h('h3.yh-h3.m-0', t('tpl_layout')), previewBox, h('p.yh-caption.yh-muted.m-0', t('tpl_legend')),

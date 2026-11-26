@@ -735,14 +735,15 @@ def runs_of(runs_root: Path, suite_id: str) -> list[dict]:
 
 
 def create_run(runs_root: Path, suite_id: Any, *, name: Any, base_url: Any, project: Any, template: Any,
-               tester: Any, home: Path | None = None, report_lang: Any = None, when: datetime | None = None) -> dict:
+               tester: Any, home: Path | None = None, report_lang: Any = None, when: datetime | None = None,
+               browsers: Any = None) -> dict:
     """A run copied from a ready suite onto one environment, with its first-guess column plan."""
     from . import login_scenarios, templates, webtest_export  # noqa: PLC0415
 
     folder = find_suite(runs_root, suite_id)
     suite = load(folder)
     target = webtest.check_run_target(login_scenarios.load_projects(home), templates.list_templates(home),
-                                      base_url, project, template)
+                                      base_url, project, template, browsers)
     try:
         entry = templates.resolve(target["template"], home)
     except templates.TemplateError as exc:

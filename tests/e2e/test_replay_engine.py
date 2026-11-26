@@ -85,8 +85,9 @@ def env(tmp_path, monkeypatch, site):
     return {"home": tmp_path, "root": root, "suite": ready_suite(root, cases=CASES)}
 
 
-def new_run(env, site, minute):
-    target = webtest.check_run_target({"demo": {"hosts": HOSTS}}, templates.list_templates(), site.base_url, "demo")
+def new_run(env, site, minute, browsers=None):
+    target = webtest.check_run_target({"demo": {"hosts": HOSTS}}, templates.list_templates(), site.base_url, "demo",
+                                      browsers=browsers)
     suite = webtest_suite.load(env["suite"])
     made = webtest.new_run_from_suite(env["root"], suite, env["suite"], name=f"round {minute}", target=target,
                                       tester="Kien", columns_for=lambda run: webtest_export.suite_plan(run),
@@ -169,6 +170,21 @@ def test_a_broken_sign_in_leaves_rows_not_run(env, site):
     assert states(second)["r01"] == ("not-run", "session-expired")
     assert states(second)["r02"] == ("pass", None)  # public page, no sign-in
     assert "wrong" not in json.dumps(webtest.load(second))
+
+
+def test_each_browser_gets_its_verdict_and_a_missing_one_is_pending(env, site):
+    home = env["home"]
+    record_all(new_run(env, site, 6), home)
+    view = webtest_spec.view(env["suite"], webtest_suite.load(env["suite"]))
+    webtest_spec.review(env["suite"], view["hash"], "fp-tester")
+    # WebKit is never installed for these tests, so it stays Pending while Chromium decides the row.
+    folder = new_run(env, site, 7, browsers=["chromium", "webkit"])
+    result = webtest_replay.replay(folder, None, home)
+    assert result["browsers"] == ["chromium", "webkit"]
+    r02 = webtest.case_of(webtest.load(folder), "r02")
+    assert r02["state"] == "pass"
+    assert r02["result"]["browsers"]["chromium"]["verdict"] == "pass"
+    assert r02["result"]["browsers"]["webkit"]["verdict"] == "pending"
 
 
 def test_engine_tells_failures_apart(env, site):

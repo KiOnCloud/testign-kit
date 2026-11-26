@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import config, webtest, webtest_live, webtest_record, webtest_spec, webtest_suite
+from . import config, webtest, webtest_live, webtest_spec, webtest_suite
 from .login_recipe import RecipeError
 from .webtest import WebtestError
 
@@ -64,8 +64,21 @@ def _why_left(spec: dict | None, case: dict) -> str:
     return "the case changed since it was recorded"
 
 
+RETRY = (webtest_live.FAIL, webtest_live.SPEC_ERROR)
+
+
 def replay(folder: Path, job: str | None, home: Path | None = None) -> dict:
+    """Replay the queued rows that have a reviewed spec case, in every browser of the run.
+
+    ``job`` is the console job of ``mode: replay``, or None for a replay with nobody at the console
+    (a scheduler): then no row may be running, so it never races a job on the same run. A row that
+    fails or cannot run is tried once more in that browser; passing the second time marks it flaky.
+    """
     run = webtest.load(folder)
+    if job is None:
+        running = [c["row"] for c in run["cases"] if c["state"] == "running"]
+        if running:
+            raise WebtestError(f"{running[0]} is running in a console job; replay this run when that job ends")
     suite_folder, _suite_data = _suite(run)
     spec = webtest_spec.load(suite_folder)
     todo = plan(folder)
@@ -80,9 +93,17 @@ def replay(folder: Path, job: str | None, home: Path | None = None) -> dict:
             raise
         except RecipeError as exc:
             sessions[scenario] = str(exc)
+    names = webtest.run_browsers(run)
     with webtest_live.playwright() as p:
-        browser = webtest_live.launch(p)
+        launched: dict[str, object] = {}
         try:
+            for name in names:
+                try:
+                    launched[name] = webtest_live.launch(p, browser=name)
+                except webtest_live.EngineUnavailable as exc:
+                    launched[name] = str(exc)
+            if all(_is_missing(b) for b in launched.values()):
+                raise webtest_live.EngineUnavailable("; ".join(launched.values()))
             for item in todo["rows"]:
                 row = item["row"]
                 session = sessions[item["scenario"]]
@@ -94,15 +115,71 @@ def replay(folder: Path, job: str | None, home: Path | None = None) -> dict:
                     results.append({"row": row, "state": "skipped", "note": "the row is no longer queued"})
                     continue
                 body = spec["cases"][webtest_spec.row_case_id(row)]
-                shot = folder / "evidence" / f".replay-{row}.png"
-                outcome = webtest_live.run_case(
-                    browser, base_url=run["base_url"], hosts=run["hosts"], steps=body["steps"],
-                    expected=case.get("expected") or "", storage=session["storage"], login_url=session["login_url"],
-                    secrets=session["secrets"], screenshot=shot)
-                results.append(webtest_record._write_result(folder, row, outcome, job, "replay", shot))
+                results.append(_replay_row(folder, run, row, case, body, session, launched, job))
         finally:
-            browser.close()
-    return {**todo, "results": results}
+            for b in launched.values():
+                if not _is_missing(b):
+                    b.close()
+    return {**todo, "browsers": names, "results": results}
+
+
+def _replay_row(folder: Path, run: dict, row: str, case: dict, body: dict, session: dict, launched: dict,
+                job: str | None) -> dict:
+    per: dict[str, dict] = {}
+    shots: list[tuple[str, bytes]] = []
+    outcomes: dict[str, dict] = {}
+    for name, browser in launched.items():
+        if _is_missing(browser):
+            per[name] = {"verdict": "pending", "error": browser[:300]}
+            continue
+        shot = folder / "evidence" / f".replay-{row}-{name}.png"
+        flaky = False
+        out = _run(browser, run, case, body, session, shot)
+        if out["result"] in RETRY:
+            again = _run(browser, run, case, body, session, shot)
+            flaky = again["result"] == webtest_live.OK
+            out = again
+        outcomes[name] = out
+        per[name] = {"verdict": VERDICT[out["result"]], "error": out.get("error"), **({"flaky": True} if flaky else {})}
+        try:
+            if out.get("screenshot"):
+                shots.append((name, shot.read_bytes()))
+        except OSError:
+            pass
+        finally:
+            shot.unlink(missing_ok=True)
+    found = {o["result"] for o in outcomes.values()}
+    errors = "\n".join(f"{n}: {o['error']}" for n, o in outcomes.items() if o.get("error"))
+    single = len(launched) == 1
+    note = errors if not single else next(iter(outcomes.values())).get("error") or ""
+    url = next((o.get("url") for o in outcomes.values() if o.get("url")), "")
+    browsers = None if single else per
+    if webtest_live.SESSION_EXPIRED in found:
+        return webtest.replay_not_run(folder, row, "session-expired", note, browsers)
+    if found & {webtest_live.FAIL, webtest_live.OFF_SITE}:
+        return webtest.replay_result(folder, row, job=job, verdict="fail", actual=note, url=url or "",
+                                     screenshot=None, screenshots=shots, by="replay", browsers=browsers)
+    if webtest_live.SPEC_ERROR in found:
+        return webtest.replay_not_run(folder, row, "spec-error", note, browsers)
+    return webtest.replay_result(folder, row, job=job, verdict="pass", actual="", url=url or "",
+                                 screenshot=None, screenshots=shots, by="replay", browsers=browsers,
+                                 flaky=any(v.get("flaky") for v in per.values()))
+
+
+def _is_missing(browser) -> bool:
+    """A browser that could not start is kept as its error message."""
+    return isinstance(browser, str)
+
+
+VERDICT = {webtest_live.OK: "pass", webtest_live.FAIL: "fail", webtest_live.SPEC_ERROR: "spec-error",
+           webtest_live.SESSION_EXPIRED: "session-expired", webtest_live.OFF_SITE: "off-site"}
+
+
+def _run(browser, run: dict, case: dict, body: dict, session: dict, shot: Path) -> dict:
+    return webtest_live.run_case(
+        browser, base_url=run["base_url"], hosts=run["hosts"], steps=body["steps"],
+        expected=case.get("expected") or "", storage=session["storage"], login_url=session["login_url"],
+        secrets=session["secrets"], screenshot=shot)
 
 
 def check(folder: Path, home: Path | None = None) -> dict:

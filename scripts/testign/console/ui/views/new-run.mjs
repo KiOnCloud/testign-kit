@@ -12,6 +12,9 @@ import { alertBox, field, openDialog, selectEl, selectWrap } from './shell.mjs';
 
 const NAME_MAX = 80;
 
+/** The browsers a replay can run a row in; Chromium is the default. */
+export const BROWSERS = ['chromium', 'msedge', 'firefox', 'webkit'];
+
 /** Templates for a web run: the web test ones first, then the rest. */
 export function templateChoices(listing) {
   const list = (listing && listing.templates) || [];
@@ -157,6 +160,13 @@ export async function openNewRun(ctx, opts = {}) {
   let settle = () => {};
   const outcome = new Promise((resolve) => { settle = resolve; });
   const submit = h('button.yh-btn.yh-btn--primary', { type: 'button', dataset: { newRunSubmit: '1' } }, [icon('play'), t('nr_start')]);
+  const browserBoxes = BROWSERS.map((b) => h('input', { type: 'checkbox', id: `nr-browser-${b}`, value: b,
+    checked: b === 'chromium' ? true : undefined, dataset: { browser: b } }));
+  const browsersField = h('fieldset.stack-4', { dataset: { browsers: '1' } }, [
+    h('legend', t('nr_browsers')),
+    h('div.st-row', BROWSERS.map((b, i) => h('label.st-row', [browserBoxes[i], h('span', t(`browser_${b}`))]))),
+    h('p.yh-caption.yh-muted.m-0', t('nr_browsers_help')),
+  ]);
   const dlg = openDialog({
     t, title: t('new_run'), wide: true,
     body: h('div.stack-16.new-run', { dataset: { newRun: '1' } }, [
@@ -168,6 +178,7 @@ export async function openNewRun(ctx, opts = {}) {
         field(t('nr_tester'), controls.tester, t('nr_tester_help'), errLine('tester')),
       ]),
       field(t('runform_template'), selectWrap(templateSel), t('nr_template_help'), errLine('template'), 'nr-template'),
+      browsersField,
       scenariosBox,
       alertBox('', 'info', t('nr_safety_t'), t('nr_safety_d')),
       formError,
@@ -192,8 +203,9 @@ export async function openNewRun(ctx, opts = {}) {
     const tester = v.tester.trim();
     let made;
     try {
+      const browsers = BROWSERS.filter((b, i) => browserBoxes[i].checked);
       made = await ctx.api.createRun({ suite: v.suite, project: v.project, base_url: v.base_url.trim(), template: v.template,
-        name: v.name.trim() || undefined, tester });
+        name: v.name.trim() || undefined, tester, browsers: browsers.length ? browsers : ['chromium'] });
     } catch (err) {
       submit.disabled = false;
       mount(formError, h('p.k-field__error', [icon('warning'), suiteErrorText(t, err)]));

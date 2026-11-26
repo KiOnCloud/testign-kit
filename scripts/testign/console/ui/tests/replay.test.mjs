@@ -128,3 +128,46 @@ test('the review waits for a passing check', async () => {
   assert.equal(review.disabled, true);
   assert.equal(review.getAttribute('title'), DICTS.en.spec_review_needs_check);
 });
+
+test('the profile form sends the typed values once, only for a staging test account, and clears them', async () => {
+  const sent = [];
+  const scenarios = { scenarios: [{ name: 'member', label: 'Member', approved: true, hash: 'h1', steps: [],
+    recipe: { ...RECIPE, profile_set: false, missing_values: ['password', 'username'] } }] };
+  const api = { projects: async () => ({ projects: [{ name: 'demo', hosts: ['dev.example.test'] }] }), scenarios: async () => scenarios,
+    saveProfile: async (...args) => { sent.push(args); return { keys: ['password', 'username'] }; } };
+  const { ctx, view, ready, calls } = fakeContext(api);
+  renderScenarios(ctx);
+  await ready;
+  const row = byData(view, 'scenario').find((el) => el.tagName === 'TR' && el.dataset.scenario === 'member');
+  row.listeners.click[0]({ target: row });
+  const body = globalThis.document.body;
+  const inputs = byData(body, 'profileKey');
+  assert.deepEqual(inputs.map((el) => el.dataset.profileKey), ['password', 'username']);
+  assert.equal(inputs[0].getAttribute('type'), 'password');
+  inputs[0].value = 'typed-1';
+  inputs[1].value = 'u1';
+  const [save] = byData(body, 'saveProfile');
+  save.listeners.click[0]();
+  await tick();
+  assert.deepEqual(sent, [], 'nothing is sent before the staging box is ticked');
+  byData(body, 'profileStaging')[0].checked = true;
+  save.listeners.click[0]();
+  await tick();
+  assert.deepEqual(sent, [['demo', 'member01', { staging_test_account: true, values: { password: 'typed-1', username: 'u1' } }]]);
+  assert.equal(inputs[0].value, '');
+  assert.ok(calls.toasts.some(([text]) => text === DICTS.en.profile_saved_toast));
+});
+
+test('a replayed row shows each browser and the flaky mark', async () => {
+  const run = runOf({ spec: 'reviewed', recordable: 0, replayable: 0 });
+  run.cases[0] = { ...run.cases[0], state: 'pass', result: { verdict: 'pass', flaky: true, by: 'replay', evidence: [],
+    browsers: { chromium: { verdict: 'pass', flaky: true }, webkit: { verdict: 'pending' } } } };
+  const { ctx, view, ready } = fakeContext({ run: async () => run, runImage: async () => 'data:image/png;base64,' },
+    { route: { params: { run: run.id }, query: { row: 'r01' } } });
+  renderRun(ctx);
+  await ready;
+  const [panel] = byData(view, 'browserResults');
+  assert.ok(panel, 'the open row lists its browsers');
+  assert.ok(panel.textContent.includes(DICTS.en.browser_webkit) && panel.textContent.includes(DICTS.en.wt_verdict_pending));
+  assert.equal(byData(view, 'flaky').length, 1);
+});

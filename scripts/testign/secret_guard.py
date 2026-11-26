@@ -9,7 +9,8 @@ The PreToolUse hook ``hooks/secret_guard.py`` blocks, in every project with the 
 * Bash commands that name either folder, and the commands only the tester runs: ``profile-set``,
   ``profile-remove``;
 * Bash commands that call the console's recipe approval or redeem a console link
-  (``/recipe/approve``, ``/launch?code=``): the tester approves on the console.
+  (``/recipe/approve``, ``/launch?code=``, ``/api/webtest/profiles``): the tester approves and types
+  profile values on the console.
 
 The engine reads a profile in memory when it signs in, and Claude only runs the commands that do
 that (``login-recipe-test``, ``webtest-record-*``, ``webtest-replay``); their output never holds a
@@ -33,7 +34,7 @@ from . import login_recipe
 FILE_TOOLS = {"Read", "Write", "Edit", "MultiEdit", "NotebookEdit"}
 SEARCH_TOOLS = {"Grep", "Glob"}
 _TESTER_ONLY = re.compile(r"\bprofile-(set|remove)\b")
-_CONSOLE = re.compile(r"/recipe/approve\b|/launch\?code=", re.IGNORECASE)
+_CONSOLE = re.compile(r"/recipe/approve\b|/launch\?code=|/api/webtest/profiles\b", re.IGNORECASE)
 _DIR_TEXT = re.compile(r"\.testign-kit[/\\]+webtest[/\\]+(?:profiles|sessions)\b", re.IGNORECASE)
 
 

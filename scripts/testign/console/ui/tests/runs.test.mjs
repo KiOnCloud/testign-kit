@@ -65,7 +65,7 @@ test('the new run dialog creates the run, queues it and opens it', async () => {
   const made = await opened;
   assert.equal(made.run, 'W20261125-1200-login');
   assert.deepEqual(calls[0], ['run', { suite: SUITES[0].id, project: 'demo', base_url: 'https://dev.example.test/', template: 'web',
-    name: undefined, tester: 'Tester' }]);
+    name: undefined, tester: 'Tester', browsers: ['chromium'] }]);
   assert.deepEqual(calls[1], ['job', { kind: 'webtest-run', ui_lang: 'en', run: 'W20261125-1200-login', tester: 'Tester', mode: 'run' }]);
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(seen.navigated, ['#/runs/W20261125-1200-login']);

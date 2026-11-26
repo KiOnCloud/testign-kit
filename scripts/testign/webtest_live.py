@@ -70,16 +70,29 @@ def playwright():
     return sync_playwright()
 
 
-def launch(p, headed: bool = False):
-    """Chromium; ``TESTIGN_BROWSER_EXECUTABLE`` points at another Chromium build when set."""
+BROWSER_NAMES = {"chromium": "Chromium", "msedge": "Microsoft Edge", "firefox": "Firefox", "webkit": "WebKit"}
+
+
+def launch(p, headed: bool = False, browser: str = "chromium"):
+    """Start one browser: ``chromium`` (``TESTIGN_BROWSER_EXECUTABLE`` points at another Chromium build
+    when set), ``msedge`` (the installed Microsoft Edge), ``firefox`` or ``webkit`` (Playwright's builds)."""
     kwargs: dict[str, Any] = {"headless": not headed}
-    exe = os.environ.get("TESTIGN_BROWSER_EXECUTABLE")
-    if exe:
-        kwargs["executable_path"] = exe
+    if browser == "chromium":
+        exe = os.environ.get("TESTIGN_BROWSER_EXECUTABLE")
+        if exe:
+            kwargs["executable_path"] = exe
+        kind = p.chromium
+    elif browser == "msedge":
+        kwargs["channel"] = "msedge"
+        kind = p.chromium
+    elif browser in ("firefox", "webkit"):
+        kind = getattr(p, browser)
+    else:
+        raise EngineUnavailable(f"unknown browser {browser}")
     try:
-        return p.chromium.launch(**kwargs)
+        return kind.launch(**kwargs)
     except Exception as exc:  # noqa: BLE001 - browser missing, no display for headed ...
-        raise EngineUnavailable(f"cannot start Chromium: {first_line(exc)[:200]}") from None
+        raise EngineUnavailable(f"cannot start {BROWSER_NAMES[browser]}: {first_line(exc)[:200]}") from None
 
 
 def build_locator(page, loc: dict):

@@ -272,9 +272,10 @@ Record and replay sign in without the tester. For each scenario they need (not `
    takes a URL on the project's hosts or sign-in hosts; `fill` takes a placeholder such as
    `{{username}}`, never a value; the last step is `wait_url` or `wait_visible` that proves the
    sign-in worked. A refusal lists every problem: fix them all, then save again.
-3. `missing_values` or `profile_set: false`: ask the tester (a `questions` ask) to run, in their own
-   terminal, `<run> profile-set --project <p> --profile <profile> --key <k> ...` with every missing
-   key, using a dedicated staging test account; options "Done" and "Stop". Never run it yourself.
+3. `missing_values` or `profile_set: false`: ask the tester (a `questions` ask) to type the values of
+   a dedicated staging test account in the scenario's dialog on the Login scenarios screen, or in
+   their own terminal with `<run> profile-set --project <p> --profile <profile> --key <k> ...` with
+   every missing key; options "Done" and "Stop". Never run it, and never call the profile route.
 4. `<run> login-recipe-test --project <p> --scenario <name>` signs in in Playwright and keeps the
    session. `ok: false` → its `error` and `failed_step` (values redacted) say what to fix; go to 2.
 5. `tested: true, approved: false`: ask the tester to check the steps and press "Approve recipe" in
@@ -333,6 +334,16 @@ unchanged, reviewed spec entry runs; a failed expect is `fail` with a screenshot
 run is `not-run: spec-error` (the spec needs fixing, not the app), a failed sign-in is
 `not-run: session-expired` for that scenario's rows. Rows without a spec stay queued for a run job.
 Close the job with the counts and those reasons; do not export unless the tester asked.
+
+The run's `browsers` (picked on New run) are all used: a row fails when one browser fails, and a
+browser that cannot start is `pending` in that row (relay its message once, with
+`<run> setup --browser <name>`'s `todo`). A failed or unrunnable row is tried once more; a pass on
+the second try is marked flaky: list those rows in the summary. `EngineUnavailable` (Playwright or
+every browser missing): run `<run> setup --webtest` and relay its `todo` to the tester; never install
+anything yourself.
+
+`webtest-replay` without `--job` and `webtest-replay-new` are for the tester's scheduler (no console
+job): never run or schedule them yourself.
 
 `<run> webtest-spec-check --run <r>` replays the whole spec on the run's environment and stores the
 check the review needs, without writing any row result.

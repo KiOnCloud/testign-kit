@@ -395,7 +395,7 @@ def columns(state, run_id: Any) -> dict:
         raise ApiError(409, "conflict", "this run has no export columns yet")
     try:
         facts = webtest_export.sheet_facts(webtest_export._entry(plan.get("template") or run.get("template"),
-                                                                 state.home))
+                                                                 state.home, plan.get("template_version")))
     except webtest.WebtestError as exc:
         raise ApiError(409, "conflict", str(exc)) from None
     return {"plan": plan, "headers": facts["headers"], "last_column": webtest_export._letter(max(facts["last"], 1)),
