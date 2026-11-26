@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .. import config, templates, webtest, webtest_history, webtest_sources, webtest_suite
+from .. import config, templates, webtest, webtest_history, webtest_sources, webtest_spec, webtest_suite
 from . import templates_api
 from .server import ApiError, Response
 
@@ -139,7 +139,32 @@ def suite_view(state, suite_id: Any) -> dict:
             "coverage": webtest_suite.coverage(suite, env(state), folder),
             "runs": webtest_suite.runs_of(runs_root(state), suite["id"]),
             "results": webtest_history.suite_results(runs_root(state), suite["id"], suite["cases"]),
+            "spec": webtest_spec.view(folder, suite),
             "generate": _generate_view(state, suite)}
+
+
+def review_spec(state, suite_id: Any, body: Any, session: str | None) -> dict:
+    """The tester marks the spec they looked at reviewed (its hash); later edits clear it."""
+    from .jobs import fingerprint  # noqa: PLC0415
+
+    folder = suite_folder(state, suite_id)
+    suite = _load(state, folder)
+    spec_hash = body.get("hash") if isinstance(body, dict) else None
+    try:
+        webtest_spec.review(folder, spec_hash, fingerprint(session))
+    except webtest_spec.SpecError as exc:
+        raise ApiError(409, "spec-not-ready", str(exc)) from None
+    return webtest_spec.view(folder, suite)
+
+
+def remove_spec_cases(state, suite_id: Any, body: Any) -> dict:
+    folder = suite_folder(state, suite_id)
+    suite = _load(state, folder)
+    try:
+        webtest_spec.remove_cases(folder, body.get("cases") if isinstance(body, dict) else None)
+    except webtest_spec.SpecError as exc:
+        raise ApiError(400, "bad-request", str(exc)) from None
+    return webtest_spec.view(folder, suite)
 
 
 def sources(_state) -> dict:
@@ -348,6 +373,10 @@ def install(state) -> None:
     r.add("GET", "/api/webtest/suites/:suite/captures/:name", "browser",
           lambda q: capture(state, q.params["suite"], q.params["name"]))
     r.add("POST", "/api/webtest/suites/:suite/export", "browser", lambda q: export(state, q.params["suite"], q.body))
+    r.add("POST", "/api/webtest/suites/:suite/spec/review", "browser",
+          lambda q: review_spec(state, q.params["suite"], q.body, q.session))
+    r.add("POST", "/api/webtest/suites/:suite/spec/remove", "browser",
+          lambda q: remove_spec_cases(state, q.params["suite"], q.body))
     r.add("POST", "/api/webtest/runs", "browser", lambda q: create_run(state, q.body, q.session))
     r.add("POST", "/agent/suites/:suite/stage", "agent", lambda q: agent_stage(state, q.params["suite"], q.body),
           max_body=4 * 1024 * 1024)

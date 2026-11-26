@@ -13,7 +13,8 @@ from pathlib import Path
 from . import (
     __version__, backlog_wiki, cache, config, decisions, figma_table, git_guard, gitscope, hashcheck, login_scenarios,
     report,
-    templates, trace, webtest, webtest_export, webtest_sources, webtest_suite, xlsx,
+    login_recipe, templates, trace, webtest, webtest_export, webtest_live, webtest_record, webtest_replay,
+    webtest_sources, webtest_spec, webtest_suite, xlsx,
 )
 from .console import client as console_client
 from .console import lifecycle
@@ -944,6 +945,164 @@ def _add_webtest_parser(sub) -> None:
     p.add_argument("--name", required=True)
 
 
+# record once, replay with Playwright, Login Recipes ---------------------------------------------
+def _mode_job(args: argparse.Namespace, mode: str) -> str:
+    """The open webtest-run job of this session for ``--run`` in ``mode`` (record or replay)."""
+    job, session = _job_args(args)
+    view = console_client.Reader().job(job, session)
+    params = view.get("params") or {}
+    if (view.get("kind") != "webtest-run" or view.get("state") not in ("running", "needs-input")
+            or params.get("run") != args.run or params.get("mode") != mode):
+        raise webtest.WebtestError(f"job {job} is not an open {mode} job of this session for run {args.run}")
+    return job
+
+
+@_webtest_command
+def _cmd_record_start(args: argparse.Namespace) -> dict:
+    _mode_job(args, "record")
+    return webtest_record.start(_run_folder(args))
+
+
+@_webtest_command
+def _cmd_record_open(args: argparse.Namespace) -> dict:
+    return webtest_record.open_row(_run_folder(args), args.row, restart=args.restart)
+
+
+@_webtest_command
+def _cmd_record_step(args: argparse.Namespace) -> dict:
+    return webtest_record.step(_run_folder(args), args.row, _read_json_file(args.step, "step"))
+
+
+@_webtest_command
+def _cmd_record_done(args: argparse.Namespace) -> dict:
+    return webtest_record.done(_run_folder(args), args.row)
+
+
+@_webtest_command
+def _cmd_record_give_up(args: argparse.Namespace) -> dict:
+    return webtest_record.give_up(_run_folder(args), args.row, args.reason)
+
+
+@_webtest_command
+def _cmd_record_finish(args: argparse.Namespace) -> dict:
+    job = _mode_job(args, "record")
+    return webtest_record.finish(_run_folder(args), job)
+
+
+@_webtest_command
+def _cmd_replay_plan(args: argparse.Namespace) -> dict:
+    return webtest_replay.plan(_run_folder(args))
+
+
+@_webtest_command
+def _cmd_replay(args: argparse.Namespace) -> dict:
+    job = _mode_job(args, "replay")
+    return webtest_replay.replay(_run_folder(args), job)
+
+
+@_webtest_command
+def _cmd_spec_check(args: argparse.Namespace) -> dict:
+    return webtest_replay.check(_run_folder(args))
+
+
+@_webtest_command
+def _cmd_spec_show(args: argparse.Namespace) -> dict:
+    folder = _suite_folder(args)
+    return webtest_spec.view(folder, webtest_suite.load(folder))
+
+
+@_webtest_command
+def _cmd_recipe_save(args: argparse.Namespace) -> dict:
+    return login_recipe.save(None, args.project, args.scenario, _read_json_file(args.file, "recipe"))
+
+
+@_webtest_command
+def _cmd_recipe_show(args: argparse.Namespace) -> dict:
+    return login_recipe.view(None, login_scenarios.check_name(args.project, "project"),
+                             login_scenarios.check_name(args.scenario, "scenario"))
+
+
+@_webtest_command
+def _cmd_recipe_test(args: argparse.Namespace) -> dict:
+    project = login_scenarios.check_name(args.project, "project")
+    scenario = login_scenarios.check_name(args.scenario, "scenario")
+    hosts = login_scenarios.get_project(None, project)
+    result = webtest_live.test_recipe(None, project, scenario, hosts["hosts"] + hosts["signin_hosts"])
+    return {**result, "recipe": login_recipe.view(None, project, scenario)}
+
+
+def _cmd_profile_set(args: argparse.Namespace) -> int:
+    """Typed by the tester in their own terminal: no echo, never from a pipe, never printed."""
+    import getpass  # noqa: PLC0415
+
+    if not sys.stdin.isatty():
+        raise webtest.WebtestError("profile-set reads the values from your keyboard; run it in your own terminal")
+    print("Only a dedicated test account of a staging environment goes in a profile.", file=sys.stderr)
+    answer = input("Is this a dedicated staging test account? [y/N] ").strip().lower()
+    if answer not in ("y", "yes"):
+        raise webtest.WebtestError("nothing saved: use a dedicated staging test account")
+    values = {}
+    for key in args.key:
+        values[key] = getpass.getpass(f"{key}: ")
+    return _emit(login_recipe.set_profile(None, args.project, args.profile, values))
+
+
+@_webtest_command
+def _cmd_profile_list(args: argparse.Namespace) -> dict:
+    return {"profiles": login_recipe.list_profiles(None, args.project)}
+
+
+def _cmd_profile_remove(args: argparse.Namespace) -> int:
+    return _emit(login_recipe.remove_profile(None, args.project, args.profile))
+
+
+def _add_replay_parser(sub) -> None:
+    def cmd(name: str, fn, help_text: str, *, run: bool = True, row: bool = False, job: bool = False):
+        p = sub.add_parser(name, help=help_text)
+        if run:
+            p.add_argument("--run", required=True, help="run id (W<yyyymmdd>-<hhmm>-<slug>)")
+        if row:
+            p.add_argument("--row", required=True)
+        if job:
+            p.add_argument("--job", required=True, help="console job id")
+            p.add_argument("--session", required=True, help="agent session id")
+        p.set_defaults(func=fn)
+        return p
+
+    cmd("webtest-record-start", _cmd_record_start, "start recording the run's eligible rows (mode record)", job=True)
+    p = cmd("webtest-record-open", _cmd_record_open, "replay a row's recorded steps and show the page", row=True)
+    p.add_argument("--restart", action="store_true", help="drop the row's steps and record it again")
+    p = cmd("webtest-record-step", _cmd_record_step, "try one step; a passing step is recorded", row=True)
+    p.add_argument("--step", required=True, help='JSON file: {"action", "locator"?, "value"?, "timeout_ms"?}')
+    cmd("webtest-record-done", _cmd_record_done, "close a row whose steps passed", row=True)
+    p = cmd("webtest-record-give-up", _cmd_record_give_up, "leave a row out of the spec (it stays queued)", row=True)
+    p.add_argument("--reason", required=True)
+    cmd("webtest-record-finish", _cmd_record_finish, "save the spec and write the recorded rows' results", job=True)
+    cmd("webtest-replay-plan", _cmd_replay_plan, "which queued rows a replay would run, and why not the others")
+    cmd("webtest-replay", _cmd_replay, "replay the queued rows from the suite's reviewed spec (mode replay)", job=True)
+    cmd("webtest-spec-check", _cmd_spec_check, "replay the whole spec on this run's environment; writes no result")
+    p = cmd("webtest-spec-show", _cmd_spec_show, "a suite's spec beside its cases", run=False)
+    p.add_argument("--suite", required=True)
+    for name, fn, text in (("login-recipe-save", _cmd_recipe_save, "save a scenario's sign-in steps (placeholders only)"),
+                           ("login-recipe-show", _cmd_recipe_show, "a recipe, its test and approval (never a value)"),
+                           ("login-recipe-test", _cmd_recipe_test, "sign in with the recipe and save the session")):
+        p = cmd(name, fn, text, run=False)
+        p.add_argument("--project", required=True)
+        p.add_argument("--scenario", required=True)
+        if name == "login-recipe-save":
+            p.add_argument("--file", required=True, help='JSON file: {"profile", "login_url", "steps"}')
+    p = cmd("profile-set", _cmd_profile_set, "the tester types a staging test account's values (own terminal only)",
+            run=False)
+    p.add_argument("--project", required=True)
+    p.add_argument("--profile", required=True)
+    p.add_argument("--key", action="append", required=True, help="a value to type, such as username; repeat")
+    p = cmd("profile-list", _cmd_profile_list, "a project's profiles and their keys (never a value)", run=False)
+    p.add_argument("--project", required=True)
+    p = cmd("profile-remove", _cmd_profile_remove, "delete a profile", run=False)
+    p.add_argument("--project", required=True)
+    p.add_argument("--profile", required=True)
+
+
 def _add_console_parser(sub) -> None:
     cp = sub.add_parser("console", help="local console in the browser (start, open, status, stop)")
     csub = cp.add_subparsers(dest="console_command", required=True,
@@ -1178,6 +1337,7 @@ def build_parser() -> argparse.ArgumentParser:
         g.set_defaults(func=_cmd_guard)
 
     _add_webtest_parser(sub)
+    _add_replay_parser(sub)
     _add_console_parser(sub)
     return parser
 

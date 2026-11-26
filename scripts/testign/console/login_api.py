@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from .. import login_recipe
 from .. import login_scenarios as ls
 from ..webtest import WebtestError
 from .server import ApiError
@@ -48,7 +49,22 @@ def save_project(home, name: Any, body: Any) -> dict:
 
 def scenarios_view(home, project: Any) -> dict:
     entry = _call(lambda: ls.get_project(home, project))
-    return {"project": project, **entry, "scenarios": _call(lambda: ls.list_scenarios(home, project))}
+    scenarios = _call(lambda: ls.list_scenarios(home, project))
+    for scenario in scenarios:
+        scenario["recipe"] = _call(lambda s=scenario: login_recipe.view(home, project, s["name"]))
+    return {"project": project, **entry, "scenarios": scenarios,
+            "profiles": _call(lambda: login_recipe.list_profiles(home, project))}
+
+
+def approve_recipe(home, project: Any, scenario: Any, body: Any, session: str | None) -> dict:
+    """The tester approves the recipe steps they looked at (its fingerprint); never a value."""
+    fp = body.get("fingerprint") if isinstance(body, dict) else None
+    try:
+        return login_recipe.approve(home, project, scenario, fp, _by(session))
+    except ls.NotFound as exc:
+        raise ApiError(404, "not-found", str(exc)) from None
+    except login_recipe.RecipeError as exc:
+        raise ApiError(409, "recipe-not-ready", str(exc)) from None
 
 
 def install(state) -> None:
@@ -66,5 +82,7 @@ def install(state) -> None:
           lambda q: _call(lambda: ls.reject(home, q.params["project"], q.params["scenario"],
                                             (q.body or {}).get("note") if isinstance(q.body, dict) else None,
                                             _by(q.session))))
+    r.add("POST", "/api/webtest/login/:project/:scenario/recipe/approve", "browser",
+          lambda q: approve_recipe(home, q.params["project"], q.params["scenario"], q.body, q.session))
     r.add("DELETE", "/api/webtest/login/:project/:scenario", "browser",
           lambda q: _call(lambda: ls.remove(home, q.params["project"], q.params["scenario"])))
