@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -80,3 +81,25 @@ def test_login_routes_need_a_browser_session(console, home):
     assert call(console.port, "PUT", "/api/webtest/projects/demo", headers={srv.AGENT_HEADER: "agent"},
                 body={"hosts": ["evil.test"]})[0] in (401, 403)
     assert login_scenarios.get_project(home, "demo")["hosts"] == ["dev.example.test"]
+
+
+def test_recipe_is_shown_without_values_and_approved_only_after_a_passing_test(console, home):
+    from testign import login_recipe  # noqa: PLC0415
+
+    login_scenarios.save_project(home, "demo", ["dev.example.test"])
+    login_scenarios.save_draft(home, "demo", DRAFT)
+    recipe = login_recipe.save(home, "demo", "member", {"profile": "member01", "login_url": "https://dev.example.test/login", "steps": [
+        {"action": "goto", "value": "https://dev.example.test/login"},
+        {"action": "fill", "locator": {"label": "Password"}, "value": "{{password}}"},
+        {"action": "wait_url", "value": "https://dev.example.test/mypage"}]})
+    login_recipe.set_profile(home, "demo", "member01", {"password": "never-shown-1"})
+    data = req(console, "GET", "/api/webtest/login/demo")[2]
+    assert data["scenarios"][0]["recipe"]["placeholders"] == ["password"]
+    assert data["profiles"] == [{"profile": "member01", "keys": ["password"]}]
+    assert "never-shown-1" not in json.dumps(data)
+    path = "/api/webtest/login/demo/member/recipe/approve"
+    status, _, err = req(console, "POST", path, {"fingerprint": recipe["fingerprint"]})
+    assert status == 409 and err["error"]["code"] == "recipe-not-ready"
+    login_recipe.store_test(home, "demo", "member", recipe["fingerprint"], {"ok": True})
+    status, _, view = req(console, "POST", path, {"fingerprint": recipe["fingerprint"]})
+    assert status == 200 and view["usable"] is True

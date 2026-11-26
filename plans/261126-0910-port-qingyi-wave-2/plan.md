@@ -1,6 +1,6 @@
 # Port from qingyi-test-kit, wave 2: record once, replay with Playwright, Login Recipe
 
-Status: in progress · Requested by Asher (2026-11-26) · Follows wave 1 (PR #8)
+Status: done · Requested by Asher (2026-11-26) · Follows wave 1 (PR #8)
 
 ## Outcome
 
@@ -27,7 +27,7 @@ owner-only on the tester's machine.
 |---|---|
 | Spec per suite, keyed by case id, bound to each case's digest; review gate by hash | `<suite folder>/spec.json`, `webtest_spec.py` |
 | Engine: locators, steps, spec error versus fail, host guard, kept replies, page snapshot | `webtest_live.py` |
-| First run (record): open, step, done, give up, finish; the recorded rows get their results | `webtest_record.py`, `<suite folder>/spec.record.json` |
+| First run (record): open, step, done, give up, finish; the recorded rows get their results | `webtest_record.py`, `<run folder>/spec.record.json` |
 | Replay a run's queued rows from the reviewed spec | `webtest_replay.py` |
 | Login Recipe: steps with `{{placeholders}}` per scenario; profiles; saved sessions | `login_recipe.py`, `~/.testign-kit/webtest/{login/<p>/<s>/recipe.json, profiles/, sessions/}` |
 | Secret guard hook | `hooks/secret_guard.py` |
@@ -64,11 +64,11 @@ terminal).
 
 | # | Phase | Status |
 |---|---|---|
-| 1 | Spec model and engine | |
-| 2 | Login Recipe, profiles, secret guard | |
-| 3 | Record and replay, job modes, CLI | |
-| 4 | Console screens | |
-| 5 | Tests on a local demo page, docs, version | |
+| 1 | Spec model and engine | done |
+| 2 | Login Recipe, profiles, secret guard | done |
+| 3 | Record and replay, job modes, CLI | done |
+| 4 | Console screens | done |
+| 5 | Tests on a local demo page, docs, version | done |
 
 ## Risks
 

@@ -107,6 +107,9 @@ def test_runs_listing_and_detail(console, home, run_id):
     status, _, run = browser(console, "GET", f"/api/webtest/runs/{run_id}")
     assert status == 200 and run["hosts"] == ["dev.example.test"] and len(run["cases"]) == 8
     assert run["waiting_on_tester"] == 1 and run["jobs"] == []
+    # No spec yet: every eligible queued row can be recorded, none replayed.
+    assert run["replay"]["spec"] == "missing" and run["replay"]["replayable"] == 0
+    assert run["replay"]["recordable"] >= 1
 
 
 @pytest.mark.parametrize("name", ["..", "%2e%2e", "a%2Fb", "a%5Cb", "NUL", "W20261119-1000-x%2F..", "nope"])

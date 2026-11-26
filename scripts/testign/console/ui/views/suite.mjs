@@ -8,6 +8,7 @@ import { NONE, timeOrDay } from '../format.mjs';
 import { hostOf } from '../hosts.mjs';
 import { href } from '../router.mjs';
 import { chooseTemplate } from './job-actions.mjs';
+import { stepList } from './spec-steps.mjs';
 import { MOBILE_METHODS, mobileMethod } from './mobile-method.mjs';
 import { openNewRun } from './new-run.mjs';
 import { freshnessIcon } from './survey.mjs';
@@ -100,7 +101,7 @@ export function render(ctx) {
   const { t, route } = ctx;
   const id = route.params.suite;
   const ui = uiFor(id);
-  if (route.query && ['cases', 'source', 'runs'].includes(route.query.tab)) ui.tab = route.query.tab;
+  if (route.query && ['cases', 'source', 'runs', 'spec'].includes(route.query.tab)) ui.tab = route.query.tab;
   const crumbs = (name) => ctx.topbar(breadcrumb(t, [{ label: t('nav_group_design') }, { label: t('nav_suites'), href: href(['suites']) },
     { label: name || id }]));
   crumbs(null);
@@ -181,6 +182,7 @@ export function render(ctx) {
     }
     const tabs = h('div.yh-tabs', { role: 'tablist', 'aria-label': suite.name }, [
       ['cases', t('suite_tab_cases'), suite.cases.length], ['source', t('suite_tab_source')], ['runs', t('suite_tab_runs'), (suite.runs || []).length],
+      ...(suite.spec && (suite.spec.exists || suite.spec.eligible) ? [['spec', t('suite_tab_spec'), suite.spec.recorded]] : []),
     ].map(([k, label, n]) => h('button.yh-tab', {
       type: 'button', role: 'tab', 'aria-selected': ui.tab === k ? 'true' : 'false', dataset: { tab: k },
       on: { click: () => { ui.tab = k; draw(); } },
@@ -188,6 +190,7 @@ export function render(ctx) {
     let content;
     if (ui.tab === 'source') content = sourceTab(suite, tickets);
     else if (ui.tab === 'runs') content = runsTab(suite);
+    else if (ui.tab === 'spec') content = specTab(suite);
     else content = casesTab(suite, scenarios, generating);
     if (popEscape) { popEscape(); popEscape = null; }
     if (ui.tab === 'cases' && ui.selected) popEscape = pushEscape(() => { ui.selected = null; draw(); });
@@ -246,6 +249,65 @@ export function render(ctx) {
         ctx.toast(suiteErrorText(t, err), 'danger');
       }
     }, (err) => ctx.toast(suiteErrorText(t, err), 'danger'));
+  }
+
+  // replay spec -------------------------------------------------------------------------------
+  function specTab(suite) {
+    const spec = suite.spec || { status: 'missing', cases: [] };
+    const errorBox = h('div', { role: 'alert' });
+    const check = spec.check || { status: 'missing' };
+    const canReview = spec.exists && spec.status === 'draft' && check.status === 'passed';
+    const review = h('button.yh-btn.yh-btn--primary', { type: 'button', dataset: { specAction: 'review' },
+      disabled: canReview ? undefined : true, title: canReview ? undefined : t('spec_review_needs_check') }, t('spec_review'));
+    review.addEventListener('click', async () => {
+      review.disabled = true;
+      try {
+        await ctx.api.reviewSpec(suite.id, spec.hash);
+        ctx.toast(t('spec_reviewed_toast'));
+        reload();
+      } catch (err) {
+        review.disabled = false;
+        mount(errorBox, h('p.k-field__error', [icon('warning'), suiteErrorText(t, err)]));
+        if (err && err.code === 'spec-not-ready') reload();
+      }
+    });
+    const removeCase = async (caseId) => {
+      try {
+        await ctx.api.removeSpecCases(suite.id, [caseId]);
+        ctx.toast(t('spec_removed_toast', { id: caseId }));
+        reload();
+      } catch (err) {
+        mount(errorBox, h('p.k-field__error', [icon('warning'), suiteErrorText(t, err)]));
+      }
+    };
+    const status = h('div.st-row', { dataset: { specStatus: spec.status } }, [
+      ybadge(t(`spec_status_${spec.status}`), spec.status === 'reviewed' ? 'success' : 'outline'),
+      h('span', t('spec_counts', { recorded: spec.recorded || 0, eligible: spec.eligible || 0 })),
+      spec.exists ? h('span.yh-muted', t(`spec_check_${check.status}`)) : null,
+      spec.reviewed ? h('span.yh-caption.yh-muted', t('spec_reviewed_by', { by: spec.reviewed.by || NONE, when: timeOrDay(spec.reviewed.at) })) : null,
+      h('span.push'), spec.status === 'reviewed' ? null : review,
+    ]);
+    const cards = (spec.cases || []).map((c) => {
+      const res = c.check && c.check.result;
+      return h('div.k-card.stack-8', { dataset: { specCase: c.case } }, [
+        h('div.st-row', [h('code.id', c.case), h('span', c.content || NONE), h('span.push'),
+          res ? ybadge(t(`spec_result_${res}`), res === 'ok' ? 'success' : 'outline') : null,
+          c.changed ? ybadge(t('spec_case_changed'), 'outline') : null,
+          c.steps ? h('button.yh-btn.yh-btn--sm.yh-btn--ghost', { type: 'button', dataset: { specRemove: c.case },
+            on: { click: () => removeCase(c.case) } }, [icon('trash'), t('spec_remove')]) : null]),
+        h('p.yh-caption.yh-muted.m-0', [t('case_f_expected'), ': ', c.expected || NONE]),
+        c.not_eligible ? h('p.yh-caption.text-danger.m-0', c.not_eligible) : null,
+        c.steps ? stepList(c.steps) : h('p.yh-caption.yh-muted.m-0', t('spec_not_recorded')),
+        c.check && c.check.error ? h('p.yh-caption.text-danger.m-0', String(c.check.error)) : null,
+        (c.warnings || []).length ? h('ul.plain-list.yh-caption', c.warnings.map((w) => h('li', { dataset: { specWarning: w.kind } },
+          [icon('warning'), ' ', t(`spec_warn_${w.kind}`, { step: w.step === null || w.step === undefined ? '' : w.step + 1, value: w.value || '' })]))) : null,
+      ]);
+    });
+    return h('div.stack-16', [
+      alertBox('', 'info', t('spec_how_t'), t('spec_how_d')),
+      status, errorBox,
+      cards.length ? h('div.stack-8', cards) : h('p.yh-muted', t('spec_none')),
+    ]);
   }
 
   // cases -----------------------------------------------------------------------------------

@@ -37,7 +37,7 @@ testign-kit makes that investigation an automatic step for every ticket, and tur
 | Shared rules | [`references/rules.md`](references/rules.md): language, source labels, fact/intent routing, F1–F5 |
 | Survey report template | [`templates/survey-report-template.md`](templates/survey-report-template.md) |
 | Local scout cache | Reuse the `master` brief per feature (`~/.testign-kit/cache/`), validated by file blob hashes. The `develop` diff always runs fresh |
-| Hooks ([`hooks/hooks.json`](hooks/hooks.json)) | Block git writes in the customer repositories you put on the guard list, and send a console job's questions to the console instead of the terminal |
+| Hooks ([`hooks/hooks.json`](hooks/hooks.json)) | Block git writes in the customer repositories you put on the guard list, send a console job's questions to the console instead of the terminal, and keep the agent away from sign-in profiles and saved sessions |
 
 ## Installation
 
@@ -48,6 +48,9 @@ testign-kit makes that investigation an automatic step for every ticket, and tur
 - **openpyxl** for `/testign:testcase`: `python3 -m pip install openpyxl` (or `py -3 -m pip install openpyxl` on Windows).
 - Git, and a local clone of the customer repository. The plugin only reads it (`git show`, `git diff`, `git log`, `git grep`) and never checks out or changes the working tree.
 - The Backlog MCP server (see below) for reading tickets and the wiki.
+- Optional, for recording and replaying web tests: **Playwright for Python** and its Chromium
+  (`python3 -m pip install playwright` then `python3 -m playwright install chromium`). Set
+  `TESTIGN_BROWSER_EXECUTABLE` to use another Chromium build. Nothing else needs it.
 
 ### Install the plugin
 
@@ -305,6 +308,41 @@ session tells the console which of these tools it has, and *Agent & jobs* shows 
    the workbook next to its `source` folder. The report also lists the rows fixed since the
    previous run and the run's defects with their status and tracker key.
 
+9. **Record once, replay later:** a sure case the agent runs on PC (a label, element or behaviour
+   change) can be replayed without the agent. Press *Record (Playwright)* on a run: the agent walks
+   each such row step by step in a Playwright browser, and every step is tried from a fresh page, so
+   what it saves is what replay does. A submit the app received while recording is answered from
+   the kept reply afterwards, so the app sees it once. The steps go into the suite's *Replay spec*
+   tab as a draft, with warnings for checks that may not hold next time (a date or count in a
+   locator, a value not in the expected result). After you review them there (*Mark reviewed*), a
+   later run shows *Replay N*: the rows run from the spec with no agent and no Chrome. A failed check
+   is a *fail* with a screenshot; a step that cannot run marks the row *not run: spec error* (fix the
+   spec, not the app); a failed sign-in marks the rows of that scenario *not run: session expired*.
+   Editing a case or a step clears the review, and a changed case is not replayed.
+
+#### Login Recipe
+
+Record and replay sign in by themselves with a scenario's **Login Recipe**: the sign-in steps the
+agent drafts (`login-recipe-save`), with `{{username}}` and `{{password}}` placeholders instead of
+values. You type the values yourself, in your own terminal:
+
+```bash
+python3 scripts/run.py profile-set --project <project> --profile <profile> --key username --key password
+```
+
+It asks you to confirm the account is a **dedicated staging test account** (use nothing else), reads
+each value without echo, refuses piped input, and writes
+`~/.testign-kit/webtest/profiles/<project>/<profile>.json` readable by you only (mode 600; the
+values are plain text in that file). The agent then tests the recipe (`login-recipe-test`), and you
+check the steps and press *Approve recipe* in the scenario's dialog. A recipe is used only with its
+values set, a passing test and your approval; saving it again clears both. The signed-in browser
+session is kept in `~/.testign-kit/webtest/sessions/` (mode 600) and refreshed when it expires.
+
+The plugin's secret guard hook blocks the agent from reading, searching or editing the profiles and
+sessions folders, from running `profile-set` or `profile-remove`, and from approving a recipe through
+the console API. Errors and recordings are redacted of profile values. Runs in your own Chrome
+(*Run*) still never use a profile: you sign in by hand.
+
 Runs made before suites existed (run file version 1, imported straight from a Figma table) still
 open, run and export; the old import job (`webtest-plan`) is retired, and a queued one fails with
 `retired-kind` when the console starts.
@@ -326,8 +364,8 @@ Excel suite reads a workbook through a template's item, steps, expected and trac
 
 Where things live:
 
-- Suites: `<output_dir>/webtest/suites/<suite id>/` holds `suite.json`, the Figma captures and an
-  uploaded Excel source.
+- Suites: `<output_dir>/webtest/suites/<suite id>/` holds `suite.json`, the Figma captures, an
+  uploaded Excel source and the replay spec (`spec.json`).
 - Runs: `<output_dir>/webtest/<run id>/` holds `run.json`, the captures, the evidence screenshots
   and the exports. The agent's commands write there; the console only creates `run.json` from a
   suite and changes its export columns.
@@ -335,8 +373,8 @@ Where things live:
   results, your saved defects and the images you upload. It is created readable by you only (mode 700 on macOS and
   Linux). On Windows, mode bits do nothing: the folder takes the ACL of your user profile, which by
   default lets only you and administrators read it.
-- No screen takes or stores an account name or password, and the agent never types into a sign-in
-  form.
+- No screen takes or shows an account name or password. Only `profile-set`, typed by you, stores
+  one (see Login Recipe), and the agent never types into a sign-in form in your Chrome.
 
 Limits:
 
@@ -352,6 +390,11 @@ Limits:
   fixed page scripts in your signed-in tab: one that draws the frame and one that reads the
   frame's text. The rule that it runs nothing else is written in its instructions, not enforced by
   a tool, so give the agent emulation rows only on sites you would let it script.
+- The secret guard matches what a tool call names: a file path, a search folder, or the text of a
+  command. A command that reaches the profiles folder without naming it (a script that builds the
+  path) is not caught. That is why a profile may hold only a dedicated staging test account.
+- Replay runs inside a console job (*Replay N* on the run); there is no unattended or scheduled
+  replay, and profiles are typed in a terminal, not on a console screen.
 
 ## Repository layout
 
@@ -364,7 +407,7 @@ Limits:
 ├── commands/                       # /testign:survey, /testign:close, /testign:console, /testign:webtest
 ├── skills/                         # scout (internal), spec-qa, qa-close, testcase (/testign:testcase), console, webtest
 ├── agents/                         # web test workers that check one case in Chrome
-├── hooks/                          # PreToolUse hooks: git guard, console questions
+├── hooks/                          # PreToolUse hooks: git guard, console questions, secret guard
 ├── references/
 │   ├── rules.md                    # shared rules every skill reads
 │   ├── decisions-log-format.md     # Backlog wiki decisions log format
@@ -380,6 +423,12 @@ Limits:
 │       ├── webtest.py              # web test runs, copied from a suite
 │       ├── webtest_history.py      # results across runs and the Fixed mark
 │       ├── webtest_defects.py      # defect drafts for failed rows
+│       ├── webtest_spec.py         # a suite's replay spec and its review
+│       ├── webtest_record.py       # record mode: steps tried one by one in Playwright
+│       ├── webtest_replay.py       # replay mode: queued rows from the reviewed spec
+│       ├── webtest_live.py         # the Playwright engine (optional dependency)
+│       ├── login_recipe.py         # Login Recipes, profiles and saved sessions
+│       ├── secret_guard.py         # the hook that keeps the agent away from profiles
 │       ├── git_guard.py            # guard list and the git write guard hook
 │       └── console/                # console server, read API, job queue, suite API
 │           └── ui/                 # browser UI: ES modules, no build step, Yohaku styles, en/ja
