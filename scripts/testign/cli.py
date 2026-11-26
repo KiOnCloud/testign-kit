@@ -13,7 +13,7 @@ from pathlib import Path
 from . import (
     __version__, backlog_wiki, cache, config, decisions, figma_table, git_guard, gitscope, hashcheck, login_scenarios,
     report,
-    login_recipe, templates, trace, webtest, webtest_export, webtest_live, webtest_record, webtest_replay,
+    login_recipe, setup_check, templates, trace, webtest, webtest_export, webtest_live, webtest_record, webtest_replay,
     webtest_sources, webtest_spec, webtest_suite, xlsx,
 )
 from .console import client as console_client
@@ -601,11 +601,12 @@ def _job_args(args: argparse.Namespace) -> tuple[str, str]:
 
 
 def new_run_from_suite(suite_id: str, *, name: str | None, base_url: str, project: str, template: str | None,
-                       tester: str, home: Path | None = None) -> dict:
+                       tester: str, home: Path | None = None, browsers: list[str] | None = None) -> dict:
     """A run copied from a ready suite onto one environment (the console calls the same helper)."""
     cfg = config.load(home)
     return webtest_suite.create_run(webtest.runs_root(cfg), suite_id, name=name, base_url=base_url, project=project,
-                                    template=template, tester=tester, home=home, report_lang=cfg.get("lang"))
+                                    template=template, tester=tester, home=home, report_lang=cfg.get("lang"),
+                                    browsers=browsers)
 
 
 def _suite_env() -> webtest_sources.Env:
@@ -634,7 +635,7 @@ def _suite_command(fn):
 @_suite_command
 def _cmd_webtest_new(args: argparse.Namespace) -> dict:
     return new_run_from_suite(args.suite, name=args.name, base_url=args.base_url, project=args.project,
-                              template=args.template, tester=args.tester)
+                              template=args.template, tester=args.tester, browsers=args.browser)
 
 
 def _figma_rows(args: argparse.Namespace, source: dict) -> list[dict]:
@@ -852,6 +853,8 @@ def _add_webtest_parser(sub) -> None:
     p.add_argument("--template", help="the result template (default: the default template)")
     p.add_argument("--tester", required=True, help="the tester's name")
     p.add_argument("--name", help="run name (default: the suite's name)")
+    p.add_argument("--browser", action="append", choices=webtest.BROWSERS,
+                   help="a browser replay runs the rows in; repeat (default: chromium)")
     p = cmd("webtest-table", _cmd_webtest_table,
             "write the rows of one saved get_design_context of a Figma table as cases of a generating suite",
             run=False)
@@ -996,8 +999,30 @@ def _cmd_replay_plan(args: argparse.Namespace) -> dict:
 
 @_webtest_command
 def _cmd_replay(args: argparse.Namespace) -> dict:
-    job = _mode_job(args, "replay")
+    # With --job: the console's replay job. Without: nobody at the console (a scheduler); see
+    # webtest_replay.replay for what keeps it from racing a job on the same run.
+    job = _mode_job(args, "replay") if args.job or args.session else None
     return webtest_replay.replay(_run_folder(args), job)
+
+
+@_suite_command
+def _cmd_replay_new(args: argparse.Namespace) -> dict:
+    """For a scheduler: a new run from the suite, every row with a reviewed spec replayed, then exported
+    when nothing is left open. Rows without a spec stay queued for a run in Chrome."""
+    suite_folder = _suite_folder(args)
+    spec = webtest_spec.load(suite_folder)
+    if not webtest_spec.is_reviewed(spec):
+        raise webtest.WebtestError("the suite's replay spec is not reviewed; review it on the suite's Replay spec tab")
+    made = new_run_from_suite(args.suite, name=args.name, base_url=args.base_url, project=args.project,
+                              template=args.template, tester=args.tester, browsers=args.browser)
+    folder = webtest.find_run(webtest.runs_root(config.load()), made["run"])
+    result = webtest_replay.replay(folder, None)
+    out = {"run": made["run"], "counts": webtest.counts(webtest.load(folder)),
+           "results": result["results"], "left": result["left"]}
+    if args.export and not webtest.open_rows(webtest.load(folder)):
+        webtest.close(folder, lambda _job: False)
+        out["export"] = webtest_export.export(folder, webtest.load(folder))
+    return out
 
 
 @_webtest_command
@@ -1056,7 +1081,20 @@ def _cmd_profile_remove(args: argparse.Namespace) -> int:
     return _emit(login_recipe.remove_profile(None, args.project, args.profile))
 
 
+def _cmd_setup(args: argparse.Namespace) -> int:
+    out = setup_check.check(webtest=args.webtest or bool(args.browser), browsers=args.browser, install=args.install)
+    _emit(out)
+    return 0 if out["ok"] else 1
+
+
 def _add_replay_parser(sub) -> None:
+    p = sub.add_parser("setup", help="check (and with --install, install) what testign needs on this computer")
+    p.add_argument("--webtest", action="store_true", help="also check Playwright and Chromium for record and replay")
+    p.add_argument("--browser", action="append", choices=webtest.BROWSERS, help="a browser to check; repeat")
+    p.add_argument("--install", action="store_true",
+                   help="pip install --user missing packages and playwright install missing browsers")
+    p.set_defaults(func=_cmd_setup)
+
     def cmd(name: str, fn, help_text: str, *, run: bool = True, row: bool = False, job: bool = False):
         p = sub.add_parser(name, help=help_text)
         if run:
@@ -1079,7 +1117,20 @@ def _add_replay_parser(sub) -> None:
     p.add_argument("--reason", required=True)
     cmd("webtest-record-finish", _cmd_record_finish, "save the spec and write the recorded rows' results", job=True)
     cmd("webtest-replay-plan", _cmd_replay_plan, "which queued rows a replay would run, and why not the others")
-    cmd("webtest-replay", _cmd_replay, "replay the queued rows from the suite's reviewed spec (mode replay)", job=True)
+    p = cmd("webtest-replay", _cmd_replay,
+            "replay the queued rows from the suite's reviewed spec (mode replay job, or with no job for a scheduler)")
+    p.add_argument("--job", help="console job id (mode replay); leave out when nobody is at the console")
+    p.add_argument("--session", help="agent session id, with --job")
+    p = cmd("webtest-replay-new", _cmd_replay_new,
+            "for a scheduler: a new run from a suite with a reviewed spec, replayed (and exported)", run=False)
+    p.add_argument("--suite", required=True)
+    p.add_argument("--base-url", required=True)
+    p.add_argument("--project", required=True)
+    p.add_argument("--tester", required=True, help="the name the run is recorded under")
+    p.add_argument("--template")
+    p.add_argument("--name", help="run name (default: the suite's name)")
+    p.add_argument("--browser", action="append", choices=webtest.BROWSERS, help="repeat (default: chromium)")
+    p.add_argument("--export", action="store_true", help="close and export the run when no row is left open")
     cmd("webtest-spec-check", _cmd_spec_check, "replay the whole spec on this run's environment; writes no result")
     p = cmd("webtest-spec-show", _cmd_spec_show, "a suite's spec beside its cases", run=False)
     p.add_argument("--suite", required=True)

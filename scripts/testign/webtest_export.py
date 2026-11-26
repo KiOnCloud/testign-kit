@@ -18,7 +18,9 @@ from .webtest import WebtestError
 
 CASE_FIELDS = ("no", "type", "content", "creator", "screen", "viewport", "mobile_method", "kind", "class", "reason",
                "scenario", "runner", "preconditions", "steps", "expected", "target_node", "trace")
-RESULT_FIELDS = ("verdict", "actual", "evidence", "executed_at", "by")
+BROWSER_FIELDS = tuple(f"verdict_{b}" for b in webtest.BROWSERS)
+BROWSER_LABEL = {"chromium": "Chromium", "msedge": "Edge", "firefox": "Firefox", "webkit": "WebKit"}
+RESULT_FIELDS = ("verdict", "actual", "evidence", "executed_at", "by", "flaky", *BROWSER_FIELDS)
 FIELDS = CASE_FIELDS + RESULT_FIELDS
 ROLE_FIELD = {"no": "no", "item": "content", "steps": "steps", "expected": "expected", "evidence": "evidence"}
 RESULT_SYNONYMS = {
@@ -27,21 +29,21 @@ RESULT_SYNONYMS = {
     "executed_at": ["実施日", "実施日時", "executed", "executedat", "ngày chạy"],
 }
 PROPOSED_NEW = ("verdict", "actual", "executed_at", "evidence", "screen")
-LABEL_KEYS = ("pass", "fail", "not-run", "not-applicable", "manual")
+LABEL_KEYS = ("pass", "fail", "not-run", "not-applicable", "manual", "pending")
 OPEN = ("draft", *webtest.OPEN_STATES)
 
 HEADERS = {
-    "en": {"verdict": "Result", "actual": "Actual", "executed_at": "Executed", "evidence": "Evidence",
+    "en": {"flaky": "Flaky", "verdict": "Result", "actual": "Actual", "executed_at": "Executed", "evidence": "Evidence",
            "screen": "Screen", "scenario": "Scenario", "by": "By", "reason": "Reason", "steps": "Steps",
            "expected": "Expected", "preconditions": "Preconditions", "kind": "Kind", "class": "Class",
            "runner": "Runner", "viewport": "Viewport", "mobile_method": "Phone check", "type": "Type", "creator": "Creator",
            "target_node": "Figma node", "no": "No", "content": "Content", "trace": "Trace"},
-    "ja": {"verdict": "結果", "actual": "実際の結果", "executed_at": "実施日", "evidence": "エビデンス",
+    "ja": {"flaky": "不安定", "verdict": "結果", "actual": "実際の結果", "executed_at": "実施日", "evidence": "エビデンス",
            "screen": "画面", "scenario": "ログインシナリオ", "by": "実施者", "reason": "理由", "steps": "手順",
            "expected": "期待結果", "preconditions": "前提条件", "kind": "種類", "class": "分類",
            "runner": "実施", "viewport": "表示幅", "mobile_method": "スマホ確認方法", "type": "種別", "creator": "作成者",
            "target_node": "Figmaノード", "no": "No", "content": "内容", "trace": "トレース"},
-    "vi": {"verdict": "Kết quả", "actual": "Thực tế", "executed_at": "Ngày chạy", "evidence": "Bằng chứng",
+    "vi": {"flaky": "Chập chờn", "verdict": "Kết quả", "actual": "Thực tế", "executed_at": "Ngày chạy", "evidence": "Bằng chứng",
            "screen": "Màn hình", "scenario": "Kịch bản đăng nhập", "by": "Người chạy", "reason": "Lý do",
            "steps": "Các bước", "expected": "Kết quả mong đợi", "preconditions": "Tiền điều kiện",
            "kind": "Loại", "class": "Phân loại", "runner": "Người chạy", "viewport": "Khổ màn hình",
@@ -111,8 +113,17 @@ def default_labels(options: list[str]) -> dict[str, str]:
     return {"pass": "Pass", "fail": "Fail"}
 
 
-def first_guess(entry: dict, facts: dict, lang: str = "en", phone_rows: bool = False) -> dict:
-    """The column plan before the tester edits it; a run with phone-width rows also gets a method column."""
+def header_for(field: str, lang: str = "en") -> str:
+    names = HEADERS.get(lang, HEADERS["en"])
+    if field.startswith("verdict_"):
+        return f"{names['verdict']} ({BROWSER_LABEL[field[len('verdict_'):]]})"
+    return names[field]
+
+
+def first_guess(entry: dict, facts: dict, lang: str = "en", phone_rows: bool = False,
+                browsers: list[str] | None = None) -> dict:
+    """The column plan before the tester edits it; a run with phone-width rows also gets a method column,
+    and a run replayed in several browsers a result column per browser."""
     columns: list[dict] = []
     used_letters: set[str] = set()
     for role, letter in entry["columns"].items():
@@ -128,10 +139,11 @@ def first_guess(entry: dict, facts: dict, lang: str = "en", phone_rows: bool = F
             used_letters.add(letter)
             have.add(field)
     next_col = facts["last"] + 1
-    names = HEADERS.get(lang, HEADERS["en"])
-    for field in (*PROPOSED_NEW, "mobile_method") if phone_rows else PROPOSED_NEW:
+    proposed = [*PROPOSED_NEW, *(["mobile_method"] if phone_rows else []),
+                *([f"verdict_{b}" for b in browsers] if browsers and len(browsers) > 1 else [])]
+    for field in proposed:
         if field not in have:
-            columns.append({"field": field, "letter": _letter(next_col), "header": names[field], "new": True})
+            columns.append({"field": field, "letter": _letter(next_col), "header": header_for(field, lang), "new": True})
             next_col += 1
     columns.sort(key=lambda c: _index(c["letter"]))
     verdict = next((c["letter"] for c in columns if c["field"] == "verdict" and not c.get("new")), None)
@@ -194,18 +206,22 @@ def check_columns(columns: Any, facts: dict) -> list[dict]:
     return sorted(out, key=lambda c: _index(c["letter"]))
 
 
-def _entry(name: str | None, home: Path | None = None) -> dict:
+def _entry(name: str | None, home: Path | None = None, version: int | None = None) -> dict:
     try:
-        return templates.resolve(name, home)
+        return templates.resolve(name, home, version)
     except templates.TemplateError as exc:
         raise WebtestError(str(exc)) from None
 
 
 def confirmed_plan(run: dict, answer: dict, home: Path | None = None) -> dict:
     """The column plan from the confirmed review table, checked against the template it names."""
-    entry = _entry(answer.get("template") or run.get("template"), home)
+    name = answer.get("template") or run.get("template")
+    pinned = run.get("columns") or {}
+    # Editing the columns of a run keeps the template version the run is pinned to.
+    entry = _entry(name, home, pinned.get("template_version") if pinned.get("template") == name else None)
     facts = sheet_facts(entry)
-    return {"template": entry["name"], "sheet": entry["sheet"], "header_row": entry["header_row"],
+    return {"template": entry["name"], "template_version": entry["version"], "sheet": entry["sheet"],
+            "header_row": entry["header_row"],
             "verdict_labels": check_labels(answer.get("verdict_labels")),
             "columns": check_columns(answer.get("columns"), facts)}
 
@@ -219,14 +235,16 @@ def suite_plan(run: dict, entry: dict | None = None) -> dict:
     entry = entry or _entry(run.get("template"))
     facts = sheet_facts(entry)
     plan = first_guess(entry, facts, run.get("report_lang") or "en",
-                       phone_rows=any(c.get("viewport") == "mobile" for c in run["cases"]))
+                       phone_rows=any(c.get("viewport") == "mobile" for c in run["cases"]),
+                       browsers=webtest.run_browsers(run))
     columns = plan["columns"]
     label = (webtest_sources.REGISTRY.get((run.get("source") or {}).get("kind")) or
              webtest_sources.REGISTRY["manual"]).trace_label
     if label and not any(c["field"] == "trace" for c in columns):
         last = max([facts["last"], *(_index(c["letter"]) for c in columns)])
         columns.append({"field": "trace", "letter": _letter(last + 1), "header": label, "new": True})
-    return {"template": entry["name"], "sheet": entry["sheet"], "header_row": entry["header_row"],
+    return {"template": entry["name"], "template_version": entry.get("version"), "sheet": entry["sheet"],
+            "header_row": entry["header_row"],
             "verdict_labels": check_labels(plan["verdict_labels"]), "columns": check_columns(columns, facts)}
 
 
@@ -281,6 +299,20 @@ def verdict_text(case: dict, labels: dict[str, str]) -> str:
     return ""
 
 
+def browser_verdict(case: dict, browser: str, labels: dict[str, str]) -> str:
+    """One browser's verdict of a replayed row; a browser that could not start reads Pending."""
+    own = ((case.get("result") or {}).get("browsers") or {}).get(browser)
+    if own is None:
+        # A row run in one browser (or in Chrome by the agent) has only the row's verdict.
+        return verdict_text(case, labels) if browser == "chromium" else ""
+    verdict = own.get("verdict")
+    if verdict in ("pass", "fail"):
+        return labels[verdict]
+    if verdict == "pending":
+        return labels.get("pending", "Pending")
+    return labels.get("not-run", "Not run")
+
+
 def value_for(case: dict, field: str, labels: dict[str, str], lang: str = "en") -> Any:
     result = case.get("result") or {}
     if field == "mobile_method":
@@ -299,6 +331,10 @@ def value_for(case: dict, field: str, labels: dict[str, str], lang: str = "en") 
         return entry.trace_value(source) if entry else ""
     if field == "verdict":
         return verdict_text(case, labels)
+    if field.startswith("verdict_"):
+        return browser_verdict(case, field[len("verdict_"):], labels)
+    if field == "flaky":
+        return "flaky" if result.get("flaky") else ""
     if field == "actual":
         actual = result.get("actual") or ""
         if case["state"] == "not-run":
@@ -336,10 +372,13 @@ def columns_view(folder: Path, run: dict, template: str | None = None) -> dict:
     """The first-guess column plan of a run against a template, with three sample rows."""
     if not run["import"]["complete"]:
         raise WebtestError("this run has no case list")
-    entry = _entry(template or run.get("template"))
+    pinned = run.get("columns") or {}
+    entry = _entry(template or run.get("template"), None,
+                   pinned.get("template_version") if not template or template == pinned.get("template") else None)
     facts = sheet_facts(entry)
     plan = first_guess(entry, facts, run.get("report_lang") or "en",
-                       phone_rows=any(c.get("viewport") == "mobile" for c in run["cases"]))
+                       phone_rows=any(c.get("viewport") == "mobile" for c in run["cases"]),
+                       browsers=webtest.run_browsers(run))
     return {"plan": plan, "headers": facts["headers"], "last_column": _letter(max(facts["last"], 1)),
             "samples": samples(run, plan)}
 
@@ -351,7 +390,7 @@ REPORT = {
            "state": "State", "count": "Rows", "fail": "Failed rows", "notrun": "Rows not run", "reason": "Reason",
            "self": "Rows run by the tester", "changed": "Rows whose class changed during the run",
            "visual": "Visual rows", "visual_note": "compared by the agent with the capture; spot-check them",
-           "fixed": "Fixed since the previous run", "previous": "Previous run", "defects": "Defects", "dstatus": "Status", "tracker": "Tracker", "dtitle": "Title",
+           "flaky": "Flaky rows (passed only when tried again)", "fixed": "Fixed since the previous run", "previous": "Previous run", "defects": "Defects", "dstatus": "Status", "tracker": "Tracker", "dtitle": "Title",
            "all": "All rows", "none": "None.", "draft": "Results are a draft for the tester to review.",
            "expected": "Expected", "actual": "Actual", "evidence": "Evidence", "verdict": "Result",
            "from": "From", "to": "To", "content": "Content", "scenario": "Scenario", "screen": "Screen",
@@ -363,7 +402,7 @@ REPORT = {
            "state": "状態", "count": "件数", "fail": "NGの行", "notrun": "未実施の行", "reason": "理由",
            "self": "テスターが実施した行", "changed": "実施中に分類が変わった行", "visual": "見た目の行",
            "visual_note": "エージェントがキャプチャと見比べた結果です。抜き取りで確認してください",
-           "fixed": "前回のNGから修正された行", "previous": "前回の実施", "defects": "不具合", "dstatus": "状態", "tracker": "チケット", "dtitle": "タイトル",
+           "flaky": "不安定な行（再試行で合格）", "fixed": "前回のNGから修正された行", "previous": "前回の実施", "defects": "不具合", "dstatus": "状態", "tracker": "チケット", "dtitle": "タイトル",
            "all": "全行", "none": "なし。", "draft": "結果はテスターが確認するための下書きです。",
            "expected": "期待結果", "actual": "実際の結果", "evidence": "エビデンス", "verdict": "結果",
            "from": "変更前", "to": "変更後", "content": "内容", "scenario": "シナリオ", "screen": "画面",
@@ -375,7 +414,7 @@ REPORT = {
            "state": "Trạng thái", "count": "Số dòng", "fail": "Các dòng fail", "notrun": "Các dòng không chạy",
            "reason": "Lý do", "self": "Các dòng tester tự chạy", "changed": "Các dòng đổi phân loại khi chạy",
            "visual": "Các dòng giao diện", "visual_note": "do agent so với ảnh chụp; hãy kiểm tra lại vài dòng",
-           "fixed": "Các dòng đã sửa so với lần chạy trước", "previous": "Lần chạy trước", "defects": "Lỗi", "dstatus": "Trạng thái", "tracker": "Mã ticket", "dtitle": "Tiêu đề",
+           "flaky": "Dòng chập chờn (chạy lại mới đạt)", "fixed": "Các dòng đã sửa so với lần chạy trước", "previous": "Lần chạy trước", "defects": "Lỗi", "dstatus": "Trạng thái", "tracker": "Mã ticket", "dtitle": "Tiêu đề",
            "all": "Tất cả các dòng", "none": "Không có.", "draft": "Kết quả là bản nháp để tester xem lại.",
            "expected": "Mong đợi", "actual": "Thực tế", "evidence": "Bằng chứng", "verdict": "Kết quả",
            "from": "Từ", "to": "Sang", "content": "Nội dung", "scenario": "Kịch bản", "screen": "Màn hình",
@@ -437,6 +476,10 @@ def report_markdown(run: dict, workbook_name: str, captures: dict[str, str] | No
     lines += _table(["Row", "No", t["content"], t["previous"]],
                     [[c["row"], value_for(c, "no", {}), c.get("content"), marks[c["row"]]["previous"].get("name")]
                      for c in fixed]) if fixed else [t["none"]]
+    flaky = [c for c in cases if (c.get("result") or {}).get("flaky")]
+    lines += ["", f"## {t['flaky']}", ""]
+    lines += _table(["Row", "No", t["content"]], [[c["row"], value_for(c, "no", {}), c.get("content")] for c in flaky]
+                    ) if flaky else [t["none"]]
     listed = [c for c in cases if c["row"] in defects]
     lines += ["", f"## {t['defects']}", ""]
     lines += _table(["Row", "No", t["dtitle"], t["dstatus"], t["tracker"], t["reason"]],
@@ -489,7 +532,7 @@ def export(folder: Path, run: dict) -> dict:
     plan = run.get("columns")
     if not plan or not plan.get("columns"):
         raise WebtestError("the run has no confirmed column plan")
-    entry = _entry(plan.get("template"))
+    entry = _entry(plan.get("template"), None, plan.get("template_version"))
     columns = {c["field"]: c["letter"] for c in plan["columns"]}
     new_headers = {c["letter"]: c["header"] for c in plan["columns"] if c.get("new")}
     captures = capture_links(folder, run)

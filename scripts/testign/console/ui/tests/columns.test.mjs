@@ -59,7 +59,8 @@ test('labels need Pass and Fail; another template is sent and its headers left t
   const out = columnsAnswer(INFO, setColumn(other, 3, { letter: 'B', new: undefined }));
   assert.equal(out.body.template, 'other');
   assert.ok(!out.errors.some((e) => e.key === 'rt_err_no_header'));
-  assert.deepEqual(freeFields(initialDraft(INFO), INFO), ['screen', 'expected', 'evidence', 'executed_at', 'by']);
+  assert.deepEqual(freeFields(initialDraft(INFO), INFO), ['screen', 'expected', 'evidence', 'executed_at', 'by',
+    'flaky', 'verdict_chromium', 'verdict_msedge', 'verdict_firefox', 'verdict_webkit']);
 });
 
 test('the editor saves the plan and reports a busy run', async () => {

@@ -460,8 +460,27 @@ class TargetError(WebtestError):
         self.code = code
 
 
+BROWSERS = ("chromium", "msedge", "firefox", "webkit")
+
+
+def check_browsers(value: Any) -> list[str]:
+    """The browsers a run replays in, in a fixed order; Chromium when none are named."""
+    if value in (None, [], ""):
+        return ["chromium"]
+    if not isinstance(value, list) or not all(isinstance(b, str) for b in value):
+        raise TargetError("browsers must be a list of names", "bad-browsers")
+    unknown = sorted(set(value) - set(BROWSERS))
+    if unknown:
+        raise TargetError(f"unknown browser {unknown[0]}; choose from {', '.join(BROWSERS)}", "bad-browsers")
+    return [b for b in BROWSERS if b in value]
+
+
+def run_browsers(run: dict) -> list[str]:
+    return list(run.get("browsers") or ["chromium"])
+
+
 def check_run_target(projects: dict, templates_listing: dict, base_url: Any, project: Any,
-                     template: Any = None) -> dict:
+                     template: Any = None, browsers: Any = None) -> dict:
     """The environment a run goes to: base URL on the project's hosts, and a registered template.
 
     The run's hosts are the project's hosts now; only the tester edits them, in the console.
@@ -479,7 +498,8 @@ def check_run_target(projects: dict, templates_listing: dict, base_url: Any, pro
     template = template or templates_listing.get("default")
     if template not in names:
         raise TargetError("template is not registered", "unknown-template")
-    return {"base_url": base_url, "project": project, "hosts": hosts, "template": template}
+    return {"base_url": base_url, "project": project, "hosts": hosts, "template": template,
+            "browsers": check_browsers(browsers)}
 
 
 def _suite_capture(suite_folder: Path, capture: Any) -> bytes | None:
@@ -552,7 +572,7 @@ def new_run_from_suite(root: Path, suite: dict, suite_folder: Path, *, name: Any
         "suite": {"id": suite["id"], "name": suite.get("name") or suite["id"],
                   "suite_digest": suite.get("suite_digest")},
         "base_url": target["base_url"], "project": target["project"], "hosts": list(target["hosts"]),
-        "template": target["template"],
+        "template": target["template"], "browsers": list(target.get("browsers") or ["chromium"]),
         "ticket": suite["source"].get("ticket") if kind == "backlog" else None,
         "report_lang": report_lang, "ui_lang": ui_lang, "plan_job": None, "tester": tester,
         "jobs": {"current": None, "session": None}, "signed_in": None,
@@ -745,9 +765,13 @@ def add_evidence(folder: Path, row: str, data: bytes, source: str) -> dict:
 
 
 def replay_result(folder: Path, row: str, *, job: str | None, verdict: str, actual: str, url: str,
-                  screenshot: bytes | None, by: str) -> dict:
+                  screenshot: bytes | None, by: str, screenshots: list[tuple[str, bytes]] | None = None,
+                  browsers: dict | None = None, flaky: bool = False) -> dict:
     """A queued agent row run from the suite's spec (``by`` is ``record`` or ``replay``): pass or fail
-    with the page's screenshot, ``not-run: off-site`` when the page ended outside the run's hosts."""
+    with the page's screenshot, ``not-run: off-site`` when the page ended outside the run's hosts.
+
+    A replay in several browsers passes ``screenshots`` as (browser, image) pairs and ``browsers``
+    as each browser's own verdict; ``flaky`` marks a row that passed only when tried again."""
     if verdict not in ("pass", "fail"):
         raise WebtestError('the verdict must be "pass" or "fail"')
     run = load(folder)
@@ -763,20 +787,30 @@ def replay_result(folder: Path, row: str, *, job: str | None, verdict: str, actu
         not_run(case, "off-site")
         save(folder, run)
         return {"row": row, "state": "not-run", "reason": "off-site"}
-    ext = _image_ext(screenshot) if screenshot else None
-    if ext is not None and len(screenshot) <= IMAGE_CAP:
-        name = f"{row}-a{case['attempt']}-1{ext}"
+    shots = list(screenshots) if screenshots is not None else ([("", screenshot)] if screenshot else [])
+    for label, data in shots:
+        ext = _image_ext(data) if data else None
+        if ext is None or len(data) > IMAGE_CAP:
+            continue
+        name = f"{row}-a{case['attempt']}-{len(out['evidence']) + 1}{ext}"
         (folder / "evidence").mkdir(exist_ok=True)
-        fsutil.atomic_write_bytes(folder / "evidence" / name, screenshot)
-        case.setdefault("evidence", []).append({"file": f"evidence/{name}", "attempt": case["attempt"], "source": by})
-        out["evidence"] = [f"evidence/{name}"]
+        fsutil.atomic_write_bytes(folder / "evidence" / name, data)
+        case.setdefault("evidence", []).append({"file": f"evidence/{name}", "attempt": case["attempt"], "source": by,
+                                                **({"browser": label} if label else {})})
+        out["evidence"].append(f"evidence/{name}")
+        if browsers and label in browsers:
+            browsers[label]["evidence"] = f"evidence/{name}"
+    if browsers:
+        out["browsers"] = browsers
+    if flaky:
+        out["flaky"] = True
     case["result"] = out
     move(case, verdict, owner_job=None)
     save(folder, run)
     return {"row": row, "state": verdict, "evidence": out["evidence"]}
 
 
-def replay_not_run(folder: Path, row: str, reason: str, note: str = "") -> dict:
+def replay_not_run(folder: Path, row: str, reason: str, note: str = "", browsers: dict | None = None) -> dict:
     """A queued row the spec could not decide: ``spec-error`` or ``session-expired``."""
     if reason not in ("spec-error", "session-expired"):
         raise WebtestError("a replay leaves a row not run only for spec-error or session-expired")
@@ -785,7 +819,7 @@ def replay_not_run(folder: Path, row: str, reason: str, note: str = "") -> dict:
     if case["state"] != "queued":
         raise WebtestError(f"{row} is {case['state']}; only a queued row is replayed")
     case["result"] = {"verdict": "not-run", "actual": _text(note, "actual"), "url": "", "evidence": [],
-                      "executed_at": now_iso(), "by": "replay"}
+                      "executed_at": now_iso(), "by": "replay", **({"browsers": browsers} if browsers else {})}
     not_run(case, reason)
     save(folder, run)
     return {"row": row, "state": "not-run", "reason": reason}

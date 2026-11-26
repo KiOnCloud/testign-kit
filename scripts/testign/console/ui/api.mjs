@@ -231,6 +231,7 @@ export const api = {
   approveScenario: (project, name, hash) => request('POST', `/api/webtest/login/${seg(project)}/${seg(name)}/approve`, { json: { hash } }),
   rejectScenario: (project, name, note) => request('POST', `/api/webtest/login/${seg(project)}/${seg(name)}/reject`, { json: { note } }),
   removeScenario: (project, name) => request('DELETE', `/api/webtest/login/${seg(project)}/${seg(name)}`),
+  saveProfile: (project, profile, body) => request('PUT', `/api/webtest/profiles/${seg(project)}/${seg(profile)}`, { json: body }),
   approveRecipe: (project, name, fingerprint) => request('POST', `/api/webtest/login/${seg(project)}/${seg(name)}/recipe/approve`, { json: { fingerprint } }),
   sources: () => request('GET', '/api/webtest/sources'),
   suites: () => request('GET', '/api/webtest/suites'),

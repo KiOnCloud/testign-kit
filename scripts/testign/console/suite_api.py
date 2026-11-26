@@ -314,7 +314,7 @@ def create_run(state, body: Any, session: str | None) -> dict:
     with LOCK:
         made = _do(webtest_suite.create_run, runs_root(state), body.get("suite"), name=body.get("name"),
                    base_url=body.get("base_url"), project=body.get("project"), template=body.get("template"),
-                   tester=tester, home=state.home, report_lang=cfg.get("lang"))
+                   tester=tester, home=state.home, report_lang=cfg.get("lang"), browsers=body.get("browsers"))
     made.pop("folder", None)
     return made
 

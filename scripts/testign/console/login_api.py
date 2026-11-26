@@ -67,6 +67,23 @@ def approve_recipe(home, project: Any, scenario: Any, body: Any, session: str | 
         raise ApiError(409, "recipe-not-ready", str(exc)) from None
 
 
+def save_profile(home, project: Any, profile: Any, body: Any) -> dict:
+    """The tester types a staging test account's values on the console. Write-only: the answer, like
+    every other route, holds the profile's keys and never a value."""
+    body = body if isinstance(body, dict) else {}
+    if body.get("staging_test_account") is not True:
+        raise ApiError(400, "bad-request", "only a dedicated staging test account goes in a profile; tick the box")
+    values = body.get("values")
+    if not isinstance(values, dict) or not all(isinstance(v, str) for v in values.values()):
+        raise ApiError(400, "bad-request", "values must be an object of text values")
+    try:
+        return login_recipe.set_profile(home, project, profile, values)
+    except ls.NotFound as exc:
+        raise ApiError(404, "not-found", str(exc)) from None
+    except login_recipe.RecipeError as exc:
+        raise ApiError(400, "bad-request", str(exc)) from None
+
+
 def install(state) -> None:
     home = state.home
     r = state.router
@@ -84,5 +101,9 @@ def install(state) -> None:
                                             _by(q.session))))
     r.add("POST", "/api/webtest/login/:project/:scenario/recipe/approve", "browser",
           lambda q: approve_recipe(home, q.params["project"], q.params["scenario"], q.body, q.session))
+    r.add("PUT", "/api/webtest/profiles/:project/:profile", "browser",
+          lambda q: save_profile(home, q.params["project"], q.params["profile"], q.body))
+    r.add("DELETE", "/api/webtest/profiles/:project/:profile", "browser",
+          lambda q: _call(lambda: login_recipe.remove_profile(home, q.params["project"], q.params["profile"])))
     r.add("DELETE", "/api/webtest/login/:project/:scenario", "browser",
           lambda q: _call(lambda: ls.remove(home, q.params["project"], q.params["scenario"])))

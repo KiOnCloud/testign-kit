@@ -48,9 +48,14 @@ testign-kit makes that investigation an automatic step for every ticket, and tur
 - **openpyxl** for `/testign:testcase`: `python3 -m pip install openpyxl` (or `py -3 -m pip install openpyxl` on Windows).
 - Git, and a local clone of the customer repository. The plugin only reads it (`git show`, `git diff`, `git log`, `git grep`) and never checks out or changes the working tree.
 - The Backlog MCP server (see below) for reading tickets and the wiki.
-- Optional, for recording and replaying web tests: **Playwright for Python** and its Chromium
-  (`python3 -m pip install playwright` then `python3 -m playwright install chromium`). Set
+- Optional, for recording and replaying web tests: **Playwright for Python** and its Chromium. Set
   `TESTIGN_BROWSER_EXECUTABLE` to use another Chromium build. Nothing else needs it.
+
+`python3 scripts/run.py setup` (in the installed plugin folder; `py -3` on Windows) checks Python and
+openpyxl; add `--webtest`, or `--browser chromium --browser firefox ...`, to check Playwright and each
+browser too. `--install` installs what it can without admin rights (`pip install --user`, `playwright
+install <browser>`) and prints the commands left for you: Microsoft Edge is the system's Edge, and on
+Linux the browsers' system libraries need `sudo python3 -m playwright install-deps`.
 
 ### Install the plugin
 
@@ -155,6 +160,11 @@ applies to every subagent in your sessions, not only this plugin's. Remove it wh
 ### Test case templates
 
 `/testign:testcase` fills a copy of your own Excel test case template. On the first run it asks for the template file and a name, detects the header row and which column holds each field (`No`, 確認項目, 手順, 期待結果, エビデンス, 備考), and registers it. You can register several templates (for example one per customer) and pick one per run; `template-preview` shows a template's sheets, header and column mapping as a small Markdown table in chat instead of having the model read the workbook.
+
+Registering a template again under the same name (`--replace`, or *Replace* on the Templates screen)
+makes a new version and keeps the earlier ones (up to ten). A web test run records the version its
+export columns were made for and keeps exporting with it, so a changed template never shifts the
+columns of an older run; a new run takes the current version.
 
 Registered templates are copied to `~/.testign-kit/templates/` with an `index.json` that records each name, sheet, header row and column mapping. They live there, not inside the installed plugin folder, so plugin updates keep them and customer templates never end up in this public repository.
 
@@ -320,18 +330,45 @@ session tells the console which of these tools it has, and *Agent & jobs* shows 
    spec, not the app); a failed sign-in marks the rows of that scenario *not run: session expired*.
    Editing a case or a step clears the review, and a changed case is not replayed.
 
+   A row that fails or cannot run is tried once more; if it passes then, it is a pass marked
+   *Flaky* (in the row, the report's flaky list and an optional *Flaky mark* export column).
+
+   *Browsers for replay* on New run picks where replay runs each row: Chromium (default), Microsoft
+   Edge, Firefox and WebKit (Safari's engine). The row fails if one browser fails, the export gets a
+   result column per browser, and a browser that is not installed leaves its column *Pending*
+   (`setup --browser <name> --install` adds it). Runs in your own Chrome are not affected.
+
+   **Replay with nobody at the console.** A scheduler can run a suite's reviewed spec on its own:
+
+   ```bash
+   python3 scripts/run.py webtest-replay-new --suite <suite id> --base-url https://staging.example.test/ \
+       --project <project> --tester nightly --browser chromium --export
+   ```
+
+   It makes a new run, replays every row with a reviewed spec, and with `--export` closes and exports
+   the run when no row is left open (rows without a spec stay queued for a run in Chrome).
+   `webtest-replay --run <run id>` without `--job` replays the queued rows of an existing run; it
+   refuses while a console job has a row running. Schedule it with cron
+   (`0 2 * * 1-5 cd <plugin folder> && python3 scripts/run.py webtest-replay-new ...`) or the
+   Windows Task Scheduler (`schtasks /Create /SC DAILY /ST 02:00 /TN testign-nightly /TR "py -3
+   <plugin folder>\scripts\run.py webtest-replay-new ..."`). It signs in with the approved Login
+   Recipe, so the computer must stay on and signed in to your account.
+
 #### Login Recipe
 
 Record and replay sign in by themselves with a scenario's **Login Recipe**: the sign-in steps the
 agent drafts (`login-recipe-save`), with `{{username}}` and `{{password}}` placeholders instead of
-values. You type the values yourself, in your own terminal:
+values. You type the values yourself: in the scenario's dialog on the *Login scenarios* screen
+(*Account values of profile …*, with the staging box ticked), or in your own terminal:
 
 ```bash
 python3 scripts/run.py profile-set --project <project> --profile <profile> --key username --key password
 ```
 
-It asks you to confirm the account is a **dedicated staging test account** (use nothing else), reads
-each value without echo, refuses piped input, and writes
+Both ask you to confirm the account is a **dedicated staging test account** (use nothing else). The
+console form is write-only: it starts empty, the server never sends a value back, and only your
+console tab may call it. The terminal command reads each value without echo, refuses piped input,
+and both write
 `~/.testign-kit/webtest/profiles/<project>/<profile>.json` readable by you only (mode 600; the
 values are plain text in that file). The agent then tests the recipe (`login-recipe-test`), and you
 check the steps and press *Approve recipe* in the scenario's dialog. A recipe is used only with its
@@ -339,8 +376,8 @@ values set, a passing test and your approval; saving it again clears both. The s
 session is kept in `~/.testign-kit/webtest/sessions/` (mode 600) and refreshed when it expires.
 
 The plugin's secret guard hook blocks the agent from reading, searching or editing the profiles and
-sessions folders, from running `profile-set` or `profile-remove`, and from approving a recipe through
-the console API. Errors and recordings are redacted of profile values. Runs in your own Chrome
+sessions folders, from running `profile-set` or `profile-remove`, and from approving a recipe or
+writing a profile through the console API. Errors and recordings are redacted of profile values. Runs in your own Chrome
 (*Run*) still never use a profile: you sign in by hand.
 
 Runs made before suites existed (run file version 1, imported straight from a Figma table) still
@@ -393,8 +430,8 @@ Limits:
 - The secret guard matches what a tool call names: a file path, a search folder, or the text of a
   command. A command that reaches the profiles folder without naming it (a script that builds the
   path) is not caught. That is why a profile may hold only a dedicated staging test account.
-- Replay runs inside a console job (*Replay N* on the run); there is no unattended or scheduled
-  replay, and profiles are typed in a terminal, not on a console screen.
+- A scheduled replay runs as you, with your profiles, whenever the computer is on: schedule it only
+  against a staging environment, and remember it changes data the same way the recorded steps did.
 
 ## Repository layout
 
@@ -429,6 +466,7 @@ Limits:
 │       ├── webtest_live.py         # the Playwright engine (optional dependency)
 │       ├── login_recipe.py         # Login Recipes, profiles and saved sessions
 │       ├── secret_guard.py         # the hook that keeps the agent away from profiles
+│       ├── setup_check.py          # the setup command: dependencies and browsers
 │       ├── git_guard.py            # guard list and the git write guard hook
 │       └── console/                # console server, read API, job queue, suite API
 │           └── ui/                 # browser UI: ES modules, no build step, Yohaku styles, en/ja

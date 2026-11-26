@@ -74,6 +74,42 @@ export function recipeSection(t, recipe) {
   ]);
 }
 
+/**
+ * The account values of a recipe's profile, typed by the tester. Write-only: the inputs start empty,
+ * nothing is read back, and the server keeps the values in a file only the tester can read.
+ */
+export function profileForm(ctx, project, recipe, onSaved) {
+  const { t } = ctx;
+  const keys = recipe.placeholders || [];
+  const inputs = keys.map((k) => h('input.yh-input', { type: k.toLowerCase().includes('pass') ? 'password' : 'text', id: `pv-${k}`,
+    autocomplete: 'off', spellcheck: 'false', maxlength: '500', dataset: { profileKey: k } }));
+  const staging = h('input', { type: 'checkbox', id: 'pv-staging', dataset: { profileStaging: '1' } });
+  const errorBox = h('div', { role: 'alert' });
+  const save = h('button.yh-btn.yh-btn--sm', { type: 'button', dataset: { saveProfile: recipe.profile } }, t('profile_save'));
+  save.addEventListener('click', async () => {
+    const values = {};
+    keys.forEach((k, i) => { values[k] = inputs[i].value; });
+    if (keys.some((k) => !values[k])) { mount(errorBox, h('p.k-field__error', [icon('warning'), t('profile_err_empty')])); return; }
+    if (!staging.checked) { mount(errorBox, h('p.k-field__error', [icon('warning'), t('profile_err_staging')])); return; }
+    save.disabled = true;
+    try {
+      await ctx.api.saveProfile(project, recipe.profile, { staging_test_account: true, values });
+      for (const el of inputs) el.value = '';
+      ctx.toast(t('profile_saved_toast'));
+      onSaved();
+    } catch (err) {
+      save.disabled = false;
+      mount(errorBox, h('p.k-field__error', [icon('warning'), jobErrorText(t, err)]));
+    }
+  });
+  return h('div.yh-stack', { dataset: { profileForm: recipe.profile } }, [
+    h('h3.yh-h3.m-0', t('profile_title', { profile: recipe.profile })),
+    h('div.grid2', keys.map((k, i) => field(h('span.mono', k), inputs[i]))),
+    h('label.st-row', [staging, h('span', t('profile_staging'))]),
+    errorBox, h('div.row-8', save),
+  ]);
+}
+
 /** One scenario in a dialog: its checklist, and approve, reject (needs a note) or remove. */
 export function openScenario(ctx, project, s, after) {
   const { t } = ctx;
@@ -141,6 +177,7 @@ export function openScenario(ctx, project, s, after) {
         (s.steps || []).length ? h('ol.signin-steps', s.steps.map((x) => h('li', x))) : h('p.yh-muted.m-0', NONE),
         h('p.yh-caption.yh-muted.m-0', t('login_steps_readonly'))]),
       recipeSection(t, recipe),
+      recipe && recipe.profile && (recipe.placeholders || []).length ? profileForm(ctx, project, recipe, () => { dlg.close(); after(); }) : null,
       field([t('login_note'), ' ', h('span.yh-muted', t('login_note_when'))], note),
       h('p.yh-caption.yh-muted.m-0', t('login_no_values')),
       errorBox,

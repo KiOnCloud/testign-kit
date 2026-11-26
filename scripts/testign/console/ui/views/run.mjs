@@ -315,7 +315,13 @@ export function rowPanel(ctx, run, c, onSent, onClose) {
     const r = c.result;
     parts.push(h('div.stack-4', [h('span.k-section-label', t('run_result')),
       h('div.row-8', [badge(t(`wt_verdict_${String(r.verdict).replace(/-/g, '_')}`), r.verdict === 'pass' ? 'success' : r.verdict === 'fail' ? 'danger' : 'outline'),
+        r.flaky ? ybadge(t('run_flaky'), 'outline', { title: t('run_flaky_hint'), dataset: { flaky: '1' } }) : null,
         r.url ? h('code.k-mono.k-note.break', r.url) : null]),
+      r.browsers ? h('dl.kv', { dataset: { browserResults: '1' } }, Object.entries(r.browsers).flatMap(([name, b]) => [
+        h('dt', t(`browser_${name}`)),
+        h('dd', [badge(t(`wt_verdict_${String(b.verdict).replace(/-/g, '_')}`), b.verdict === 'pass' ? 'success' : b.verdict === 'fail' ? 'danger' : 'outline'),
+          b.flaky ? [' ', ybadge(t('run_flaky'), 'outline')] : null]),
+      ])) : null,
       r.actual ? h('p.pre-wrap.panel-text', r.actual) : null]));
   }
   if (c.state === 'not-run' && c.not_run_reason) parts.push(h('p.k-note', rowStateBadge(t, c.state, c.not_run_reason)));
