@@ -4,7 +4,7 @@ import pytest
 
 from make_webtest_run import ready_suite
 
-from testign import webtest_spec, webtest_suite
+from testign import webtest_live, webtest_spec, webtest_suite
 
 LABEL = [{"action": "goto", "value": "/mypage"},
          {"action": "expect_text", "locator": {"role": "banner"}, "value": "予約履歴"}]
@@ -34,7 +34,7 @@ def test_only_eligible_cases_with_a_check_and_no_host_or_placeholder(suite_folde
         })
     text = " ".join(err.value.problems)
     assert "c3: only a sure case" in text
-    assert "c1: the steps need at least one expect_" in text
+    assert "c1: the steps need at least one check" in text
     assert "goto takes a path" in text and "no placeholder" in text
     assert "c9: no such case" in text
     assert webtest_spec.load(suite_folder) is None
@@ -103,3 +103,36 @@ def test_view_lists_eligible_cases_with_warnings(suite_folder):
     assert {"live_data_locator", "unsourced", "no_value_check"} <= kinds
     removed = webtest_spec.remove_cases(suite_folder, ["c1"])
     assert removed["cases"] == {}
+
+
+def test_state_checks_and_click_blocked_are_valid_steps():
+    problems: list[str] = []
+    btn = {"role": "button", "name": "Save"}
+    steps = webtest_spec.check_steps("c1", [
+        {"action": "goto", "value": "/cart"},
+        {"action": "expect_disabled", "locator": btn},
+        {"action": "click_blocked", "locator": btn, "value": "Saved"},
+        {"action": "click_blocked", "locator": btn},
+    ], problems)
+    assert problems == [] and steps[2]["value"] == "Saved" and "value" not in steps[3]
+    webtest_spec.check_steps("c1", [{"action": "goto", "value": "/"}, {"action": "click_blocked", "locator": btn}], problems)
+    assert problems == []  # click_blocked alone is a check
+    bad: list[str] = []
+    webtest_spec.check_steps("c1", [{"action": "expect_disabled", "locator": btn, "value": "x"},
+                                    {"action": "click_blocked", "locator": btn, "value": "{{password}}"},
+                                    {"action": "click_blocked", "locator": btn, "value": "  "}], bad)
+    assert len(bad) == 3
+
+
+def test_state_warnings_follow_the_expected_result():
+    btn = {"role": "button", "name": "Save"}
+    goto = {"action": "goto", "value": "/cart"}
+    warn = lambda steps, expected: {w["kind"] for w in webtest_live.assertion_warnings(steps, expected)}  # noqa: E731
+    assert warn([goto, {"action": "click", "locator": btn}, {"action": "expect_text", "locator": {"css": "p"}, "value": "Saved"}],
+                "[Save] is disabled while Quantity is empty. Saved") >= {"state_unchecked"}
+    assert warn([goto, {"action": "expect_disabled", "locator": btn}, {"action": "click_blocked", "locator": btn}],
+                "[保存]ボタンは非活性") == set()
+    assert warn([goto, {"action": "expect_disabled", "locator": btn}], "Nút [Lưu] bị vô hiệu") == set()
+    assert "unsourced" in warn([goto, {"action": "expect_enabled", "locator": btn}], "[Save] is disabled")
+    assert webtest_live.says_state("[保存]ボタンは活性", "enabled") and not webtest_live.says_state("非活性", "enabled")
+    assert webtest_live.says_state("The box is not checked", "unchecked")

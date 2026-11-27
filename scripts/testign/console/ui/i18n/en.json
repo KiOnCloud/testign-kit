@@ -1265,6 +1265,7 @@
   "spec_warn_live_data_locator": "Step {step} picks an element by live data ({value}); it may differ next time",
   "spec_warn_unsourced": "Step {step} checks a value that does not come from the expected result ({value})",
   "spec_warn_no_value_check": "No step checks a value from the expected result",
+  "spec_warn_state_unchecked": "The expected result says disabled, but no step checks it with expect_disabled",
   "wt_field_flaky": "Flaky mark",
   "wt_field_verdict_chromium": "Result (Chromium)",
   "wt_field_verdict_msedge": "Result (Edge)",

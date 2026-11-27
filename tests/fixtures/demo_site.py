@@ -19,6 +19,7 @@ class DemoSite:
         self.footer_link = True
         self.tokens: set[str] = set()
         self.submits = 0
+        self.cart_posts = 0
         site = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -57,6 +58,15 @@ class DemoSite:
                 elif path == "/":
                     footer = '<footer><a href="/help">Help</a></footer>' if site.footer_link else "<footer></footer>"
                     self._send(200, PAGE.format(title="Top", body=f"<h1>Top</h1>{footer}"))
+                elif path == "/cart":
+                    # [Save] is natively disabled; [Update] is only marked disabled and still submits (a
+                    # deliberate bug for click_blocked); the box is read-only and the consent is ticked.
+                    self._send(200, PAGE.format(title="Cart", body=(
+                        '<form method="post" action="/cart"><label>Quantity <input name="qty" value=""></label>'
+                        '<label>Code <input name="code" value="X1" readonly></label>'
+                        '<label><input type="checkbox" name="agree" checked> Agree</label>'
+                        '<button type="submit" disabled>Save</button>'
+                        '<button type="submit" aria-disabled="true">Update</button></form>')))
                 elif path == "/away":
                     self._send(200, PAGE.format(title="Away", body='<a href="http://other.invalid/">Partner</a>'))
                 else:
@@ -72,6 +82,9 @@ class DemoSite:
                         self._send(302, headers={"Location": "/mypage", "Set-Cookie": f"sid={token}; Path=/"})
                     else:
                         self._send(401, PAGE.format(title="Sign in", body="<p>Wrong user or password</p>"))
+                elif self.path == "/cart":
+                    site.cart_posts += 1
+                    self._send(200, PAGE.format(title="Cart", body="<p>Cart updated</p>"))
                 elif self.path == "/subscribe":
                     site.submits += 1
                     self._send(200, PAGE.format(title="Done", body="<p>Subscribed</p>"))

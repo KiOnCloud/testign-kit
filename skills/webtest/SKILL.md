@@ -287,14 +287,35 @@ Record and replay sign in without the tester. For each scenario they need (not `
 A suite's replay spec (`spec.json` in the suite folder) holds Playwright steps per case. Only a
 `sure` case run by the agent on PC, of kind label, element or behaviour, may have one. Steps:
 `goto` (a path, never a host), `click`, `dblclick`, `fill`, `press`, `select`, `check`,
-`wait_visible`, `expect_visible`, `expect_hidden`, `expect_text`, `expect_value`, `expect_url`; each takes a
+`wait_visible`, `expect_visible`, `expect_hidden`, `expect_text`, `expect_value`, `expect_url`, the
+state checks `expect_enabled`, `expect_disabled`, `expect_checked`, `expect_unchecked`,
+`expect_editable`, `expect_readonly` (locator, no value), and `click_blocked` (locator, optional
+value; see "Button state" below); each takes a
 `locator` with exactly one of `role` (with `name`), `label`, `placeholder`, `text`, `test_id`, `css`
 and optional `exact` / `nth`, and a `value` where the action needs one. Every case needs at least one
-`expect_` step that checks the expected result, and no `{{placeholder}}`. A spec is used for replay only after the tester
+check (`expect_` or `click_blocked`) of the expected result, and no `{{placeholder}}`. A spec is used for replay only after the tester
 marks it reviewed on the suite's Replay spec tab, which needs a check where every step ran; any
 edit of a case or a step clears the review. `<run> webtest-spec-show --suite <S>` shows it with
 warnings (a locator on live data such as a date or a count, a checked value not in the expected
-result, no value check): fix what they point at before the tester reviews.
+result, no value check, `state_unchecked` when the expected result says "disabled" and no
+`expect_disabled` checks it): fix what they point at before the tester reviews.
+
+### Button state
+
+When an expected result is about a control's state ("[Save] is disabled", "[Agree] is checked",
+非活性, 読み取り専用), check the state itself:
+
+- Disabled: `expect_disabled` on the control, then `click_blocked` on it. `click_blocked` presses it
+  anyway and fails when anything happens within its window (default 1500 ms): a request that
+  changes data, a new URL, or the text in its `value` appearing (put the design's success message
+  there when there is one). A button that is only marked or styled disabled (`aria-disabled`, a CSS
+  class) but still submits fails here, which is the point. Never use a plain `click` to show a
+  button is disabled: on a disabled button it times out and records nothing.
+- Enabled, checked, unchecked, editable, read-only: the matching `expect_` state check.
+- A state check is sourced when the expected result names that state (en, ja or vi wording); one
+  it does not name comes back as an `unsourced` warning.
+- When the expected result says the control is disabled until something is filled in, put the
+  page in that state first (leave the input empty, or fill the invalid value), then check.
 
 ## Record job (`webtest-run`, `mode: record`)
 
@@ -309,14 +330,19 @@ replays the row from a fresh page, so what passes is what replay will do.
    steps, expected), the steps so far, the page URL and an accessibility snapshot. Then
    `<run> webtest-record-step --run <r> --row <row> --step <file>` for one step at a time:
    - `result: ok` → recorded; the new snapshot shows the page after it.
-   - `result: fail` → an `expect_` step did not hold: recorded, and the row is closed as a failure
-     (a defect). Do not change the check to make it pass.
+   - `result: fail` → a check (`expect_` or `click_blocked`) did not hold: recorded, and the row is
+     closed as a failure (a defect). Do not change the check to make it pass.
+   - `result: failed` → an action (click, fill…) on a found element failed: not recorded; usually
+     the wrong element. With `disabled: true` the element is the right one and the app has it
+     disabled: that is a finding, not a wrong locator. If the expected result says the action
+     works, record `expect_enabled` on it (it fails, so the row closes as a failure); if it says
+     the element is disabled, record `expect_disabled` and `click_blocked` ("Button state").
    - `result: spec_error` → the step could not run (no element, two elements, timeout): not
      recorded; try another locator from the snapshot.
    - `session_expired` / `off_site` → stop the row: give up with the reason.
    - `this_step_sent` lists data-changing requests the app received; their replies are kept, so the
      app sees each submit only once while you record.
-4. Close the row: `<run> webtest-record-done --run <r> --row <row>` (needs an `expect_` step), or
+4. Close the row: `<run> webtest-record-done --run <r> --row <row>` (needs a check step), or
    `<run> webtest-record-give-up --run <r> --row <row> --reason "<why>"` when no working locator is
    found (the row stays queued for a Chrome run). `--restart` on open drops the row's steps.
    Send `console progress` after each row.

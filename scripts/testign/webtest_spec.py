@@ -33,11 +33,17 @@ from .webtest import NO_SCENARIO, WebtestError, now_iso
 
 FILE = "spec.json"
 VERSION = 1
+# State checks compare an attribute of the element (disabled, checked, read-only), not its text.
+STATE_CHECKS = ("expect_enabled", "expect_disabled", "expect_checked", "expect_unchecked",
+                "expect_editable", "expect_readonly")
 ACTIONS = ("goto", "fill", "click", "dblclick", "press", "select", "check", "wait_visible",
-           "expect_visible", "expect_hidden", "expect_text", "expect_value", "expect_url")
+           "expect_visible", "expect_hidden", "expect_text", "expect_value", "expect_url") + STATE_CHECKS + ("click_blocked",)
 NEEDS_LOCATOR = ("fill", "click", "dblclick", "press", "select", "check", "wait_visible",
-                 "expect_visible", "expect_hidden", "expect_text", "expect_value")
+                 "expect_visible", "expect_hidden", "expect_text", "expect_value") + STATE_CHECKS + ("click_blocked",)
 NEEDS_VALUE = ("goto", "fill", "press", "select", "expect_text", "expect_value", "expect_url")
+# click_blocked presses the element anyway and fails when anything happens; its optional value is a
+# text that must not appear (the design's success message, say).
+OPTIONAL_VALUE = ("click_blocked",)
 ELIGIBLE_KINDS = ("label", "element", "behaviour")
 MAX_STEPS = 60
 MAX_VALUE = 2000
@@ -93,6 +99,13 @@ def check_step(raw: Any, where: str, problems: list[str]) -> dict:
         elif action == "goto" and (value.startswith(("http:", "https:", "//")) or "://" in value):
             problems.append(f"{where}: goto takes a path such as /mypage; the run's base URL gives the host")
         step["value"] = value
+    elif action in OPTIONAL_VALUE and value is not None:
+        if not isinstance(value, str) or not value.strip() or len(value) > MAX_VALUE:
+            problems.append(f"{where}: {action} value must be a text that must not appear")
+        elif "{{" in value:
+            problems.append(f"{where}: a spec holds no placeholder; a signed-in case signs in with its scenario's recipe")
+        else:
+            step["value"] = value
     elif value is not None:
         problems.append(f"{where}: {action} takes no value")
     check_timeout(raw, step, where, problems)
@@ -102,13 +115,18 @@ def check_step(raw: Any, where: str, problems: list[str]) -> dict:
     return step
 
 
+def is_check(action: str) -> bool:
+    """A step that checks the app's answer: when it fails, the case is a fail (not a wrong spec)."""
+    return action.startswith("expect_") or action == "click_blocked"
+
+
 def check_steps(case_id: str, raw: Any, problems: list[str]) -> list[dict]:
     if not isinstance(raw, list) or not raw or len(raw) > MAX_STEPS:
         problems.append(f"{case_id}: steps must be a list of 1 to {MAX_STEPS} steps")
         return []
     steps = [check_step(s, f"{case_id} step {i}", problems) for i, s in enumerate(raw, start=1)]
-    if not any(s.get("action", "").startswith("expect_") for s in steps):
-        problems.append(f"{case_id}: the steps need at least one expect_ check of the expected result")
+    if not any(is_check(s.get("action", "")) for s in steps):
+        problems.append(f"{case_id}: the steps need at least one check of the expected result (expect_ or click_blocked)")
     return steps
 
 

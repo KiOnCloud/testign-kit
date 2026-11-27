@@ -1265,6 +1265,7 @@
   "spec_warn_live_data_locator": "ステップ {step} は実データ（{value}）で要素を選んでいます。次回は変わる可能性があります",
   "spec_warn_unsourced": "ステップ {step} は期待結果にない値（{value}）を確認しています",
   "spec_warn_no_value_check": "期待結果の値を確認するステップがありません",
+  "spec_warn_state_unchecked": "期待結果は非活性ですが、expect_disabled で確認するステップがありません",
   "wt_field_flaky": "不安定マーク",
   "wt_field_verdict_chromium": "結果 (Chromium)",
   "wt_field_verdict_msedge": "結果 (Edge)",
