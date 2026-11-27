@@ -87,12 +87,16 @@ def start(bridge, body, session=A, *, created_before=1.0):
 def test_suite_generate_carries_the_suites_source_and_attaches_itself(bridge, world):
     job = bridge.create({"kind": "suite-generate", "ui_lang": "ja", "suite": SUITE})
     record = bridge.jobs[job["id"]]
-    assert record["suite"] == SUITE and record["params"] == {"suite": SUITE, "source": world.suites[SUITE]["source"]}
+    assert record["suite"] == SUITE and record["params"] == {"suite": SUITE, "source": world.suites[SUITE]["source"],
+                                                                "depth": world.suites[SUITE].get("depth")}
     assert record["ticket"] == "DEMO-1" and record["base_revision"] is None  # a later survey must not stop the job
     assert world.suites[SUITE]["generate_job"] == job["id"] and bridge.summary(record)["suite"] == SUITE
     with pytest.raises(ApiError) as exc:
         bridge.create({"kind": "suite-generate", "ui_lang": "en", "suite": SUITE})
     assert exc.value.code == "suite-busy"
+    bridge.jobs[job["id"]]["state"] = "done"
+    extend = bridge.create({"kind": "suite-generate", "ui_lang": "en", "suite": SUITE, "extend": True})
+    assert bridge.jobs[extend["id"]]["params"]["extend"] is True
 
 
 @pytest.mark.parametrize("change,code", [

@@ -295,6 +295,18 @@ session tells the console which of these tools it has, and *Agent & jobs* shows 
    *review*. On its Cases tab you edit cases (one at a time or in bulk), duplicate or delete them,
    then confirm; a confirmed suite is *ready*. No case runs before you confirm. A case the agent runs
    that writes data needs the preconditions you name.
+
+   **Test depth.** Each suite has a test depth, picked in the wizard: *Smoke* (display and the
+   normal action of each control), *Standard*, the default (adds button state with empty, missing
+   or wrong input, limits and the values next to them, message text, each role) or *Thorough* (adds
+   refill, character types, length, every pair of input values, double press, leaving with unsaved
+   input). The agent lists the controls the change touches and tags each case with the kit check it
+   covers. The suite's *Checks* tab lists every check per control with its status; a check that
+   does not apply is skipped there with a reason, and a suite with a missing check cannot be
+   confirmed. *Change depth* stores a new depth; when it requires more checks, *Add missing cases*
+   queues a job that adds only those cases. The suite's Excel export adds a *Coverage* sheet. A
+   suite made before test depth tracks nothing until you set one. `/testign:testcase` takes the
+   same depth (`--depth`) and reports the missing checks in its output.
 4. **Runs → New run:** pick a ready suite, the test base URL on one of the project's hosts, your
    name and a template. The run's export columns can be changed on the run while no job works on it.
 5. **Run:** the agent works one case at a time in your Chrome and saves a screenshot per case. It
@@ -324,7 +336,10 @@ session tells the console which of these tools it has, and *Agent & jobs* shows 
    what it saves is what replay does. A submit the app received while recording is answered from
    the kept reply afterwards, so the app sees it once. The steps go into the suite's *Replay spec*
    tab as a draft, with warnings for checks that may not hold next time (a date or count in a
-   locator, a value not in the expected result). After you review them there (*Mark reviewed*), a
+   locator, a value not in the expected result, an expected "disabled" that no step checks). A
+   control's state is checked as such (enabled, disabled, checked, read-only…), and a "disabled"
+   button is also pressed anyway: if it still sends data, changes the page or shows the success
+   message, the row fails, so a button that only looks disabled is caught. After you review them there (*Mark reviewed*), a
    later run shows *Replay N*: the rows run from the spec with no agent and no Chrome. A failed check
    is a *fail* with a screenshot; a step that cannot run marks the row *not run: spec error* (fix the
    spec, not the app); a failed sign-in marks the rows of that scenario *not run: session expired*.
@@ -457,6 +472,7 @@ Limits:
 │   └── testign/                    # python package (config, git scoping, ...)
 │       ├── webtest_sources.py      # where suite cases come from (figma, backlog, excel, manual)
 │       ├── webtest_suite.py        # test suites: cases, review and confirmation
+│       ├── coverage_rules.py       # test depth: the kit checks each control needs
 │       ├── webtest.py              # web test runs, copied from a suite
 │       ├── webtest_history.py      # results across runs and the Fixed mark
 │       ├── webtest_defects.py      # defect drafts for failed rows

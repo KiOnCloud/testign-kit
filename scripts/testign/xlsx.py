@@ -199,6 +199,28 @@ def fill_columns(template: Path, sheet: str, header_row: int, columns: dict[str,
     return {"path": str(out), "sheet": sheet, "rows": written}
 
 
+def append_table_sheet(workbook: Path, sheet_name: str, rows: list[list[Any]]) -> str:
+    """Add a plain sheet of ``rows`` to a workbook this plugin just wrote (an export, never the
+    template). Text starting with ``=`` stays text. Returns the sheet name used."""
+    workbook = Path(workbook)
+    with _editable(workbook) as wb:
+        name, n = sheet_name, 2
+        while name in wb.sheetnames:
+            name, n = f"{sheet_name}-{n}", n + 1
+        ws = wb.create_sheet(name)
+        for r, values in enumerate(rows, start=1):
+            for c, value in enumerate(values, start=1):
+                if value in (None, ""):
+                    continue
+                cell = ws.cell(row=r, column=c, value=value)
+                if isinstance(value, str) and value.startswith("="):
+                    cell.data_type = "s"
+        for letter, width in zip("ABCDEFG", (12, 32, 40, 14, 12, 16, 48)):
+            ws.column_dimensions[letter].width = width
+        wb.save(workbook)
+    return name
+
+
 def add_sheet(workbook: Path, layout: dict, cases: list[dict], sheet_name: str) -> dict[str, Any]:
     """Copy the filled ``workbook`` to a new file and add a sheet with ``cases``.
 

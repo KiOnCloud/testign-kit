@@ -251,3 +251,28 @@ def test_template_preview_output_is_pinned(tmp_path):
     assert proc.stdout == (FIXTURES / "template-preview-golden.md").read_text(encoding="utf-8")
     proc = run_cli("template-preview", "--file", str(SHIPPED_SAMPLE), home=home)
     assert proc.stdout == (FIXTURES / "template-preview-file-golden.md").read_text(encoding="utf-8")
+
+
+def test_cli_fill_with_a_test_depth_reports_the_missing_checks(tmp_path):
+    home = tmp_path / "home"
+    assert run_cli("template-register", "--file", str(SHIPPED_SAMPLE), "--name", "mẫu", home=home).returncode == 0
+    rpt = write_report(tmp_path / "reports", tmp_path, "d" * 40, "b" * 40)
+    btn, box = "Đơn/[Lưu]", "Đơn/[Tên]"
+    tagged = [{**CASES[0], "rule": "action.normal", "about": btn}, {**CASES[1], "rule": "display.initial", "about": box},
+              *CASES[2:]]
+    data = {"depth": "standard", "cases": tagged,
+            "controls": [{"about": btn, "type": "button", "action": True, "needs": [box]}, {"about": box, "type": "textbox"}]}
+    cases = tmp_path / "cases.json"
+    cases.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    proc = run_cli("xlsx-fill", "--report", str(rpt), "--cases", str(cases), "--out-dir", str(tmp_path / "out"), home=home)
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads(proc.stdout)
+    assert out["cases"] == len(tagged) and out["checks"]["missing"] == 1
+    assert out["checks"]["missing_checks"][0]["rule"] == "state.empty"
+    assert openpyxl.load_workbook(out["path"]).sheetnames == openpyxl.load_workbook(SHIPPED_SAMPLE).sheetnames
+    data["cases"][0]["rule"] = "nope"
+    cases.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    proc = run_cli("xlsx-fill", "--report", str(rpt), "--cases", str(cases), home=home)
+    assert proc.returncode == 2 and "case 1" in proc.stderr
+    proc = run_cli("coverage-rules", home=home)
+    assert proc.returncode == 0 and json.loads(proc.stdout)["default"] == "standard"

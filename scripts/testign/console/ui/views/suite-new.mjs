@@ -15,6 +15,7 @@ import {
 
 export const STEPS = ['source', 'input', 'details', 'review'];
 export const NAME_MAX = 120;
+export const DEPTHS = ['smoke', 'standard', 'thorough'];
 const FIGMA = /^https:\/\/(?:www\.)?figma\.com\/(?:design|file|proto)\/[A-Za-z0-9]{10,64}(?:\/[^?#]*)?\?(?:[^#]*&)?node-id=\d+[-:]\d+(?:[&#]|$)/;
 const EXCEL = /\.(xlsx|xlsm)$/i;
 
@@ -164,6 +165,7 @@ export function createBody(d, uiLang) {
   const body = { kind: d.kind, name: text(d.name), ui_lang: uiLang, ...SOURCE_FORMS[d.kind].payload(d) };
   if (text(d.project)) body.project = text(d.project);
   if (text(d.case_lang)) body.case_lang = text(d.case_lang);
+  if (DEPTHS.includes(d.depth)) body.depth = d.depth;
   return body;
 }
 
@@ -172,7 +174,7 @@ let draftKey = null;
 
 function freshDraft(query) {
   return { step: query.kind && SOURCE_FORMS[query.kind] ? 2 : 1, kind: SOURCE_FORMS[query.kind] ? query.kind : null,
-    ticket: query.ticket || '', figma_url: '', file: null, template: '', sheet: '', note: '', name: '', project: '', case_lang: '' };
+    ticket: query.ticket || '', figma_url: '', file: null, template: '', sheet: '', note: '', name: '', project: '', case_lang: '', depth: 'standard' };
 }
 
 export function render(ctx) {
@@ -255,6 +257,8 @@ function wizard(ctx, page, data) {
           field(t('wiz_case_lang'), selectWrap(selectEl({ id: 'wiz-lang', on: { change: (e) => set('case_lang', e.target.value) } },
             langs.map((l) => [l, langName(l)]), draft.case_lang)), null, null, 'wiz-lang'),
         ]),
+        field(t('depth_label'), selectWrap(selectEl({ id: 'wiz-depth', on: { change: (e) => set('depth', e.target.value, true) } },
+          DEPTHS.map((d) => [d, t(`depth_${d}`)]), draft.depth)), t(`depth_${draft.depth}_d`), null, 'wiz-depth'),
       ])];
     }
     const s = source();
@@ -265,6 +269,7 @@ function wizard(ctx, page, data) {
         h('dt', t('suite_name')), h('dd', text(draft.name)),
         h('dt', t('col_project')), h('dd', text(draft.project) || NONE),
         h('dt', t('wiz_case_lang')), h('dd', draft.case_lang ? langName(draft.case_lang) : NONE),
+        h('dt', t('depth_label')), h('dd', t(`depth_${draft.depth || 'standard'}`)),
       ]),
       alertBox('', 'info', t('wiz_next_title'),
         t(s && s.needs_agent ? 'wiz_next_gen' : draft.kind === 'excel' ? 'wiz_next_excel' : 'wiz_next_manual')),

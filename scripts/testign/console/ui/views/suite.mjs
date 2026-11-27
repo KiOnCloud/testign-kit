@@ -1,7 +1,8 @@
 // One test suite: its source, state and actions (Export Excel, New run, rename/duplicate/delete),
 // the confirm banner while it waits for review, and three tabs. Cases: a searchable table with
 // checkboxes, bulk changes and a side form for one case, checked by the server's run rules on every
-// save. Source & coverage: the source rows and the cases tracing to each. Runs: the runs made from it.
+// save. Source & coverage: the source rows and the cases tracing to each. Checks: the test depth and
+// the kit checks of the listed controls it requires. Runs: the runs made from it.
 
 import { h, icon, mount, statusIcon } from '../dom.mjs';
 import { NONE, timeOrDay } from '../format.mjs';
@@ -11,6 +12,7 @@ import { chooseTemplate } from './job-actions.mjs';
 import { stepList } from './spec-steps.mjs';
 import { MOBILE_METHODS, mobileMethod } from './mobile-method.mjs';
 import { openNewRun } from './new-run.mjs';
+import { DEPTHS } from './suite-new.mjs';
 import { freshnessIcon } from './survey.mjs';
 import { classBadge, resultIcons, runStateBadge } from './runs.mjs';
 import { openSuiteMenu, sourceRef, suiteErrorText, suiteStateBadge } from './suites.mjs';
@@ -32,7 +34,7 @@ export function caseToForm(c) {
     content: x.content || '', preconditions: x.preconditions || '', steps: x.steps || '', expected: x.expected || '',
     screen: (x.screen && x.screen.url) || '', trace: (x.trace || []).join(', '),
     class: x.class || '', runner: x.runner || '', scenario: x.scenario || '', viewport: x.viewport || 'pc',
-    mobile_method: x.mobile_method || '',
+    mobile_method: x.mobile_method || '', check: x.rule ? `${x.rule}|${x.about}` : '',
   };
 }
 
@@ -62,7 +64,17 @@ export function formToBody(f, original) {
     scenario: f.scenario || null,
     viewport,
     mobile_method: viewport === 'mobile' ? mobileMethod(viewport, f.mobile_method) : null,
+    ...checkFields(f.check, original),
   };
+}
+
+/** The kit check a case covers, from the form's "rule|about" choice; cleared only when it had one. */
+function checkFields(check, original) {
+  if (check) {
+    const cut = check.indexOf('|');
+    return { rule: check.slice(0, cut), about: check.slice(cut + 1) };
+  }
+  return original && original.rule ? { rule: null, about: null } : {};
 }
 
 /** Field messages of a refused save: {field: message} when the error is about `caseId` (or any case). */
@@ -101,7 +113,7 @@ export function render(ctx) {
   const { t, route } = ctx;
   const id = route.params.suite;
   const ui = uiFor(id);
-  if (route.query && ['cases', 'source', 'runs', 'spec'].includes(route.query.tab)) ui.tab = route.query.tab;
+  if (route.query && ['cases', 'source', 'checks', 'runs', 'spec'].includes(route.query.tab)) ui.tab = route.query.tab;
   const crumbs = (name) => ctx.topbar(breadcrumb(t, [{ label: t('nav_group_design') }, { label: t('nav_suites'), href: href(['suites']) },
     { label: name || id }]));
   crumbs(null);
@@ -168,6 +180,7 @@ export function render(ctx) {
       srcBadge(t, suite.kind), h('span.mono', sourceRef(t, suite.source)),
       suite.project ? [h('span', '·'), h('span', suite.project)] : null,
       suiteStateBadge(t, suite.state),
+      suite.depth ? ybadge(t(`depth_${suite.depth}`), '', { title: t('depth_label'), dataset: { depth: suite.depth } }) : null,
       suite.confirmed_at ? h('span.yh-muted', t('suite_confirmed_at', { when: timeOrDay(suite.confirmed_at) })) : null,
     ]);
 
@@ -181,7 +194,9 @@ export function render(ctx) {
           Object.entries(ui.problems[cid]).map(([f, m]) => `${t(`case_f_${key(f)}`)}: ${m}`).join(' · ')])))));
     }
     const tabs = h('div.yh-tabs', { role: 'tablist', 'aria-label': suite.name }, [
-      ['cases', t('suite_tab_cases'), suite.cases.length], ['source', t('suite_tab_source')], ['runs', t('suite_tab_runs'), (suite.runs || []).length],
+      ['cases', t('suite_tab_cases'), suite.cases.length], ['source', t('suite_tab_source')],
+      ['checks', t('suite_tab_checks'), suite.checks && suite.checks.missing ? suite.checks.missing : undefined],
+      ['runs', t('suite_tab_runs'), (suite.runs || []).length],
       ...(suite.spec && (suite.spec.exists || suite.spec.eligible) ? [['spec', t('suite_tab_spec'), suite.spec.recorded]] : []),
     ].map(([k, label, n]) => h('button.yh-tab', {
       type: 'button', role: 'tab', 'aria-selected': ui.tab === k ? 'true' : 'false', dataset: { tab: k },
@@ -189,6 +204,7 @@ export function render(ctx) {
     }, [label, n !== undefined ? h('span.yh-tab__count', String(n)) : null])));
     let content;
     if (ui.tab === 'source') content = sourceTab(suite, tickets);
+    else if (ui.tab === 'checks') content = checksTab(suite);
     else if (ui.tab === 'runs') content = runsTab(suite);
     else if (ui.tab === 'spec') content = specTab(suite);
     else content = casesTab(suite, scenarios, generating);
@@ -220,7 +236,11 @@ export function render(ctx) {
         reload();
       } catch (err) {
         confirm.disabled = false;
-        if (err && err.code === 'case-rules' && err.details) {
+        if (err && err.code === 'coverage-missing') {
+          ctx.toast(t('checks_confirm_missing', { n: ((err.details && err.details.missing) || []).length }), 'danger');
+          ui.tab = 'checks';
+          reload();
+        } else if (err && err.code === 'case-rules' && err.details) {
           ui.problems = err.details.problems || (err.details.case ? { [err.details.case]: err.details.errors || {} } : {});
           ui.filter = 'problems';
           reload();
@@ -441,6 +461,111 @@ export function render(ctx) {
     return h('div.yh-stack', parts);
   }
 
+  // test depth and checks ------------------------------------------------------------------
+  function checksTab(suite) {
+    const view = suite.checks;
+    const generating = suite.state === 'generating';
+    const errorBox = h('div', { role: 'alert' });
+    const fail = (err) => mount(errorBox, h('p.k-field__error', [icon('warning'), suiteErrorText(t, err)]));
+    const current = view ? view.depth : null;
+    const pick = selectEl({ id: 'suite-depth', disabled: generating ? true : undefined },
+      [...(current ? [] : [['', t('depth_none')]]), ...DEPTHS.map((d) => [d, t(`depth_${d}`)])], current || '');
+    const apply = h('button.yh-btn.yh-btn--sm', { type: 'button', dataset: { checksAction: 'depth' }, disabled: true }, t('depth_change'));
+    pick.addEventListener('change', () => { apply.disabled = !pick.value || pick.value === current; });
+    apply.addEventListener('click', async () => {
+      apply.disabled = true;
+      try {
+        const out = await ctx.api.suiteDepth(suite.id, pick.value);
+        ctx.toast(out.more ? t('depth_changed_more', { depth: t(`depth_${out.depth}`) }) : t('depth_changed', { depth: t(`depth_${out.depth}`) }));
+        reload();
+      } catch (err) { apply.disabled = false; fail(err); }
+    });
+    const parts = [h('div.toolbar', [field(t('depth_label'), selectWrap(pick), current ? t(`depth_${current}_d`) : t('depth_none_d'), null, 'suite-depth'), apply]), errorBox];
+    if (!view) return h('div.yh-stack', parts);
+    const canExtend = ['figma', 'backlog'].includes(suite.kind) && !generating && view.missing > 0;
+    if (canExtend) {
+      const extend = h('button.yh-btn.yh-btn--sm.yh-btn--primary', { type: 'button', dataset: { checksAction: 'extend' } }, [icon('plus'), t('checks_extend')]);
+      extend.addEventListener('click', async () => {
+        extend.disabled = true;
+        try {
+          await ctx.api.suiteDepth(suite.id, view.depth, true, ctx.lang);
+          ctx.toast(t('checks_extend_queued'));
+          reload();
+        } catch (err) { extend.disabled = false; fail(err); }
+      });
+      parts.push(alertBox('warning', 'warning', t('checks_missing_t', { n: view.missing }), t('checks_missing_d'), extend));
+    } else if (view.missing > 0) {
+      parts.push(alertBox('warning', 'warning', t('checks_missing_t', { n: view.missing }), t('checks_missing_manual_d')));
+    }
+    if ((view.problems || []).length) {
+      parts.push(alertBox('danger', 'warning', t('checks_problems', { n: view.problems.length }),
+        h('ul.plain-list', view.problems.slice(0, 6).map((p) => h('li.mono', p)))));
+    }
+    if (!view.controls) {
+      parts.push(h('div.yh-empty', [h('div.yh-empty__title', t('checks_no_controls_t')), h('div.yh-empty__text', t('checks_no_controls_d'))]));
+      return h('div.yh-stack', parts);
+    }
+    parts.push(h('p.yh-caption.yh-muted.m-0', t('checks_summary', { required: view.required, covered: view.covered, skipped: view.skipped,
+      missing: view.missing, controls: view.controls })));
+    const statusCell = (r) => {
+      if (r.status === 'covered') return statusIcon('ok', 'check', t('checks_st_covered'));
+      if (r.status === 'skipped') return ybadge(t('checks_st_skipped'), 'neutral');
+      if (r.status === 'optional') return h('span.yh-muted', t('checks_st_optional'));
+      return ybadge(r.partial ? t('checks_st_partial') : t('checks_st_missing'), 'warning');
+    };
+    const actionCell = (r) => {
+      if (!r.required || generating) return r.reason ? h('span.wrap', r.reason) : NONE;
+      if (r.status === 'skipped') {
+        const undo = h('button.yh-btn.yh-btn--sm.yh-btn--ghost', { type: 'button', dataset: { checksAction: 'unskip' } }, t('checks_unskip'));
+        undo.addEventListener('click', async () => {
+          undo.disabled = true;
+          try { await ctx.api.suiteSkip(suite.id, r.rule, r.about, '', ctx.prefs.getTesterName()); reload(); } catch (err) { undo.disabled = false; fail(err); }
+        });
+        return h('div.yh-stack.skip-cell', [h('span', r.reason), undo]);
+      }
+      if (r.status !== 'missing') return NONE;
+      const skip = h('button.yh-btn.yh-btn--sm', { type: 'button', dataset: { checksAction: 'skip' } }, t('checks_skip'));
+      skip.addEventListener('click', () => openSkip(suite, r));
+      return skip;
+    };
+    parts.push(tableBox([h('th', t('checks_col_group')), h('th', t('checks_col_check')), h('th', t('checks_col_control')),
+      h('th', t('checks_col_required')), h('th', t('col_state')), h('th', t('col_cases')), h('th', t('checks_col_reason'))],
+    view.rows.map((r) => h('tr', { class: r.required ? '' : 'is-optional', dataset: { check: `${r.rule}|${r.about}` } }, [
+      h('td', t(`checks_group_${r.group}`)),
+      h('td', { title: r.case_hint }, r.label),
+      h('td.wrap-cell', { title: r.about, lang: suite.case_lang || undefined }, [r.control, r.inputs.length ? h('span.yh-caption.yh-muted', ` (${r.inputs.join(', ')})`) : null]),
+      h('td', r.required ? t('checks_yes') : t('checks_from', { depth: t(`depth_${r.level}`) })),
+      h('td', statusCell(r)),
+      h('td.mono.yh-muted', r.cases.length ? `${r.cases.join(', ')}${r.need > 1 ? ` / ${r.need}` : ''}` : (r.need > 1 ? `0 / ${r.need}` : NONE)),
+      h('td.wrap.reason-cell', actionCell(r)),
+    ])), { label: t('suite_tab_checks') }));
+    parts.push(h('p.yh-caption.yh-muted.m-0', t('checks_note')));
+    return h('div.yh-stack', parts);
+  }
+
+  function openSkip(suite, r) {
+    const reason = h('textarea.yh-textarea', { id: 'skip-reason', rows: '3', maxlength: '500' });
+    const errorBox = h('div', { role: 'alert' });
+    const save = h('button.yh-btn.yh-btn--primary', { type: 'button', dataset: { checksAction: 'skip-save' } }, t('checks_skip'));
+    const dlg = openDialog({
+      t, title: t('checks_skip_title', { check: r.label, control: r.control }),
+      body: h('div.stack-16', [h('p.k-note', r.case_hint), field(t('checks_skip_reason'), reason, t('checks_skip_help')), errorBox]),
+      footer: [save],
+    });
+    save.addEventListener('click', async () => {
+      if (!String(reason.value || '').trim()) { mount(errorBox, h('p.k-field__error', [icon('warning'), t('checks_skip_need_reason')])); return; }
+      save.disabled = true;
+      try {
+        await ctx.api.suiteSkip(suite.id, r.rule, r.about, String(reason.value).trim(), ctx.prefs.getTesterName());
+        dlg.close();
+        reload();
+      } catch (err) {
+        save.disabled = false;
+        mount(errorBox, h('p.k-field__error', [icon('warning'), suiteErrorText(t, err)]));
+      }
+    });
+  }
+
   // runs ------------------------------------------------------------------------------------
   function runsTab(suite) {
     const list = suite.runs || [];
@@ -583,6 +708,10 @@ export function caseForm(ctx, { suite, c, scenarios, onClose, onSaved, onDeleted
   const scenarioOptions = [['', t('case_no_scenario')], ['none', t('login_l_none')],
     ...scenarios.map((s) => [s.name, s.approved ? s.name : `${s.name} · ${t('rt_not_approved')}`])];
   if (f.scenario && !scenarioOptions.some(([v]) => v === f.scenario)) scenarioOptions.push([f.scenario, f.scenario]);
+  const checkRows = (suite.checks && suite.checks.rows) || [];
+  const checkOptions = [['', t('case_no_check')], ...checkRows.map((r) => [`${r.rule}|${r.about}`,
+    `${r.label} · ${r.control}${r.required ? '' : ` (${t('checks_from', { depth: t(`depth_${r.level}`) })})`}`])];
+  if (f.check && !checkOptions.some(([v]) => v === f.check)) checkOptions.push([f.check, f.check.replace('|', ' · ')]);
 
   drawRunner();
   drawMethod();
@@ -657,6 +786,7 @@ export function caseForm(ctx, { suite, c, scenarios, onClose, onSaved, onDeleted
       choice('viewport', VIEWPORTS.map((v) => [v, t(`wt_viewport_${v}`)]), drawMethod),
       methodBox,
     ]),
+    checkRows.length || f.check ? choice('check', checkOptions) : null,
     h('p.yh-caption.yh-muted.m-0', t('case_safety')),
     c && c.creator === 'agent' ? h('p.yh-caption.yh-muted.m-0', t('case_by_agent')) : null,
     traceLabel ? h('p.yh-caption.yh-muted.m-0', [t('case_source'), ' ', h('span.mono', traceLabel)]) : null,

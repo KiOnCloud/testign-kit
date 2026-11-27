@@ -1,6 +1,6 @@
 ---
 name: webtest
-argument-hint: <figma-url> [--name <n>] [--project <p>] | --ticket <T> [--name <n>] | --run <run-id> [--tester <name>]
+argument-hint: <figma-url> [--name <n>] [--project <p>] [--depth <d>] | --ticket <T> [--name <n>] [--depth <d>] | --run <run-id> [--tester <name>]
 description: Web UI test suites and runs. Writes the cases of a test suite from a Figma change table or a Backlog survey report (suite-generate job), runs a run made from a confirmed suite one row at a time in the tester's own Chrome through a worker agent, parks what cannot continue, and exports an Excel workbook and a Markdown report (webtest-run job). Records Playwright steps for sure cases once (mode record) and replays the reviewed steps in later runs without a worker (mode replay), signing in with a tester-approved Login Recipe. Used by /testign:webtest and by the console skill for these job kinds.
 ---
 
@@ -50,10 +50,11 @@ Arguments: `$ARGUMENTS`
    - `<figma-url>`: create the suite, then queue its generate job at once (a suite left without a
      job for ten minutes is handed to the tester as it is):
      `<run> suite-new --kind figma --name "<--name, else the node id>" --figma-url "<figma-url>"
-     [--project <p>]` → `{id, state: "generating"}`, then
+     [--project <p>] [--depth smoke|standard|thorough]` → `{id, state: "generating"}`, then
      `{"kind": "suite-generate", "ui_lang": "en", "suite": "<S>"}`.
    - `--ticket <T>`: the same with `<run> suite-new --kind backlog --name "<--name, else T>" --ticket
-     <T>`. `no-report`: tell the tester to survey the ticket first (`/testign:survey`), and stop.
+     <T>`. `--depth` is the test depth the tester names (default standard); `<run> suite-depth
+     --suite <S> --depth <d>` changes it later. `no-report`: tell the tester to survey the ticket first (`/testign:survey`), and stop.
    - `--run <r>`: `{"kind": "webtest-run", "ui_lang": "en", "run": "<r>", "tester": "<name>", "mode": "run"}`
      (`"mode": "record"` or `"replay"` when the tester asks for those; the console's Record and
      Replay buttons queue them too).
@@ -112,6 +113,11 @@ case's fields:
 `screen` is a path on the site (the run adds its base URL). `<run> suite-show --suite <S>` prints
 the cases and, for a Backlog suite, `coverage` (`uncovered` source rows, `orphans` traces).
 
+**Test depth.** `params.depth` is the suite's test depth. Stage the controls the change touches
+first (`{"controls": [...]}`), then tag each case with the kit check it covers (`rule`, `about`),
+and finish only when `<run> suite-coverage --suite <S>` shows no `missing` check; see "Test depth"
+in the triage rules. With `params.extend: true`, only add the missing checks ("Extend job" there).
+
 ### Figma
 
 1. **Earlier suites.** `<run> suite-list` shows the other suites; when one of the same Figma link is
@@ -169,6 +175,8 @@ the cases and, for a Backlog suite, `coverage` (`uncovered` source rows, `orphan
    is redrafted from that note and saved again. Tell the tester in a progress line to approve
    drafts on the Login scenarios screen.
 6. Stage steps 3 to 5 on the cases with `suite-stage` items that name `case`.
+   Then stage the controls the table's rows touch and tag the cases for the suite's test depth
+   (triage rules, "Test depth"); check `<run> suite-coverage --suite <S>`.
 7. Finish with `<run> suite-generated --suite <S> --job <j> --session <s>` and close the job with a
    summary: the suite id, counts by class, cases without a screen, a scenario or a capture,
    scenarios waiting for approval, and that the tester reviews and confirms the cases on the
@@ -187,7 +195,10 @@ the cases and, for a Backlog suite, `coverage` (`uncovered` source rows, `orphan
    Figma step 5 says.
 4. Stage the cases (in batches when there are many), then check `<run> suite-show --suite <S>`:
    every row in `coverage.uncovered` gets a case, or a line in the summary saying why not.
-5. Finish with `suite-generated` and close the job as for Figma, adding the uncovered rows.
+5. Stage the controls and tag the cases for the suite's test depth (triage rules, "Test depth"),
+   then check `<run> suite-coverage --suite <S>`.
+6. Finish with `suite-generated` and close the job as for Figma, adding the uncovered rows and the
+   checks you skipped with their reasons.
 
 ## Run job (`webtest-run`, `mode: run`)
 

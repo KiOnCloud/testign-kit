@@ -287,3 +287,40 @@ def test_spec_review_needs_a_passing_check_and_the_hash_the_tester_saw(console, 
     assert status == 200 and data["status"] == "reviewed"
     status, _, data = browser(console, "POST", f"/api/webtest/suites/{sid}/spec/remove", {"cases": ["c1"]})
     assert status == 200 and data["recorded"] == 0
+
+
+def test_depth_coverage_skip_and_extend(console):
+    status, _, made = browser(console, "POST", "/api/webtest/suites",
+                              {"kind": "backlog", "name": "DEMO-1", "ticket": "DEMO-1", "depth": "smoke"})
+    assert status == 200
+    sid, job_id = made["suite"], made["job"]["id"]
+    assert console.state.bridge.jobs[job_id]["params"]["depth"] == "smoke"
+    claim(console, job_id)
+    controls = [{"about": "Edit/[Save]", "type": "button", "action": True, "needs": ["Edit/[Name]"]},
+                {"about": "Edit/[Name]", "type": "textbox"}]
+    stage = {"job": job_id, "session": AGENT_S, "cases": {"controls": controls, "cases": [
+        case(trace=["B1"], rule="action.normal", about="Edit/[Save]"),
+        case(trace=["B1"], rule="display.initial", about="Edit/[Name]")]}}
+    status, _, data = agent(console, "POST", f"/agent/suites/{sid}/stage", stage)
+    assert status == 200 and data["checks"]["missing"] == 0
+    agent(console, "POST", f"/agent/suites/{sid}/generated", {"job": job_id, "session": AGENT_S})
+    console.state.bridge.jobs[job_id]["state"] = "done"
+    status, _, view = browser(console, "GET", f"/api/webtest/suites/{sid}")
+    assert view["depth"] == "smoke" and view["checks"]["required"] == 2 and view["checks"]["missing"] == 0
+    status, _, data = browser(console, "POST", f"/api/webtest/suites/{sid}/depth", {"depth": "standard"})
+    assert status == 200 and data["more"] and data["missing"] and data["can_extend"] and data["job"] is None
+    status, _, data = browser(console, "POST", f"/api/webtest/suites/{sid}/confirm", {})
+    assert status == 409 and data["error"]["code"] == "coverage-missing"
+    assert data["error"]["details"]["missing"][0]["rule"] == "state.empty"
+    status, _, data = browser(console, "POST", f"/api/webtest/suites/{sid}/skips",
+                              {"rule": "state.empty", "about": "Edit/[Save]", "reason": "hidden until a line exists"})
+    assert status == 200 and data["checks"]["missing"] == 0
+    browser(console, "POST", f"/api/webtest/suites/{sid}/skips", {"rule": "state.empty", "about": "Edit/[Save]", "reason": ""})
+    status, _, data = browser(console, "POST", f"/api/webtest/suites/{sid}/depth",
+                              {"depth": "standard", "extend": True, "ui_lang": "ja"})
+    assert status == 200 and data["job"]["kind"] == "suite-generate"
+    assert console.state.bridge.jobs[data["job"]["id"]]["params"]["extend"] is True
+    status, _, view = browser(console, "GET", f"/api/webtest/suites/{sid}")
+    assert view["state"] == "generating" and len(view["cases"]) == 2
+    status, _, data = browser(console, "POST", f"/api/webtest/suites/{sid}/depth", {"depth": "deep"})
+    assert status == 409

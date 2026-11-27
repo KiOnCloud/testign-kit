@@ -243,3 +243,85 @@ def test_a_tampered_suite_file_is_refused(root, env):
     (folder / "suite.json").write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(WebtestError, match="capture"):
         ws.load(folder)
+
+
+# test depth -----------------------------------------------------------------------------------
+BTN, BOX = "Edit/[Save]", "Edit/[Name]"
+CONTROLS = [{"about": BTN, "type": "button", "action": True, "needs": [BOX]},
+            {"about": BOX, "type": "textbox", "required": True}]
+
+
+def test_new_suites_get_the_default_depth_and_old_ones_none(root, env):
+    folder = manual(root, env)
+    assert ws.load(folder)["depth"] == "standard" and ws.show(folder)["checks"]["controls"] == 0
+    deep = ws.new_suite(root, name="Deep", kind="manual", payload={}, env=env, depth="thorough", when=WHEN)
+    assert deep["depth"] == "thorough"
+    with pytest.raises(WebtestError):
+        ws.new_suite(root, name="Bad", kind="manual", payload={}, env=env, depth="deep", when=WHEN)
+    suite = ws.load(folder)
+    for key in ("depth", "controls", "roles", "skips"):
+        suite.pop(key)
+    ws.save(folder, suite)  # a suite made before depth still loads
+    assert ws.show(folder)["checks"] is None
+
+
+def staged_backlog(root, env, survey):
+    made = ws.new_suite(root, name="DEMO-1", kind="backlog", payload={"ticket": "DEMO-1"}, env=env, when=WHEN)
+    folder = ws.find_suite(root, made["id"])
+    ws.attach_job(folder, "j1")
+    return folder
+
+
+def test_agent_stages_controls_and_tagged_cases_and_confirm_needs_every_check(root, env, survey):
+    folder = staged_backlog(root, env, survey)
+    out = ws.stage_generated(folder, {"controls": CONTROLS}, "j1")
+    assert out["controls"] == 2 and out["checks"]["missing"] == out["checks"]["required"] == 3
+    out = ws.stage_generated(folder, {"cases": [
+        agent_case(trace=["B1"], rule="action.normal", about=BTN),
+        agent_case(trace=["B1"], rule="display.initial", about=BOX)]}, "j1")
+    assert out["staged"] == ["c1", "c2"] and out["checks"]["missing"] == 1
+    ws.finish_generate(folder, "j1")
+    with pytest.raises(ws.CoverageError) as err:
+        ws.confirm(folder)
+    assert [(m["rule"], m["about"]) for m in err.value.missing] == [("state.empty", BTN)]
+    assert ws.show(folder)["checks"]["missing"] == 1
+    ws.set_skip(folder, "state.empty", BTN, "covered by the release regression list", by="Asher")
+    assert ws.load(folder)["skips"][0]["by"] == "Asher"
+    assert ws.confirm(folder)["state"] == "ready"
+    taken_back = ws.set_skip(folder, "state.empty", BTN, "")
+    assert taken_back["state"] == "review" and taken_back["checks"]["missing"] == 1
+    ws.add_case(folder, agent_case(trace=["B1"], rule="state.empty", about=BTN))
+    assert ws.confirm(folder)["state"] == "ready"
+    with pytest.raises(WebtestError):
+        ws.set_skip(folder, "robustness.leave", "Nowhere/[X]", "why")
+    with pytest.raises(CaseError):
+        ws.add_case(folder, agent_case(rule="no.such", about=BTN))
+
+
+def test_deeper_depth_reopens_review_and_can_extend(root, env, survey):
+    folder = staged_backlog(root, env, survey)
+    skips = [{"rule": r, "about": a, "reason": "manual check"}
+             for r, a in (("display.initial", BOX), ("action.normal", BTN), ("state.empty", BTN))]
+    ws.stage_generated(folder, {"controls": CONTROLS, "skips": skips, "cases": [agent_case(trace=["B1"])]}, "j1")
+    ws.finish_generate(folder, "j1")
+    assert ws.confirm(folder)["state"] == "ready"
+    out = ws.set_depth(folder, "thorough")
+    assert out["more"] and out["state"] == "review" and out["was"] == "standard"
+    assert ws.set_depth(folder, "thorough")["more"] is False
+    assert ws.start_extend(folder)["state"] == "generating"
+    assert len(ws.load(folder)["cases"]) == 1  # nothing removed
+
+
+def test_export_adds_a_coverage_sheet(root, env, survey, tmp_path):
+    folder = staged_backlog(root, env, survey)
+    ws.stage_generated(folder, {"controls": CONTROLS, "cases": [agent_case(trace=["B1"], rule="action.normal", about=BTN)]}, "j1")
+    ws.finish_generate(folder, "j1")
+    sample = tmp_path / "sample.xlsx"
+    xlsx.build_sample(sample)
+    entry = templates.register(sample, "s", home=tmp_path / "h", purpose="testcase")
+    out = ws.export_workbook(folder, ws.load(folder), templates.resolve("s", tmp_path / "h"))
+    wb = openpyxl.load_workbook(out["workbook"])
+    assert "Coverage" in wb.sheetnames
+    sheet = wb["Coverage"]
+    assert sheet["A1"].value == "Test depth: standard" and sheet["A2"].value == "Group"
+    assert entry

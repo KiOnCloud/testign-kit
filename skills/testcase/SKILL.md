@@ -1,6 +1,6 @@
 ---
 name: testcase
-argument-hint: <report-path | TICKET-ID> [--template <name>] [--into <filled.xlsx>] [--register <xlsx>]
+argument-hint: <report-path | TICKET-ID> [--template <name>] [--into <filled.xlsx>] [--register <xlsx>] [--depth smoke|standard|thorough]
 description: Check the latest survey report's pinned commit hashes, fill a copy of the customer's Excel test case template with B*/R* row IDs in the 備考 column, never overwrite tester edits, and report gaps and orphans. Manages the tester's registered templates (register, choose, preview). Invoked by the tester as /testign:testcase.
 ---
 
@@ -85,7 +85,27 @@ Write the cases in the report language; keep JP UI labels verbatim. Each case is
 ```
 
 `trace` must contain at least one B*/R* ID that exists in the report; the script refuses cases
-without one. Save the list as `<output_dir>/<TICKET>/<TICKET>-cases-<YYYYMMDD-HHMM>.json`, then:
+without one.
+
+**Test depth.** With `--depth` in the arguments (or when the tester asks for a depth), write the
+file as an object instead of a list, so the kit checks for each control the report's change
+touches are tracked:
+
+```json
+{"depth": "standard",
+ "controls": [{"about": "請求書/[発行]", "type": "button", "action": true, "needs": ["請求書/[宛名]"]},
+              {"about": "請求書/[宛名]", "type": "textbox", "required": true, "length": {"max": 40}}],
+ "skips": [{"rule": "role.each", "about": "請求書/[発行]", "reason": "one role only (R1)"}],
+ "cases": [{"item": "...", "trace": ["B2"], "rule": "state.empty", "about": "請求書/[発行]"}, ...]}
+```
+
+`<run> coverage-rules` lists the rules and the depth each is required from. List only controls,
+formats and limits the report states (never guess one), tag each case with the check it covers
+(`rule`, `about`, or `covers` for more than one), and follow the "Test depth" section of
+`${CLAUDE_PLUGIN_ROOT}/skills/webtest/triage-rules.md` for what to write when the report does not
+say what a button does. The workbook keeps the template's layout; `xlsx-fill` prints `checks`
+(required, covered, skipped, `missing_checks`). Add a case for each missing check, or a skip with a
+reason, and fill again before Step 4. Save the list as `<output_dir>/<TICKET>/<TICKET>-cases-<YYYYMMDD-HHMM>.json`, then:
 
 ```bash
 <run> xlsx-fill --report "<report>" --cases "<cases.json>" [--template "<name>"]
@@ -103,7 +123,7 @@ script never writes to an existing file or sheet name.
 
 This writes section 7 (totals, gaps, orphans, cases waiting on QA) into `r<N+1>` with `previous`
 pointing at the report you read. Report to the tester: the workbook path, the new revision path, and
-the gaps, orphans and waiting cases. Explain that gaps from Block questions are expected until the
+the gaps, orphans and waiting cases (and, with a test depth, the checks skipped with their reasons). Explain that gaps from Block questions are expected until the
 question is answered.
 
 ## In a console job

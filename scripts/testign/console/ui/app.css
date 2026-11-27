@@ -79,6 +79,9 @@
 .tbl-box .yh-table tbody tr { height: 64px; }
 .tbl-box .yh-table tbody tr.click { cursor: pointer; }
 .tbl-box .yh-table tbody tr.is-sel { background: var(--kinari); }
+.tbl-box .yh-table tbody tr.is-optional td { color: var(--ink-secondary); }
+.tbl-box .yh-table td.reason-cell { min-width: 12rem; max-width: 20rem; }
+.skip-cell { gap: var(--space-1); align-items: flex-start; }
 .tbl-box .yh-table tbody tr:focus-visible { outline: var(--stroke-active) solid var(--focus-ring); outline-offset: calc(var(--stroke-active) * -1); }
 .tbl-box .yh-table tr:last-child td { border-bottom: 0; }
 .yh-table td.ta-right, .yh-table th.ta-right { text-align: right; }

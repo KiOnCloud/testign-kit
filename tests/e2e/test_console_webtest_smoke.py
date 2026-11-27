@@ -247,3 +247,44 @@ def test_run_screen_answers_a_parked_row(page, console, runs_root, figma_run):
     (entry,) = answers.values()
     assert entry["action"] == "delegate" and entry["preconditions"] == "the footer of the member page"
     assert not page.problems, page.problems
+
+
+def test_checks_tab_shows_the_test_depth_and_skips_a_check(page, console, runs_root):
+    from testign import webtest_sources, webtest_suite  # noqa: PLC0415
+
+    env = webtest_sources.Env(runs_root.parent, console.state.home)
+    made = webtest_suite.new_suite(runs_root, name="Cart edit", kind="manual", payload={}, env=env, depth="standard")
+    folder = webtest_suite.find_suite(runs_root, made["id"])
+    suite = webtest_suite.load(folder)
+    btn, qty, note = "Cart edit/Cart lines/[Update]", "Cart edit/Cart lines/[Quantity]", "Cart edit/Cart lines/[Note]"
+    suite["controls"] = [
+        {"about": btn, "type": "button", "action": True, "needs": [qty, note], "goes_to": "Checkout"},
+        {"about": qty, "type": "textbox", "required": True, "format": "integer", "range": {"min": 1, "max": 99}},
+        {"about": note, "type": "textbox", "length": {"max": 20}},
+    ]
+    tagged = [("action.normal", btn, "[Update] saves the cart"), ("action.navigate", btn, "[Update] opens Checkout"),
+              ("state.empty", btn, "[Update] is disabled while every input is empty"),
+              ("display.initial", qty, "[Quantity] shows 1 first"), ("display.initial", note, "[Note] is empty first")]
+    suite["cases"] = [{"case": f"c{n}", **webtest_suite.check_case({"content": text, "class": "sure", "runner": "tester",
+                                                                     "rule": rule, "about": about})}
+                      for n, (rule, about, text) in enumerate(tagged, start=1)]
+    webtest_suite.save(folder, suite)
+    go(page, "suite", f"#/suites/{made['id']}?tab=checks")
+    page.wait_for_selector("[data-check]")
+    assert page.locator("tr[data-check]").count() > 10
+    assert page.locator("[data-checks-action='extend']").count() == 0  # a manual suite has no agent job
+    page.locator("tr[data-check='state.invalid|Cart edit/Cart lines/[Update]'] [data-checks-action='skip']").click()
+    page.fill("#skip-reason", "Quantity has a spinner that refuses letters")
+    page.locator("[data-checks-action='skip-save']").click()
+    page.wait_for_selector("tr[data-check='state.invalid|Cart edit/Cart lines/[Update]'] [data-checks-action='unskip']")
+    shots = os.environ.get("TESTIGN_SHOTS")
+    if shots:
+        page.evaluate("document.querySelectorAll('*').forEach(e => { if (e.scrollTop) e.scrollTop = 0; })")
+        page.set_viewport_size({"width": 1440, "height": 1500})
+        page.screenshot(path=f"{shots}/checks-tab.png")
+        page.locator("#suite-depth").select_option("thorough")
+        page.locator("[data-checks-action='depth']").click()
+        page.wait_for_selector("[data-depth='thorough']")
+        page.evaluate("document.querySelectorAll('*').forEach(e => { if (e.scrollTop) e.scrollTop = 0; })")
+        page.screenshot(path=f"{shots}/checks-tab-thorough.png")
+    assert not page.problems, page.problems
