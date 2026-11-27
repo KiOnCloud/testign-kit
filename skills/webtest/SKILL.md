@@ -1,6 +1,6 @@
 ---
 name: webtest
-argument-hint: <figma-url> [--name <n>] [--project <p>] | --ticket <T> [--name <n>] | --run <run-id> [--tester <name>]
+argument-hint: <figma-url> [--name <n>] [--project <p>] [--depth <d>] | --ticket <T> [--name <n>] [--depth <d>] | --run <run-id> [--tester <name>]
 description: Web UI test suites and runs. Writes the cases of a test suite from a Figma change table or a Backlog survey report (suite-generate job), runs a run made from a confirmed suite one row at a time in the tester's own Chrome through a worker agent, parks what cannot continue, and exports an Excel workbook and a Markdown report (webtest-run job). Records Playwright steps for sure cases once (mode record) and replays the reviewed steps in later runs without a worker (mode replay), signing in with a tester-approved Login Recipe. Used by /testign:webtest and by the console skill for these job kinds.
 ---
 
@@ -50,10 +50,11 @@ Arguments: `$ARGUMENTS`
    - `<figma-url>`: create the suite, then queue its generate job at once (a suite left without a
      job for ten minutes is handed to the tester as it is):
      `<run> suite-new --kind figma --name "<--name, else the node id>" --figma-url "<figma-url>"
-     [--project <p>]` → `{id, state: "generating"}`, then
+     [--project <p>] [--depth smoke|standard|thorough]` → `{id, state: "generating"}`, then
      `{"kind": "suite-generate", "ui_lang": "en", "suite": "<S>"}`.
    - `--ticket <T>`: the same with `<run> suite-new --kind backlog --name "<--name, else T>" --ticket
-     <T>`. `no-report`: tell the tester to survey the ticket first (`/testign:survey`), and stop.
+     <T>`. `--depth` is the test depth the tester names (default standard); `<run> suite-depth
+     --suite <S> --depth <d>` changes it later. `no-report`: tell the tester to survey the ticket first (`/testign:survey`), and stop.
    - `--run <r>`: `{"kind": "webtest-run", "ui_lang": "en", "run": "<r>", "tester": "<name>", "mode": "run"}`
      (`"mode": "record"` or `"replay"` when the tester asks for those; the console's Record and
      Replay buttons queue them too).
@@ -112,6 +113,11 @@ case's fields:
 `screen` is a path on the site (the run adds its base URL). `<run> suite-show --suite <S>` prints
 the cases and, for a Backlog suite, `coverage` (`uncovered` source rows, `orphans` traces).
 
+**Test depth.** `params.depth` is the suite's test depth. Stage the controls the change touches
+first (`{"controls": [...]}`), then tag each case with the kit check it covers (`rule`, `about`),
+and finish only when `<run> suite-coverage --suite <S>` shows no `missing` check; see "Test depth"
+in the triage rules. With `params.extend: true`, only add the missing checks ("Extend job" there).
+
 ### Figma
 
 1. **Earlier suites.** `<run> suite-list` shows the other suites; when one of the same Figma link is
@@ -169,6 +175,8 @@ the cases and, for a Backlog suite, `coverage` (`uncovered` source rows, `orphan
    is redrafted from that note and saved again. Tell the tester in a progress line to approve
    drafts on the Login scenarios screen.
 6. Stage steps 3 to 5 on the cases with `suite-stage` items that name `case`.
+   Then stage the controls the table's rows touch and tag the cases for the suite's test depth
+   (triage rules, "Test depth"); check `<run> suite-coverage --suite <S>`.
 7. Finish with `<run> suite-generated --suite <S> --job <j> --session <s>` and close the job with a
    summary: the suite id, counts by class, cases without a screen, a scenario or a capture,
    scenarios waiting for approval, and that the tester reviews and confirms the cases on the
@@ -187,7 +195,10 @@ the cases and, for a Backlog suite, `coverage` (`uncovered` source rows, `orphan
    Figma step 5 says.
 4. Stage the cases (in batches when there are many), then check `<run> suite-show --suite <S>`:
    every row in `coverage.uncovered` gets a case, or a line in the summary saying why not.
-5. Finish with `suite-generated` and close the job as for Figma, adding the uncovered rows.
+5. Stage the controls and tag the cases for the suite's test depth (triage rules, "Test depth"),
+   then check `<run> suite-coverage --suite <S>`.
+6. Finish with `suite-generated` and close the job as for Figma, adding the uncovered rows and the
+   checks you skipped with their reasons.
 
 ## Run job (`webtest-run`, `mode: run`)
 
@@ -287,14 +298,35 @@ Record and replay sign in without the tester. For each scenario they need (not `
 A suite's replay spec (`spec.json` in the suite folder) holds Playwright steps per case. Only a
 `sure` case run by the agent on PC, of kind label, element or behaviour, may have one. Steps:
 `goto` (a path, never a host), `click`, `dblclick`, `fill`, `press`, `select`, `check`,
-`wait_visible`, `expect_visible`, `expect_hidden`, `expect_text`, `expect_value`, `expect_url`; each takes a
+`wait_visible`, `expect_visible`, `expect_hidden`, `expect_text`, `expect_value`, `expect_url`, the
+state checks `expect_enabled`, `expect_disabled`, `expect_checked`, `expect_unchecked`,
+`expect_editable`, `expect_readonly` (locator, no value), and `click_blocked` (locator, optional
+value; see "Button state" below); each takes a
 `locator` with exactly one of `role` (with `name`), `label`, `placeholder`, `text`, `test_id`, `css`
 and optional `exact` / `nth`, and a `value` where the action needs one. Every case needs at least one
-`expect_` step that checks the expected result, and no `{{placeholder}}`. A spec is used for replay only after the tester
+check (`expect_` or `click_blocked`) of the expected result, and no `{{placeholder}}`. A spec is used for replay only after the tester
 marks it reviewed on the suite's Replay spec tab, which needs a check where every step ran; any
 edit of a case or a step clears the review. `<run> webtest-spec-show --suite <S>` shows it with
 warnings (a locator on live data such as a date or a count, a checked value not in the expected
-result, no value check): fix what they point at before the tester reviews.
+result, no value check, `state_unchecked` when the expected result says "disabled" and no
+`expect_disabled` checks it): fix what they point at before the tester reviews.
+
+### Button state
+
+When an expected result is about a control's state ("[Save] is disabled", "[Agree] is checked",
+非活性, 読み取り専用), check the state itself:
+
+- Disabled: `expect_disabled` on the control, then `click_blocked` on it. `click_blocked` presses it
+  anyway and fails when anything happens within its window (default 1500 ms): a request that
+  changes data, a new URL, or the text in its `value` appearing (put the design's success message
+  there when there is one). A button that is only marked or styled disabled (`aria-disabled`, a CSS
+  class) but still submits fails here, which is the point. Never use a plain `click` to show a
+  button is disabled: on a disabled button it times out and records nothing.
+- Enabled, checked, unchecked, editable, read-only: the matching `expect_` state check.
+- A state check is sourced when the expected result names that state (en, ja or vi wording); one
+  it does not name comes back as an `unsourced` warning.
+- When the expected result says the control is disabled until something is filled in, put the
+  page in that state first (leave the input empty, or fill the invalid value), then check.
 
 ## Record job (`webtest-run`, `mode: record`)
 
@@ -309,14 +341,19 @@ replays the row from a fresh page, so what passes is what replay will do.
    steps, expected), the steps so far, the page URL and an accessibility snapshot. Then
    `<run> webtest-record-step --run <r> --row <row> --step <file>` for one step at a time:
    - `result: ok` → recorded; the new snapshot shows the page after it.
-   - `result: fail` → an `expect_` step did not hold: recorded, and the row is closed as a failure
-     (a defect). Do not change the check to make it pass.
+   - `result: fail` → a check (`expect_` or `click_blocked`) did not hold: recorded, and the row is
+     closed as a failure (a defect). Do not change the check to make it pass.
+   - `result: failed` → an action (click, fill…) on a found element failed: not recorded; usually
+     the wrong element. With `disabled: true` the element is the right one and the app has it
+     disabled: that is a finding, not a wrong locator. If the expected result says the action
+     works, record `expect_enabled` on it (it fails, so the row closes as a failure); if it says
+     the element is disabled, record `expect_disabled` and `click_blocked` ("Button state").
    - `result: spec_error` → the step could not run (no element, two elements, timeout): not
      recorded; try another locator from the snapshot.
    - `session_expired` / `off_site` → stop the row: give up with the reason.
    - `this_step_sent` lists data-changing requests the app received; their replies are kept, so the
      app sees each submit only once while you record.
-4. Close the row: `<run> webtest-record-done --run <r> --row <row>` (needs an `expect_` step), or
+4. Close the row: `<run> webtest-record-done --run <r> --row <row>` (needs a check step), or
    `<run> webtest-record-give-up --run <r> --row <row> --reason "<why>"` when no working locator is
    found (the row stays queued for a Chrome run). `--restart` on open drops the row's steps.
    Send `console progress` after each row.

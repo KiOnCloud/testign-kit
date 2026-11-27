@@ -27,7 +27,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 
-from . import fsutil, webtest, webtest_sources
+from . import coverage_rules, fsutil, webtest, webtest_sources
+from .coverage_rules import CoverageError as _ShapeError
 from .webtest import WebtestError
 
 VERSION = 1
@@ -42,6 +43,7 @@ NAME_CAP = 120
 CASE_KEYS = {
     "case", "trace", "source", "content", "preconditions", "steps", "expected", "screen", "viewport",
     "mobile_method", "kind", "class", "reason", "runner", "scenario", "creator", "type", "capture",
+    "rule", "about", "covers",
 }
 EDIT_KEYS = CASE_KEYS - {"case", "capture"}
 BULK_KEYS = {"class", "runner", "scenario"}
@@ -50,6 +52,20 @@ DIGEST_KEYS = ("content", "kind", "steps", "expected", "preconditions", "screen"
 CHOICE_BY_AGENT = "only the tester delegates a choice case; offer it with runner tester"
 CHOICE_NEEDS_PRECONDITIONS = "a delegated choice case needs preconditions"
 DEVICE_IS_THE_TESTERS = "phone-width cases on a real device go to the tester"
+
+
+class CoverageError(WebtestError):
+    """The suite leaves out checks its test depth requires, or names controls it does not list."""
+
+    def __init__(self, missing: list[dict], problems: list[str]) -> None:
+        self.missing = missing
+        self.problems = problems
+        parts = []
+        if missing:
+            parts.append(f"{len(missing)} check(s) the test depth requires have no case and no skip reason")
+        if problems:
+            parts.append(f"{len(problems)} reference(s) name controls the suite does not list")
+        super().__init__("; ".join(parts))
 
 
 class CaseError(WebtestError):
@@ -185,6 +201,10 @@ def check_case(data: Any, *, by: str = "tester", case_id: str | None = None) -> 
         else:
             out[key] = value
     out["viewport"] = out.get("viewport") or "pc"
+    try:
+        out.update(coverage_rules.check_case_fields(data))
+    except _ShapeError as exc:
+        errors["rule"] = str(exc)
     if not errors:
         if out["class"] == "not-web":
             if out["runner"] not in (None, "none"):
@@ -250,6 +270,13 @@ def check_suite(suite: Any) -> dict:
         if capture is not None and capture not in (f"source/{cid}.png", f"source/{cid}.jpg"):
             raise WebtestError(f"suite.json: {cid}.capture is not the case's file in the suite's source folder")
         check_case({k: v for k, v in case.items() if k != "case"}, by="tester", case_id=cid)
+    try:
+        coverage_rules.check_depth(suite.get("depth"), allow_none=True)
+        coverage_rules.check_controls(suite.get("controls"))
+        coverage_rules.check_roles(suite.get("roles"))
+        coverage_rules.check_skips(suite.get("skips"))
+    except _ShapeError as exc:
+        raise WebtestError(f"suite.json: {exc}") from None
     return suite
 
 
@@ -316,13 +343,14 @@ def _edited(suite: dict) -> None:
 
 def new_suite(runs_root: Path, *, name: Any, kind: Any, payload: Any, env: webtest_sources.Env,
               project: Any = None, case_lang: Any = None, upload: Path | None = None,
-              when: datetime | None = None) -> dict:
+              when: datetime | None = None, depth: Any = None) -> dict:
     """Create a suite from one source. Excel cases are read now, Figma and Backlog wait for the agent."""
     entry = webtest_sources.get(kind)
     payload = dict(payload or {})
     name = _name(name)
     project = _project(project)
     case_lang = _case_lang(case_lang)
+    depth = _depth(depth)
     source = webtest_sources.check(kind, payload, env)
     if entry.extract is not None and upload is None:
         raise WebtestError("this source needs its file")
@@ -341,6 +369,7 @@ def new_suite(runs_root: Path, *, name: Any, kind: Any, payload: Any, env: webte
             "created_at": now, "updated_at": now, "source": source,
             "state": "generating" if entry.needs_agent else "review",
             "generate_job": None, "confirmed_at": None, "confirmed_by": None, "suite_digest": None, "cases": [],
+            "depth": depth, "controls": [], "roles": [], "skips": [],
         }
         if entry.extract is not None:
             fsutil.atomic_write_bytes(folder / "source" / source["file"], Path(upload).read_bytes())
@@ -360,7 +389,7 @@ def summary(suite: dict) -> dict:
             "kind": source["kind"], "source": source, "state": suite["state"], "cases": len(suite["cases"]),
             "generate_job": suite.get("generate_job"), "case_lang": suite.get("case_lang"),
             "created_at": suite.get("created_at"), "updated_at": suite.get("updated_at"),
-            "confirmed_at": suite.get("confirmed_at")}
+            "confirmed_at": suite.get("confirmed_at"), "depth": suite.get("depth")}
 
 
 def coverage(suite: dict, env: webtest_sources.Env | None, folder: Path | None = None) -> dict:
@@ -390,7 +419,70 @@ def coverage(suite: dict, env: webtest_sources.Env | None, folder: Path | None =
 
 def show(folder: Path, env: webtest_sources.Env | None = None) -> dict:
     suite = load(folder)
-    return {**summary(suite), "cases": suite["cases"], "coverage": coverage(suite, env, folder)}
+    return {**summary(suite), "cases": suite["cases"], "coverage": coverage(suite, env, folder),
+            "checks": coverage_rules.view(suite)}
+
+
+def _depth(value: Any) -> str:
+    try:
+        return coverage_rules.check_depth(value if value not in (None, "") else coverage_rules.DEFAULT_DEPTH)
+    except _ShapeError as exc:
+        raise WebtestError(str(exc)) from None
+
+
+# test depth -----------------------------------------------------------------------------------
+def set_depth(folder: Path, depth: Any) -> dict:
+    """Store a new test depth. ``more`` says whether it requires checks the old depth did not, so new
+    cases are needed (the console then offers a generate job that only adds cases); nothing is removed."""
+    suite = load(folder)
+    depth = _depth(depth)
+    was = suite.get("depth")
+    if depth == was:
+        return {"suite": suite["id"], "depth": depth, "was": was, "more": False, "state": suite["state"]}
+    more = coverage_rules.adds_checks(suite, depth)
+    _edited(suite)
+    suite["depth"] = depth
+    save(folder, suite)
+    return {"suite": suite["id"], "depth": depth, "was": was, "more": more, "state": suite["state"]}
+
+
+def set_skip(folder: Path, rule: Any, about: Any, reason: Any, by: Any = None) -> dict:
+    """Leave one required check out on purpose with a reason, or (reason empty) take the skip back."""
+    suite = load(folder)
+    _edited(suite)
+    key = (rule, coverage_rules.path(about))
+    if key not in {(c["rule"], c["about"]) for c in coverage_rules.checks(suite)}:
+        raise WebtestError(f"{rule} for {about} is not a check of this suite's controls")
+    skips = [s for s in suite.get("skips") or [] if (s["rule"], s["about"]) != key]
+    if isinstance(reason, str) and reason.strip():
+        skips.append({"rule": rule, "about": key[1], "reason": reason,
+                      **({"by": by} if isinstance(by, str) and by.strip() else {})})
+    try:
+        suite["skips"] = coverage_rules.check_skips(skips)
+    except _ShapeError as exc:
+        raise WebtestError(str(exc)) from None
+    save(folder, suite)
+    return {"suite": suite["id"], "state": suite["state"], "checks": coverage_rules.view(suite)}
+
+
+def start_extend(folder: Path) -> dict:
+    """Send a suite back to ``generating`` so a new generate job can add the cases a deeper test
+    depth requires; the cases already there stay as they are."""
+    suite = load(folder)
+    _edited(suite)
+    if not coverage_rules.missing(suite):
+        raise WebtestError("every check the test depth requires already has a case or a skip reason")
+    suite["state"] = "generating"
+    suite["generate_job"] = None
+    save(folder, suite)
+    return summary(suite)
+
+
+def coverage_errors(suite: dict) -> CoverageError | None:
+    if coverage_rules.depth_of(suite) is None:
+        return None
+    gaps, problems = coverage_rules.missing(suite), coverage_rules.problems(suite)
+    return CoverageError(gaps, problems) if gaps or problems else None
 
 
 # tester edits ---------------------------------------------------------------------------------
@@ -494,6 +586,9 @@ def confirm(folder: Path, by: Any = None) -> dict:
         err = CaseError(problems[first], first)
         err.problems = problems  # type: ignore[attr-defined]
         raise err
+    gaps = coverage_errors(suite)
+    if gaps is not None:
+        raise gaps
     suite["state"] = "ready"
     suite["confirmed_at"] = webtest.now_iso()
     suite["confirmed_by"] = str(by)[:100] if isinstance(by, str) and by.strip() else None
@@ -583,8 +678,25 @@ def stage_generated(folder: Path, items: Any, job: Any) -> dict:
     """
     suite = load(folder)
     _need_generating(suite, job)
+    listing = None
+    if isinstance(items, dict):
+        listing, items = items, items.get("cases") or []
+        if set(listing) - {"controls", "roles", "skips", "cases"}:
+            raise WebtestError('the stage object holds only "controls", "roles", "skips" and "cases"')
+        try:
+            for key, fn in (("controls", coverage_rules.check_controls), ("roles", coverage_rules.check_roles),
+                            ("skips", coverage_rules.check_skips)):
+                if key in listing:
+                    suite[key] = fn(listing[key])
+        except _ShapeError as exc:
+            raise WebtestError(str(exc)) from None
+        if not items:
+            save(folder, suite)
+            return {"suite": suite["id"], "staged": [], "cases": len(suite["cases"]),
+                    "controls": len(suite.get("controls") or []), "checks": coverage_rules.summary(suite)}
     if not isinstance(items, list) or not items:
-        raise WebtestError('the stage file must be a list of cases: [{"content": ...}, ...]')
+        raise WebtestError('the stage file must be a list of cases: [{"content": ...}, ...], or an object '
+                           '{"controls", "roles", "skips", "cases"}')
     by_id = {c["case"]: c for c in suite["cases"]}
     planned = []
     work = {"cases": list(suite["cases"])}
@@ -610,7 +722,8 @@ def stage_generated(folder: Path, items: Any, job: Any) -> dict:
         else:
             suite["cases"].append({"case": cid, **case})
     save(folder, suite)
-    return {"suite": suite["id"], "staged": [cid for cid, _ in planned], "cases": len(suite["cases"])}
+    return {"suite": suite["id"], "staged": [cid for cid, _ in planned], "cases": len(suite["cases"]),
+            "checks": coverage_rules.summary(suite)}
 
 
 def stage_rows(folder: Path, rows: list[dict], captures: Path | None, job: Any) -> dict:
@@ -714,6 +827,9 @@ def export_workbook(folder: Path, suite: dict, entry: dict) -> dict:
                      "steps": steps, "expected": case.get("expected") or "", "trace": trace_text(suite, case)})
     written = xlsx.fill_columns(Path(entry["path"]), entry["sheet"], int(entry["header_row"]), columns, rows,
                                 folder / f"{suite['id']}-testcases.xlsx")
+    sheet = coverage_rules.sheet_rows(suite)
+    if sheet is not None:
+        xlsx.append_table_sheet(Path(written["path"]), "Coverage", sheet)
     return {"workbook": written["path"], "name": Path(written["path"]).name, "rows": len(rows)}
 
 

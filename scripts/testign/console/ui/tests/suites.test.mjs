@@ -138,7 +138,7 @@ async function runWizard(kind, fill, query = {}) {
 
 test('the wizard walks figma, backlog, excel and manual through the same four steps', async () => {
   const figma = await runWizard('figma', (view) => type(byId(view, 'wiz-figma'), FIGMA));
-  assert.deepEqual(figma.made, [['create', { kind: 'figma', name: 'figma suite', ui_lang: 'en', figma_url: FIGMA, case_lang: 'ja' }]]);
+  assert.deepEqual(figma.made, [['create', { kind: 'figma', name: 'figma suite', ui_lang: 'en', figma_url: FIGMA, case_lang: 'ja', depth: 'standard' }]]);
   assert.deepEqual(figma.calls.navigated, ['#/suites/S9']);
   assert.equal(figma.calls.toasts[0][0], DICTS.en.wiz_queued);
 
@@ -153,9 +153,9 @@ test('the wizard walks figma, backlog, excel and manual through the same four st
     input.listeners.change[0]({ target: input });
   });
   assert.deepEqual(excel.made[0], ['upload', 'regression.xlsx']);
-  assert.deepEqual(excel.made[1], ['create', { kind: 'excel', name: 'regression', ui_lang: 'en', template: 'tc', case_lang: 'ja', upload: 'u-1' }]);
+  assert.deepEqual(excel.made[1], ['create', { kind: 'excel', name: 'regression', ui_lang: 'en', template: 'tc', case_lang: 'ja', depth: 'standard', upload: 'u-1' }]);
   assert.equal(excel.calls.toasts[0][0], DICTS.en.wiz_created);
 
   const manual = await runWizard('manual', (view) => type(byId(view, 'wiz-note'), 'Smoke checks'));
-  assert.deepEqual(manual.made, [['create', { kind: 'manual', name: 'manual suite', ui_lang: 'en', note: 'Smoke checks', case_lang: 'ja' }]]);
+  assert.deepEqual(manual.made, [['create', { kind: 'manual', name: 'manual suite', ui_lang: 'en', note: 'Smoke checks', case_lang: 'ja', depth: 'standard' }]]);
 });

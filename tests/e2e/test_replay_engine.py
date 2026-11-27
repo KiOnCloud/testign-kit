@@ -211,3 +211,30 @@ def test_engine_tells_failures_apart(env, site):
             assert away["result"] == "off_site" and "other.invalid" in away["error"]
         finally:
             browser.close()
+
+
+def test_state_checks_and_click_blocked(env, site):
+    with webtest_live.playwright() as p:
+        browser = webtest_live.launch(p)
+        try:
+            run = lambda steps: webtest_live.run_case(browser, base_url=site.base_url, hosts=HOSTS,  # noqa: E731
+                                                      steps=[{"action": "goto", "value": "/cart"}, *steps])
+            save = {"role": "button", "name": "Save"}
+            update = {"role": "button", "name": "Update"}
+            assert run([{"action": "expect_disabled", "locator": save},
+                        {"action": "click_blocked", "locator": save, "value": "Cart updated"},
+                        {"action": "expect_readonly", "locator": {"label": "Code"}},
+                        {"action": "expect_editable", "locator": {"label": "Quantity"}},
+                        {"action": "expect_checked", "locator": {"label": "Agree"}}])["result"] == "ok"
+            assert site.cart_posts == 0
+            assert run([{"action": "expect_enabled", "locator": save, "timeout_ms": 1000}])["result"] == "fail"
+            assert run([{"action": "expect_unchecked", "locator": {"label": "Agree"}, "timeout_ms": 1000}])["result"] == "fail"
+            # A plain click on the natively disabled button fails on the app's state, and says so.
+            clicked = run([{"action": "click", "locator": save, "timeout_ms": 1000}])
+            assert clicked["result"] == "fail" and clicked.get("disabled") is True
+            # [Update] is only marked disabled: pressing it anyway still submits.
+            leaked = run([{"action": "click_blocked", "locator": update}])
+            assert leaked["result"] == "fail" and "aria-disabled" in leaked["error"] and "POST /cart" in leaked["error"]
+            assert site.cart_posts == 1
+        finally:
+            browser.close()

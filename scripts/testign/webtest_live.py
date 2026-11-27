@@ -42,6 +42,8 @@ MAX_REPLY_BYTES = 5_000_000
 DROP_HEADERS = ("content-length", "content-encoding", "transfer-encoding")
 SETTLE_MS = 3_000
 EXPECT_TEXT = ("expect_text", "expect_value")
+BLOCKED_WINDOW_MS = 1_500  # how long click_blocked watches for a request, a navigation or the text
+ACTS = ("fill", "click", "dblclick", "press", "select", "check")
 
 
 class SpecProblem(Exception):
@@ -135,7 +137,35 @@ def sourced_value(step: dict) -> str | None:
     return None
 
 
+# What an expected result says about an element's state, in the case languages (en, ja, vi). A state
+# check is sourced when the expected result names that state; 非活性 is tested before 活性.
+_STATE_WORDS = {
+    "disabled": re.compile(r"disabled|not enabled|inactive|gr[ae]yed out|cannot be (?:pressed|clicked|used)"
+                           r"|can't be (?:pressed|clicked)|not (?:pressable|clickable)|非活性|押下不可|押せない|クリック不可"
+                           r"|グレーアウト|無効|vô hiệu|không (?:bấm|nhấn|click) được|bị khóa|bị mờ", re.I),
+    "enabled": re.compile(r"(?<!not )\benabled\b|can be (?:pressed|clicked)|(?<!非)活性|押下可能|押せる"
+                          r"|(?:bấm|nhấn|click) được", re.I),
+    "checked": re.compile(r"(?<!un)checked|(?<!not )selected|チェックあり|チェックされ(?!ていない)|選択され|được chọn|được tích", re.I),
+    "unchecked": re.compile(r"unchecked|not checked|not selected|チェックなし|チェックされていない|未選択|không được chọn|bỏ chọn", re.I),
+    "editable": re.compile(r"(?<!not )editable|can be (?:edited|typed)|入力可|編集可|nhập được|sửa được", re.I),
+    "readonly": re.compile(r"read[- ]?only|not editable|cannot be edited|入力不可|編集不可|読み取り専用|chỉ đọc|không (?:nhập|sửa) được", re.I),
+}
+STATE_OF = {"expect_enabled": "enabled", "expect_disabled": "disabled", "expect_checked": "checked",
+            "expect_unchecked": "unchecked", "expect_editable": "editable", "expect_readonly": "readonly",
+            "click_blocked": "disabled"}
+
+
+def says_state(expected: str, state: str) -> bool:
+    """True when an expected result names this state ("[Update] is disabled", 非活性)."""
+    return bool(_STATE_WORDS[state].search(expected or ""))
+
+
 def is_sourced(step: dict, expected: str) -> bool | None:
+    """True when the compared text (or, for a state check, the state) is in the expected result,
+    False when it is not, None for a check that compares nothing of it (expect_url, role locators)."""
+    state = STATE_OF.get(step.get("action", ""))
+    if state:
+        return says_state(expected, state)
     value = sourced_value(step)
     if value is None:
         return None
@@ -162,17 +192,22 @@ def live_data_name(step: dict, expected: str) -> str | None:
 
 
 def assertion_warnings(steps: list[dict], expected: str) -> list[dict]:
-    """Locators holding live data, checks whose text is not in the expected result, and a case
-    where no check compares any text of the expected result."""
+    """Locators holding live data, checks whose text or state is not in the expected result, a case
+    where no check compares anything of the expected result, and an expected "disabled" that no
+    step checks (a plain click on a disabled button proves nothing)."""
+    from .webtest_spec import is_check  # noqa: PLC0415
     out = []
     for i, step in enumerate(steps, start=1):
         name = live_data_name(step, expected)
         if name is not None:
             out.append({"step": i, "kind": "live_data_locator", "value": name})
-    marks = [(i, is_sourced(s, expected)) for i, s in enumerate(steps, start=1) if s.get("action", "").startswith("expect_")]
+    marks = [(i, is_sourced(s, expected)) for i, s in enumerate(steps, start=1) if is_check(s.get("action", ""))]
     for i, ok in marks:
         if ok is False:
-            out.append({"step": i, "kind": "unsourced", "value": sourced_value(steps[i - 1])})
+            step = steps[i - 1]
+            out.append({"step": i, "kind": "unsourced", "value": sourced_value(step) or STATE_OF.get(step["action"])})
+    if says_state(expected, "disabled") and not any(s.get("action") == "expect_disabled" for s in steps):
+        out.append({"step": None, "kind": "state_unchecked", "value": "disabled"})
     if marks and not any(ok for _, ok in marks):
         out.append({"step": None, "kind": "no_value_check"})
     return out
@@ -208,6 +243,20 @@ def do_step(page, base_url: str, step: dict) -> None:
         expect(loc).to_contain_text(value, timeout=timeout)
     elif action == "expect_value":
         expect(loc).to_have_value(value, timeout=timeout)
+    elif action == "expect_enabled":
+        expect(loc).to_be_enabled(timeout=timeout)
+    elif action == "expect_disabled":
+        expect(loc).to_be_disabled(timeout=timeout)
+    elif action == "expect_checked":
+        expect(loc).to_be_checked(timeout=timeout)
+    elif action == "expect_unchecked":
+        expect(loc).not_to_be_checked(timeout=timeout)
+    elif action == "expect_editable":
+        expect(loc).to_be_editable(timeout=timeout)
+    elif action == "expect_readonly":
+        expect(loc).not_to_be_editable(timeout=timeout)
+    elif action == "click_blocked":
+        click_blocked(page, loc, step)
     elif action == "expect_url":
         match = url_matcher(value)
         deadline = time.monotonic() + timeout / 1000
@@ -217,6 +266,64 @@ def do_step(page, base_url: str, step: dict) -> None:
             page.wait_for_timeout(100)
     else:
         raise SpecProblem(f"unknown action {action}")
+
+
+def click_blocked(page, loc, step: dict) -> None:
+    """Press the element even if it is disabled, then fail when anything happens within the window:
+    a request that changes data, a new URL, or the step's value appearing. A natively disabled
+    button never gets the click, so this passes; a button that is only marked or styled disabled
+    (aria-disabled, a CSS class) and still acts fails."""
+    from urllib.parse import urlsplit  # noqa: PLC0415
+
+    window = step.get("timeout_ms", BLOCKED_WINDOW_MS)
+    sent: list[str] = []
+
+    def on_request(req):
+        if changes_data(req.method):
+            sent.append(f"{req.method} {urlsplit(req.url).path or '/'}")
+
+    before = page.url
+    marked = marked_disabled(loc)
+    page.context.on("request", on_request)
+    try:
+        loc.click(force=True, timeout=window)
+        page.wait_for_timeout(window)
+    finally:
+        page.context.remove_listener("request", on_request)
+    happened = []
+    if sent:
+        happened.append("sent " + ", ".join(dict.fromkeys(sent)))
+    if page.url != before:
+        happened.append(f"went to {page.url}")
+    text = step.get("value")
+    if text and page.get_by_text(text).count():
+        happened.append(f"showed {text!r}")
+    if happened:
+        why = f" (it is marked disabled: {marked})" if marked else ""
+        raise AssertionError(f"pressing it anyway {' and '.join(happened)}{why}")
+
+
+def marked_disabled(loc) -> str | None:
+    """How the element says it is disabled, for the fail message: "disabled", "aria-disabled" or None."""
+    try:
+        if loc.get_attribute("disabled", timeout=1_000) is not None:
+            return "disabled"
+        if (loc.get_attribute("aria-disabled", timeout=1_000) or "").lower() == "true":
+            return "aria-disabled"
+    except Exception:  # noqa: BLE001 - only a hint for the message
+        pass
+    return None
+
+
+def is_disabled(page, step: dict) -> bool:
+    """After an action failed: was its element disabled? Then the step failed on the app's state,
+    not on a wrong element, and a state check records it (expect_enabled fails)."""
+    if step.get("action") not in ACTS or not step.get("locator"):
+        return False
+    try:
+        return bool(build_locator(page, step["locator"]).first.is_disabled(timeout=1_000))
+    except Exception:  # noqa: BLE001 - only a hint
+        return False
 
 
 def try_step(page, base_url: str, step: dict, expected: str, login_url: str | None, state: dict) -> None:
@@ -231,7 +338,7 @@ def try_step(page, base_url: str, step: dict, expected: str, login_url: str | No
             _check_session(page, login_url)
             if state.get("off_site"):
                 raise SpecProblem(f"the page tried to open {state['off_site']}, outside the run's hosts") from exc
-            if step["action"].startswith("expect_") and is_sourced(step, expected) and "text" in loc_spec:
+            if step["action"] in ("expect_visible", "expect_text", "expect_value") and is_sourced(step, expected) and "text" in loc_spec:
                 raise AssertionError(f"the expected text {loc_spec['text']!r} is not on the page") from exc
             raise SpecProblem(f"no element matches {describe(step)}") from exc
         count = loc.count()
@@ -368,6 +475,8 @@ def run_case(browser, *, base_url: str, hosts: list[str], steps: list[dict], exp
             except Exception as exc:  # noqa: BLE001 - any other failure is the app's answer
                 out = {"result": FAIL, "step": i,
                        "error": login_recipe.redact(f"step {i} ({describe(step)}): {first_line(exc)}", scrub)[:MAX_ERROR]}
+                if is_disabled(page, step):
+                    out["disabled"] = True
                 break
         if capture_from is not None:
             _settle(page, lambda: not state["inflight"])

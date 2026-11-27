@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .. import config, templates, webtest, webtest_history, webtest_sources, webtest_spec, webtest_suite
+from .. import config, coverage_rules, templates, webtest, webtest_history, webtest_sources, webtest_spec, webtest_suite
 from . import templates_api
 from .server import ApiError, Response
 
@@ -49,6 +49,8 @@ def suite_folder(state, suite_id: Any) -> Path:
 
 def _error(exc: Exception) -> ApiError:
     """A store error as the console's error; a broken case rule carries every field's message."""
+    if isinstance(exc, webtest_suite.CoverageError):
+        return ApiError(409, "coverage-missing", str(exc), {"missing": exc.missing, "problems": exc.problems})
     if isinstance(exc, webtest_suite.CaseError):
         return ApiError(400, "case-rules", str(exc), {"errors": exc.errors, "case": exc.case,
                                                       "problems": getattr(exc, "problems", None)})
@@ -140,6 +142,7 @@ def suite_view(state, suite_id: Any) -> dict:
             "runs": webtest_suite.runs_of(runs_root(state), suite["id"]),
             "results": webtest_history.suite_results(runs_root(state), suite["id"], suite["cases"]),
             "spec": webtest_spec.view(folder, suite),
+            "checks": coverage_rules.view(suite),
             "generate": _generate_view(state, suite)}
 
 
@@ -211,7 +214,7 @@ def create(state, body: Any) -> dict:
     with LOCK:
         made = _do(webtest_suite.new_suite, root, name=body.get("name"), kind=kind, payload=payload,
                    env=env(state), project=body.get("project"), case_lang=body.get("case_lang"),
-                   upload=upload_path)
+                   upload=upload_path, depth=body.get("depth"))
     if upload_folder is not None:
         shutil.rmtree(upload_folder, ignore_errors=True)
     job = None
@@ -280,6 +283,44 @@ def confirm(state, suite_id: Any, body: Any, session: str | None) -> dict:
 
     by = body.get("by") if isinstance(body, dict) and isinstance(body.get("by"), str) else None
     return _edit(state, suite_id, webtest_suite.confirm, (by or "").strip()[:100] or fingerprint(session))
+
+
+def set_depth(state, suite_id: Any, body: Any) -> dict:
+    """Change the test depth. With ``extend`` and checks still missing, the suite goes back to
+    ``generating`` and a generate job adds the cases the new depth needs (Figma and Backlog suites)."""
+    body = body if isinstance(body, dict) else {}
+    folder = suite_folder(state, suite_id)
+    suite = _load(state, folder)
+    with LOCK:
+        out = _do(webtest_suite.set_depth, folder, body.get("depth"))
+        suite = webtest_suite.load(folder)
+        missing = bool(coverage_rules.missing(suite))
+        entry = webtest_sources.get(suite["source"]["kind"])
+        can_extend = missing and entry.needs_agent
+        job = None
+        if body.get("extend") and can_extend:
+            _do(webtest_suite.start_extend, folder)
+    if body.get("extend") and can_extend:
+        ui_lang = body.get("ui_lang") if body.get("ui_lang") in UI_LANGS else "en"
+        try:
+            job = state.bridge.create({"kind": "suite-generate", "suite": suite["id"], "ui_lang": ui_lang,
+                                       "extend": True})
+        except BaseException:
+            with LOCK:
+                webtest_suite.stop_generating(folder)
+            raise
+    return {**out, "missing": missing, "can_extend": can_extend, "job": job,
+            "checks": coverage_rules.view(webtest_suite.load(folder))}
+
+
+def set_skip(state, suite_id: Any, body: Any, session: str | None) -> dict:
+    """Leave one required check out with a reason, or take the skip back (empty reason)."""
+    from .jobs import fingerprint  # noqa: PLC0415
+
+    body = body if isinstance(body, dict) else {}
+    by = body.get("by") if isinstance(body.get("by"), str) and body["by"].strip() else fingerprint(session)
+    return _edit(state, suite_id, webtest_suite.set_skip, body.get("rule"), body.get("about"), body.get("reason"),
+                 str(by)[:100])
 
 
 def capture(state, suite_id: Any, name: Any) -> Response:
@@ -370,6 +411,9 @@ def install(state) -> None:
           lambda q: update_case(state, q.params["suite"], q.params["case"], q.body))
     r.add("POST", "/api/webtest/suites/:suite/confirm", "browser",
           lambda q: confirm(state, q.params["suite"], q.body, q.session))
+    r.add("POST", "/api/webtest/suites/:suite/depth", "browser", lambda q: set_depth(state, q.params["suite"], q.body))
+    r.add("POST", "/api/webtest/suites/:suite/skips", "browser",
+          lambda q: set_skip(state, q.params["suite"], q.body, q.session))
     r.add("GET", "/api/webtest/suites/:suite/captures/:name", "browser",
           lambda q: capture(state, q.params["suite"], q.params["name"]))
     r.add("POST", "/api/webtest/suites/:suite/export", "browser", lambda q: export(state, q.params["suite"], q.body))

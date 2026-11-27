@@ -35,6 +35,9 @@ FILE = "spec.record.json"
 REPLIES = "record-replies.json"
 OPEN, OK, FAIL, GAVE_UP = "recording", "ok", "fail", "gave-up"
 MAX_LOG = 100
+# A disabled element is the app's state, not a wrong locator: the row records it with a state check.
+DISABLED_HINT = ("; the element is disabled. If the expected result says it works, record expect_enabled on it "
+                 "(it fails, so the row is a fail); if it says it is disabled, record expect_disabled and click_blocked")
 
 
 def _path(folder: Path) -> Path:
@@ -251,10 +254,12 @@ def step(folder: Path, row: str, raw: Any, home: Path | None = None) -> dict:
         result, error = "ok", None
     elif outcome["result"] in (webtest_live.SPEC_ERROR, webtest_live.OFF_SITE, webtest_live.SESSION_EXPIRED):
         result, error = outcome["result"], outcome["error"]
-    elif new["action"].startswith("expect_"):
+    elif webtest_spec.is_check(new["action"]):
         result, error = "fail", outcome["error"]
     else:
         result, error = "failed", outcome["error"]
+        if outcome.get("disabled"):
+            error += DISABLED_HINT
     rec = _need(folder)
     entry = _row(rec, row)
     entry["attempts"] += 1
@@ -271,6 +276,8 @@ def step(folder: Path, row: str, raw: Any, home: Path | None = None) -> dict:
     _save(folder, rec)
     detail = _detail(run, entry, outcome)
     detail.update({"result": result, "error": error})
+    if result == "failed" and outcome.get("disabled"):
+        detail["disabled"] = True
     if sent:
         detail["this_step_sent"] = _sent_brief(sent)
         if result not in ("ok", "fail"):
@@ -283,8 +290,8 @@ def done(folder: Path, row: str) -> dict:
     entry = _row(rec, row)
     if entry["status"] != OPEN:
         raise WebtestError(f"{row} is already closed as {entry['status']}")
-    if not any(s["action"].startswith("expect_") for s in entry["steps"]):
-        raise WebtestError(f"{row}: record at least one expect_ check of the expected result first")
+    if not any(webtest_spec.is_check(s["action"]) for s in entry["steps"]):
+        raise WebtestError(f"{row}: record at least one check of the expected result first (expect_ or click_blocked)")
     entry["status"] = OK
     entry["result"] = {"result": "ok", "step": None, "error": None}
     _log(entry, "done")

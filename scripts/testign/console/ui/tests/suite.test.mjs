@@ -187,3 +187,73 @@ test('confirming a suite with a broken case lists the problem and marks the row'
   assert.deepEqual(byData(view, 'case').filter((el) => el.tagName === 'TR').map((el) => el.dataset.case), ['c3']);
   assert.ok(walk(view).some((el) => el.getAttribute && el.getAttribute('aria-label') === `${DICTS.en.case_f_content}: is required`));
 });
+
+function checksView(extra) {
+  const row = (rule, group, status, required = true, more) => ({ group, rule, label: rule, case_hint: `hint ${rule}`, about: 'Edit/[Save]',
+    control: '[Save]', level: required ? 'standard' : 'thorough', status, partial: false, need: 1, required, cases: status === 'covered' ? ['c1'] : [],
+    inputs: ['[Name]'], reason: status === 'skipped' ? 'hidden until a line exists' : null, ...more });
+  return { depth: 'standard', depths: ['smoke', 'standard', 'thorough'], controls: 2, required: 3, covered: 1, skipped: 1, missing: 1, problems: [],
+    rows: [row('action.normal', 'action', 'covered'), row('state.empty', 'state', 'missing'), row('state.missing_one', 'state', 'skipped'),
+      row('robustness.double', 'robustness', 'optional', false)], ...extra };
+}
+
+test('the Checks tab shows the depth, skips a missing check with a reason and asks the agent for the missing cases', async () => {
+  const log = [];
+  const suite = suiteOf('S20261125-1000-checks', { depth: 'standard', checks: checksView() });
+  const api = suiteApi(suite, log, {
+    suiteSkip: async (...args) => { log.push(['skip', ...args]); return {}; },
+    suiteDepth: async (...args) => { log.push(['depth', ...args]); return { depth: args[1], more: true }; },
+  });
+  const { ctx, view, ready, calls } = fakeContext(api, { route: { params: { suite: suite.id }, query: { tab: 'checks' } } });
+  renderSuite(ctx);
+  await ready;
+  assert.ok(byData(view, 'depth').length === 1);
+  const rows = byData(view, 'check').filter((el) => el.tagName === 'TR');
+  assert.equal(rows.length, 4);
+  assert.ok(rows[3].classList.contains('is-optional'));
+  assert.ok(view.textContent.includes(ctx.t('checks_missing_t', { n: 1 })));
+  byData(view, 'checksAction').find((el) => el.dataset.checksAction === 'skip').listeners.click[0]();
+  const dialog = walk(document.body).find((el) => el.getAttribute && el.getAttribute('role') === 'dialog');
+  const save = byData(dialog, 'checksAction').find((el) => el.dataset.checksAction === 'skip-save');
+  await save.listeners.click[0]();
+  assert.ok(dialog.textContent.includes(DICTS.en.checks_skip_need_reason));
+  type(byId(dialog, 'skip-reason'), 'covered by the release list');
+  await save.listeners.click[0]();
+  assert.deepEqual(log[0], ['skip', suite.id, 'state.empty', 'Edit/[Save]', 'covered by the release list', 'Tester']);
+  await byData(view, 'checksAction').find((el) => el.dataset.checksAction === 'extend').listeners.click[0]();
+  assert.deepEqual(log[1], ['depth', suite.id, 'standard', true, 'en']);
+  assert.ok(calls.toasts.some(([text]) => text === DICTS.en.checks_extend_queued));
+  const pick = byId(view, 'suite-depth');
+  type(pick, 'thorough', 'change');
+  const change = byData(view, 'checksAction').find((el) => el.dataset.checksAction === 'depth');
+  assert.equal(change.disabled, false);
+  await change.listeners.click[0]();
+  assert.deepEqual(log[2], ['depth', suite.id, 'thorough']);
+});
+
+test('a suite made before test depth offers to set one, and a refused confirm opens the Checks tab', async () => {
+  const suite = suiteOf('S20261125-1000-old', { checks: null });
+  const api = suiteApi(suite, [], {
+    confirmSuite: async () => {
+      throw Object.assign(new Error('missing'), { status: 409, code: 'coverage-missing', details: { missing: [{ rule: 'state.empty' }], problems: [] } });
+    },
+  });
+  const { ctx, view, ready, calls } = fakeContext(api, { route: { params: { suite: suite.id }, query: {} } });
+  renderSuite(ctx);
+  await ready;
+  byData(view, 'suiteAction').find((el) => el.dataset.suiteAction === 'confirm').listeners.click[0]();
+  await tick();
+  await tick();
+  assert.ok(calls.toasts.some(([text]) => text === ctx.t('checks_confirm_missing', { n: 1 })));
+  assert.ok(view.textContent.includes(DICTS.en.depth_none_d));
+});
+
+test('a case form sends the kit check it covers, and clears it only when the case had one', () => {
+  const tagged = caseOf(1, { rule: 'state.empty', about: 'Edit/[Save]' });
+  const f = caseToForm(tagged);
+  assert.equal(f.check, 'state.empty|Edit/[Save]');
+  assert.deepEqual([formToBody(f, tagged).rule, formToBody(f, tagged).about], ['state.empty', 'Edit/[Save]']);
+  assert.deepEqual([formToBody({ ...f, check: '' }, tagged).rule, formToBody({ ...f, check: '' }, tagged).about], [null, null]);
+  assert.equal('rule' in formToBody(caseToForm(caseOf(2)), caseOf(2)), false);
+  assert.equal(formToBody({ ...caseToForm(caseOf(2)), check: 'display.initial|A/[B|C]' }, caseOf(2)).about, 'A/[B|C]');
+});

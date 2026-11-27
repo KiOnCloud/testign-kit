@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import (
-    __version__, backlog_wiki, cache, config, decisions, figma_table, git_guard, gitscope, hashcheck, login_scenarios,
+    __version__, backlog_wiki, cache, config, coverage_rules, decisions, figma_table, git_guard, gitscope, hashcheck, login_scenarios,
     report,
     login_recipe, setup_check, templates, trace, webtest, webtest_export, webtest_live, webtest_record, webtest_replay,
     webtest_sources, webtest_spec, webtest_suite, xlsx,
@@ -194,7 +194,7 @@ def _load_cases(path: str) -> list[dict]:
 def _cmd_xlsx_fill(args: argparse.Namespace) -> int:
 
     entry, template_path = _layout(args)
-    cases = _load_cases(args.cases)
+    cases, listing = _cases_with_depth(_load_cases(args.cases))
     meta, _ = report.load(args.report)
     ticket = meta.get("ticket") or "TICKET"
     when = xlsx.stamp()
@@ -203,7 +203,35 @@ def _cmd_xlsx_fill(args: argparse.Namespace) -> int:
     else:
         out_dir = Path(args.out_dir or config.load()["output_dir"]) / ticket
         result = xlsx.fill_copy(template_path, entry, cases, out_dir / f"{ticket}-testcase-{when}.xlsx")
-    return _emit({**result, "template": entry["name"], "cases": len(cases)})
+    out = {**result, "template": entry["name"], "cases": len(cases)}
+    if listing is not None:
+        out["checks"] = coverage_rules.summary(listing)
+    return _emit(out)
+
+
+def _cases_with_depth(data) -> tuple[list[dict], dict | None]:
+    """A cases file is a list of cases, or an object with a test depth: {"depth", "controls", "roles",
+    "skips", "cases"} whose cases may name the kit check they cover (``rule``, ``about``, ``covers``).
+    The workbook keeps the template's layout; the coverage comes back in the output only."""
+    if not isinstance(data, dict):
+        return data, None
+    extra = set(data) - {"depth", "controls", "roles", "skips", "cases"}
+    if extra:
+        raise ValueError(f"unknown keys in the cases file: {sorted(extra)}")
+    cases = data.get("cases")
+    if not isinstance(cases, list):
+        raise ValueError("the cases file object needs a cases list")
+    listing = {"depth": coverage_rules.check_depth(data.get("depth") or coverage_rules.DEFAULT_DEPTH),
+               "controls": coverage_rules.check_controls(data.get("controls")),
+               "roles": coverage_rules.check_roles(data.get("roles")),
+               "skips": coverage_rules.check_skips(data.get("skips")), "cases": []}
+    for n, case in enumerate(cases, 1):
+        try:
+            tags = coverage_rules.check_case_fields(case) if isinstance(case, dict) else {}
+        except coverage_rules.CoverageError as exc:
+            raise ValueError(f"case {n}: {exc}") from None
+        listing["cases"].append({"case": n, **tags})
+    return cases, listing
 
 
 def _cmd_trace(args: argparse.Namespace) -> int:
@@ -624,6 +652,9 @@ def _suite_command(fn):
     def run(args: argparse.Namespace) -> int:
         try:
             return wrapped(args)
+        except webtest_suite.CoverageError as exc:
+            detail = {"missing": [{k: m[k] for k in ("rule", "about")} for m in exc.missing], "problems": exc.problems}
+            raise webtest.WebtestError(f"{exc} ({json.dumps(detail, ensure_ascii=False)})") from None
         except webtest_suite.CaseError as exc:
             problems = getattr(exc, "problems", None) or {exc.case or "case": exc.errors}
             raise webtest.WebtestError(f"{exc} ({json.dumps(problems, ensure_ascii=False)})") from None
@@ -767,7 +798,37 @@ def _cmd_suite_new(args: argparse.Namespace) -> dict:
     if args.ticket:
         payload["ticket"] = args.ticket
     return webtest_suite.new_suite(webtest.runs_root(), name=args.name, kind=args.kind, payload=payload,
-                                   env=_suite_env(), project=args.project, case_lang=args.case_lang, upload=upload)
+                                   env=_suite_env(), project=args.project, case_lang=args.case_lang, upload=upload,
+                                   depth=args.depth)
+
+
+@_suite_command
+def _cmd_suite_depth(args: argparse.Namespace) -> dict:
+    return webtest_suite.set_depth(_suite_folder(args), args.depth)
+
+
+@_suite_command
+def _cmd_suite_coverage(args: argparse.Namespace) -> dict:
+    suite = webtest_suite.load(_suite_folder(args))
+    view = coverage_rules.view(suite)
+    if view is None:
+        return {"suite": suite["id"], "depth": None, "note": "this suite was made before test depth; set one with suite-depth"}
+    if not args.all:
+        view["rows"] = [r for r in view["rows"] if r["required"]]
+    return {"suite": suite["id"], **view}
+
+
+@_suite_command
+def _cmd_suite_skip(args: argparse.Namespace) -> dict:
+    return webtest_suite.set_skip(_suite_folder(args), args.rule, args.about, "" if args.remove else args.reason,
+                                  by="agent")
+
+
+@_webtest_command
+def _cmd_coverage_rules(_args: argparse.Namespace) -> dict:
+    return {"depths": list(coverage_rules.DEPTHS), "default": coverage_rules.DEFAULT_DEPTH,
+            "groups": list(coverage_rules.GROUPS), "control_types": list(coverage_rules.CONTROL_TYPES),
+            "rules": coverage_rules.catalogue()}
 
 
 @_suite_command
@@ -807,8 +868,9 @@ def _cmd_suite_case_delete(args: argparse.Namespace) -> dict:
 def _cmd_suite_stage(args: argparse.Namespace) -> dict:
     job, session = _job_args(args)
     cases = _read_json_file(args.file, "stage")
-    if not isinstance(cases, list):
-        raise webtest.WebtestError('the stage file must be a list of cases: [{"content": ...}, ...]')
+    if not isinstance(cases, (list, dict)):
+        raise webtest.WebtestError('the stage file must be a list of cases: [{"content": ...}, ...], or an object '
+                                   '{"controls", "roles", "skips", "cases"}')
     return console_client.suite_stage(args.suite, job, session, cases)
 
 
@@ -916,6 +978,20 @@ def _add_webtest_parser(sub) -> None:
     p.add_argument("--ticket", help="backlog: the ticket whose latest survey report the cases come from")
     p.add_argument("--file", help="excel: the workbook to read")
     p.add_argument("--input", help='JSON file with the source input (e.g. {"template": ..., "sheet": ...})')
+    p.add_argument("--depth", choices=list(coverage_rules.DEPTHS),
+                   help=f"test depth: which kit checks the cases must cover (default {coverage_rules.DEFAULT_DEPTH})")
+    p = suite_cmd("suite-depth", _cmd_suite_depth, "change a suite's test depth (more checks need more cases)")
+    p.add_argument("--depth", required=True, choices=list(coverage_rules.DEPTHS))
+    p = suite_cmd("suite-coverage", _cmd_suite_coverage, "the kit checks of a suite's controls at its test depth")
+    p.add_argument("--all", action="store_true", help="also list checks a deeper test depth would require")
+    p = suite_cmd("suite-skip", _cmd_suite_skip, "leave one required check out with a reason (or take the skip back)")
+    p.add_argument("--rule", required=True)
+    p.add_argument("--about", required=True, help="the control path, as in controls")
+    how = p.add_mutually_exclusive_group(required=True)
+    how.add_argument("--reason", help="why this check needs no case")
+    how.add_argument("--remove", action="store_true", help="take the skip back")
+    p = suite_cmd("coverage-rules", _cmd_coverage_rules, "the test depths and the kit checks each one requires",
+                  suite=False)
     suite_cmd("suite-show", _cmd_suite_show, "a suite with its cases and its coverage of the source rows")
     suite_cmd("suite-list", _cmd_suite_list, "every suite with its state and case count", suite=False)
     p = suite_cmd("suite-case-add", _cmd_suite_case_add, "add a case to a suite")
@@ -929,7 +1005,8 @@ def _add_webtest_parser(sub) -> None:
     p.add_argument("--job", required=True, help="the suite-generate job id")
     p.add_argument("--session", required=True, help="agent session id")
     p.add_argument("--file", required=True,
-                   help='JSON file: [{"case"?, "content", "trace", "class", "runner", "scenario", "screen", ...}]')
+                   help='JSON file: [{"case"?, "content", "trace", "class", "runner", "scenario", "screen", "rule"?, '
+                        '"about"?, ...}] or {"controls", "roles", "skips", "cases"}')
     p = suite_cmd("suite-generated", _cmd_suite_generated, "every case is written: hand the suite to the tester")
     p.add_argument("--job", required=True, help="the suite-generate job id")
     p.add_argument("--session", required=True, help="agent session id")
